@@ -78,7 +78,10 @@ export class ThreeWorldRenderer implements RendererPort {
     const pointer = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
     this.raycaster.setFromCamera(pointer, this.cameraController.camera)
     const intersection = this.raycaster.intersectObjects(this.buildingRenderer.getPickableObjects(), true)[0]
-    if (!intersection) return null
+    if (!intersection) {
+      const gridPosition = this.screenToGrid(clientX, clientY)
+      return gridPosition ? this.buildingRenderer.getBuildingIdAt(gridPosition) : null
+    }
     let current: THREE.Object3D | null = intersection.object
     while (current) {
       if (typeof current.userData.buildingId === 'string') return current.userData.buildingId as BuildingId

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { RenderBuilding } from '../../application/contracts/render-snapshot'
-import type { GridPosition } from '../../domain/city'
+import type { BuildingId, GridPosition } from '../../domain/city'
 import { CELL_SIZE } from '../terrain/TerrainRenderer'
 
 export class BuildingRenderer {
@@ -60,6 +60,11 @@ export class BuildingRenderer {
 
   getPickableObjects(): THREE.Object3D[] {
     return [...this.buildingGroups.values()]
+  }
+
+  getBuildingIdAt(position: GridPosition): BuildingId | null {
+    const building = [...this.buildingGroups.entries()].find(([, group]) => group.position.x === position.x * CELL_SIZE && group.position.z === position.y * CELL_SIZE)
+    return building ? building[0] as BuildingId : null
   }
 
   dispose(): void {

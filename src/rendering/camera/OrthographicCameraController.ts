@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { CELL_SIZE } from '../terrain/TerrainRenderer'
 
 export interface CameraBounds {
   width: number
@@ -39,11 +40,11 @@ export class OrthographicCameraController {
   }
 
   fitToWorld(bounds: CameraBounds): void {
-    this.target.set((bounds.width - 1) / 2, 0, (bounds.height - 1) / 2)
+    this.target.set(((bounds.width - 1) / 2) * CELL_SIZE, 0, ((bounds.height - 1) / 2) * CELL_SIZE)
     // True zenith: the city is read as a plan, never as an isometric miniature.
     this.camera.position.set(this.target.x, 48, this.target.z)
     this.camera.lookAt(this.target)
-    this.camera.zoom = Math.min(1, 42 / Math.max(bounds.width, bounds.height))
+    this.camera.zoom = Math.min(1, 42 / (Math.max(bounds.width, bounds.height) * CELL_SIZE))
     this.camera.updateProjectionMatrix()
   }
 
