@@ -47,15 +47,17 @@ export function placeBuilding(world: World, city: CityState, type: BuildingTypeI
   const occupancy = new Map(city.occupancy)
   getFootprintCells(type, position).forEach((cellPosition) => {
     const cell = getWorldCell(world, cellPosition.x, cellPosition.y)
-    if (cell) occupancy.set(cell.id, building.id)
+    if (cell) occupancy.set(cell.id, { kind: 'building', id: building.id })
   })
   return {
     valid: true,
     building,
     city: {
       buildings: [...city.buildings, building],
+      roads: city.roads,
       occupancy,
       nextBuildingSequence: city.nextBuildingSequence + 1,
+      nextRoadSequence: city.nextRoadSequence,
     },
   }
 }
@@ -70,8 +72,8 @@ export function removeBuilding(city: CityState, buildingId: string): RemoveBuild
   if (!building) return { removed: false, city }
   const buildings = city.buildings.filter((candidate) => candidate.id !== buildingId)
   const occupancy = new Map(city.occupancy)
-  occupancy.forEach((occupiedBuildingId, cellId) => {
-    if (occupiedBuildingId === building.id) occupancy.delete(cellId)
+  occupancy.forEach((occupant, cellId) => {
+    if (occupant.kind === 'building' && occupant.id === building.id) occupancy.delete(cellId)
   })
   return {
     removed: true,

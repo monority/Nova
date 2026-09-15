@@ -1,6 +1,7 @@
 import type { SimulationState } from '../../domain/simulation/simulation-state'
 import { toRenderWorld } from './to-render-world'
 import type { RenderSnapshot } from '../contracts/render-snapshot'
+import { getRoadConnectionMask } from '../../domain/construction'
 
 export function toRenderSnapshot(state: SimulationState): RenderSnapshot {
   return {
@@ -10,6 +11,12 @@ export function toRenderSnapshot(state: SimulationState): RenderSnapshot {
       id: building.id,
       type: building.type,
       position: building.position,
+    })),
+    roads: (state.city.roads ?? []).map((road) => ({
+      id: road.id,
+      position: road.position,
+      orientation: road.orientation,
+      connectionMask: getRoadConnectionMask(state.city, road.position),
     })),
   }
 }

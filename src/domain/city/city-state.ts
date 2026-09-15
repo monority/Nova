@@ -1,16 +1,25 @@
 import type { Building, BuildingId } from './building-types'
+import type { Road, RoadId } from './road-types'
 import type { CellId } from '../world'
+
+export type Occupant =
+  | { readonly kind: 'building'; readonly id: BuildingId }
+  | { readonly kind: 'road'; readonly id: RoadId }
 
 export interface CityState {
   readonly buildings: readonly Building[]
-  readonly occupancy: ReadonlyMap<CellId, BuildingId>
+  readonly roads: readonly Road[]
+  readonly occupancy: ReadonlyMap<CellId, Occupant>
   readonly nextBuildingSequence: number
+  readonly nextRoadSequence: number
 }
 
 export function createCityState(): CityState {
   return {
     buildings: [],
+    roads: [],
     occupancy: new Map(),
     nextBuildingSequence: 1,
+    nextRoadSequence: 1,
   }
 }

@@ -2,10 +2,11 @@ import * as THREE from 'three'
 import type { RenderSnapshot } from '../../application/contracts/render-snapshot'
 import type { RendererPort } from './renderer-port'
 import { OrthographicCameraController } from '../camera/OrthographicCameraController'
-import { TerrainRenderer } from '../terrain/TerrainRenderer'
-import { CELL_SIZE } from '../terrain/TerrainRenderer'
+import { CELL_SIZE, TerrainRenderer } from '../terrain/TerrainRenderer'
 import { BuildingRenderer } from '../buildings/BuildingRenderer'
 import type { BuildingId, GridPosition } from '../../domain/city'
+import type { RoadId } from '../../domain/city'
+import { RoadRenderer } from '../roads/RoadRenderer'
 
 export class ThreeWorldRenderer implements RendererPort {
   private canvas: HTMLCanvasElement | null = null
@@ -14,6 +15,7 @@ export class ThreeWorldRenderer implements RendererPort {
   private cameraController: OrthographicCameraController | null = null
   private terrainRenderer: TerrainRenderer | null = null
   private buildingRenderer: BuildingRenderer | null = null
+  private roadRenderer: RoadRenderer | null = null
   private raycaster = new THREE.Raycaster()
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private worldKey: string | null = null
@@ -33,13 +35,14 @@ export class ThreeWorldRenderer implements RendererPort {
     this.cameraController = new OrthographicCameraController(canvas)
     this.terrainRenderer = new TerrainRenderer(this.scene)
     this.buildingRenderer = new BuildingRenderer(this.scene)
+    this.roadRenderer = new RoadRenderer(this.scene)
     this.resize()
     window.addEventListener('resize', this.resize)
     this.animate()
   }
 
   render(snapshot: RenderSnapshot): void {
-    if (!this.terrainRenderer || !this.cameraController || !this.buildingRenderer) return
+    if (!this.terrainRenderer || !this.cameraController || !this.buildingRenderer || !this.roadRenderer) return
     const nextWorldKey = `${snapshot.world.width}x${snapshot.world.height}`
     if (this.worldKey !== nextWorldKey) {
       this.terrainRenderer.setWorld(snapshot.world)
@@ -50,6 +53,7 @@ export class ThreeWorldRenderer implements RendererPort {
       this.cameraWorldKey = nextWorldKey
     }
     this.buildingRenderer.sync(snapshot.buildings)
+    this.roadRenderer.sync(snapshot.roads)
   }
 
   screenToGrid(clientX: number, clientY: number): GridPosition | null {
@@ -79,12 +83,40 @@ export class ThreeWorldRenderer implements RendererPort {
     return null
   }
 
+  pickRoadId(clientX: number, clientY: number): RoadId | null {
+    if (!this.canvas || !this.cameraController || !this.roadRenderer) return null
+    const gridPosition = this.screenToGrid(clientX, clientY)
+    const gridRoadId = gridPosition ? this.roadRenderer.getRoadIdAt(gridPosition) : null
+    if (gridRoadId) return gridRoadId as RoadId
+    const rect = this.canvas.getBoundingClientRect()
+    const pointer = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
+    this.raycaster.setFromCamera(pointer, this.cameraController.camera)
+    const intersection = this.raycaster.intersectObjects(this.roadRenderer.getPickableObjects(), true)[0]
+    if (!intersection) return null
+    let current: THREE.Object3D | null = intersection.object
+    while (current) {
+      if (typeof current.userData.roadId === 'string') return current.userData.roadId as RoadId
+      current = current.parent
+    }
+    return null
+  }
+
   setPlacementPreview(position: GridPosition | null, valid: boolean): void {
     this.buildingRenderer?.setPreview(position, valid)
+    this.roadRenderer?.setPreview(null, false)
+  }
+
+  setRoadPreview(position: GridPosition | null, valid: boolean, connectionMask = 0): void {
+    this.buildingRenderer?.setPreview(null, false)
+    this.roadRenderer?.setPreview(position, valid, connectionMask)
   }
 
   setSelectedBuilding(buildingId: BuildingId | null): void {
     this.buildingRenderer?.setSelected(buildingId)
+  }
+
+  setSelectedRoad(roadId: RoadId | null): void {
+    this.roadRenderer?.setSelected(roadId)
   }
 
   resize = (): void => {
@@ -101,6 +133,7 @@ export class ThreeWorldRenderer implements RendererPort {
     this.cameraController?.dispose()
     this.terrainRenderer?.dispose()
     this.buildingRenderer?.dispose()
+    this.roadRenderer?.dispose()
     this.renderer?.dispose()
     this.canvas = null
     this.renderer = null
@@ -108,6 +141,7 @@ export class ThreeWorldRenderer implements RendererPort {
     this.cameraController = null
     this.terrainRenderer = null
     this.buildingRenderer = null
+    this.roadRenderer = null
     this.worldKey = null
     this.cameraWorldKey = null
   }

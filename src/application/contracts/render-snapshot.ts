@@ -1,5 +1,6 @@
 import type { Buildability } from '../../domain/world'
 import type { BuildingId, BuildingTypeId, GridPosition } from '../../domain/city'
+import type { RoadConnectionMask, RoadId, RoadOrientation } from '../../domain/construction'
 
 export interface RenderWorldCell {
     readonly x: number
@@ -19,6 +20,14 @@ export interface RenderSnapshot {
     readonly simulationTick: number
     readonly world: RenderWorld
     readonly buildings: readonly RenderBuilding[]
+    readonly roads: readonly RenderRoad[]
+}
+
+export interface RenderRoad {
+    readonly id: RoadId
+    readonly position: GridPosition
+    readonly orientation: RoadOrientation
+    readonly connectionMask: RoadConnectionMask
 }
 
 export interface RenderBuilding {
