@@ -1,19 +1,19 @@
 .app-shell {
     min-height: 100vh;
     display: grid;
-    grid-template-rows: 72px 1fr;
+    grid-template-rows: 64px 1fr;
     overflow: hidden;
     color: #dbe9df;
-    background: radial-gradient(circle at 54% 48%, #193b38 0, #0b1d20 36%, #071013 78%);
+    background: #091313;
 }
 
 .app-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 38px;
-    border-bottom: 1px solid rgba(165, 218, 196, .18);
-    background: rgba(5, 14, 16, .78);
+    padding: 0 30px;
+    border-bottom: 1px solid rgba(159, 227, 206, .14);
+    background: rgba(8, 18, 18, .94);
 }
 
 .brand-mark {
@@ -21,8 +21,8 @@
     place-items: center;
     width: 27px;
     height: 27px;
-    border: 1px solid #82d3bf;
-    color: #82d3bf;
+    border: 1px solid #9fe3ce;
+    color: #9fe3ce;
     font-family: monospace;
 }
 
@@ -41,6 +41,8 @@
 .world-stage {
     position: relative;
     min-height: 0;
+    background-image: linear-gradient(rgba(159,227,206,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(159,227,206,.025) 1px, transparent 1px);
+    background-size: 32px 32px;
 }
 
 .world-viewport {
@@ -57,12 +59,12 @@
     z-index: 1;
     pointer-events: none;
     padding: 16px 18px;
-    border-left: 2px solid #82d3bf;
-    background: rgba(8, 22, 23, .66);
+    border-left: 2px solid #9fe3ce;
+    background: rgba(8, 18, 18, .76);
 }
 
 .eyebrow {
-    color: #82d3bf;
+    color: #9fe3ce;
     font: 10px monospace;
     letter-spacing: .12em;
 }
@@ -96,12 +98,12 @@
         width: 164px;
         padding: 14px;
         color: #a4bab1;
-        background: rgba(8, 22, 23, .78);
-        border: 1px solid rgba(165, 218, 196, .18);
+        background: rgba(8, 18, 18, .9);
+        border: 1px solid rgba(159, 227, 206, .16);
     }
     .construction-panel .eyebrow { margin: 0 0 4px; }
-    .construction-panel button { min-height: 30px; color: #82d3bf; border: 1px solid rgba(165, 218, 196, .24); background: transparent; cursor: pointer; font: 10px monospace; letter-spacing: .1em; }
-    .construction-panel button:hover, .construction-panel button:focus-visible, .construction-panel .active { border-color: #82d3bf; background: rgba(130, 211, 191, .1); }
+    .construction-panel button { min-height: 30px; color: #9fe3ce; border: 1px solid rgba(159, 227, 206, .24); background: transparent; cursor: pointer; font: 10px monospace; letter-spacing: .1em; }
+    .construction-panel button:hover, .construction-panel button:focus-visible, .construction-panel .active { border-color: #9fe3ce; background: rgba(159, 227, 206, .1); }
     .placement-status { margin: 3px 0; color: #e87868; font: 9px monospace; letter-spacing: .08em; }
     .placement-status.valid { color: #82d3bf; }
     .remove-building { color: #e87868 !important; }
@@ -117,23 +119,23 @@
     gap: 8px;
     padding: 8px;
     color: #a4bab1;
-    background: rgba(8, 22, 23, .78);
-    border: 1px solid rgba(165, 218, 196, .18);
+    background: rgba(8, 18, 18, .92);
+    border: 1px solid rgba(159, 227, 206, .16);
     font: 11px monospace;
 }
 
 .debug-controls button {
     min-width: 32px;
     min-height: 28px;
-    color: #82d3bf;
-    border: 1px solid rgba(165, 218, 196, .24);
+    color: #9fe3ce;
+    border: 1px solid rgba(159, 227, 206, .24);
     background: transparent;
     cursor: pointer;
 }
 
 .debug-controls button:hover,
 .debug-controls button:focus-visible {
-    border-color: #82d3bf;
+    border-color: #9fe3ce;
     background: rgba(130, 211, 191, .1);
 }
 

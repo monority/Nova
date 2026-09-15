@@ -105,7 +105,7 @@ export class RoadRenderer {
 
   private createRoadGroup(x: number, y: number, mask: number, material: THREE.Material): THREE.Group {
     const roadGroup = new THREE.Group()
-    roadGroup.position.set(x * CELL_SIZE, 0.86, y * CELL_SIZE)
+    roadGroup.position.set(x * CELL_SIZE, 0.14, y * CELL_SIZE)
     const center = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH, ROAD_HEIGHT, ROAD_WIDTH), material)
     roadGroup.add(center)
     const addArm = (offsetX: number, offsetZ: number, width: number, depth: number) => {

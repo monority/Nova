@@ -5,9 +5,9 @@ export const CELL_SIZE = 0.72
 
 export class TerrainRenderer {
   private readonly group = new THREE.Group()
-  private readonly tileGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.94, 1, CELL_SIZE * 0.94)
-  private readonly landMaterial = new THREE.MeshStandardMaterial({ color: 0x355c54, roughness: 0.95 })
-  private readonly waterMaterial = new THREE.MeshStandardMaterial({ color: 0x183f4e, roughness: 0.7, metalness: 0.15 })
+  private readonly tileGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.98, 0.08, CELL_SIZE * 0.98)
+  private readonly landMaterial = new THREE.MeshStandardMaterial({ color: 0x1b3937, roughness: 0.98 })
+  private readonly waterMaterial = new THREE.MeshStandardMaterial({ color: 0x102b36, roughness: 0.8, metalness: 0.1 })
 
   constructor(scene: THREE.Scene) {
     scene.add(this.group)
@@ -33,7 +33,7 @@ export class TerrainRenderer {
     const mesh = new THREE.InstancedMesh(this.tileGeometry, material, cells.length)
     const matrix = new THREE.Matrix4()
     cells.forEach((cell, index) => {
-      const height = cell.water ? 0.06 : 0.12 + cell.elevation * 0.7
+      const height = 0.08
       matrix.compose(
         new THREE.Vector3(cell.x * CELL_SIZE, height / 2, cell.y * CELL_SIZE),
         new THREE.Quaternion(),

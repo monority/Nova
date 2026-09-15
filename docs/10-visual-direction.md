@@ -94,13 +94,13 @@ Avoid decorative motion without semantic meaning.
 
 ## 9. Camera
 
-Orthographic camera with a high oblique angle.
+Orthographic camera in a strict zenith/top view. The world must read as a contemporary planning model, not an isometric miniature.
 
 Support:
 
 - pan;
 - smooth zoom;
-- optional rotation;
+- optional rotation only if it preserves the top-down reading;
 - focus on selection.
 
 ## 10. Visual Progression

@@ -16,7 +16,10 @@ export class OrthographicCameraController {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000)
-    this.camera.position.set(18, 18, 18)
+    // In a zenith view the default Y-up vector is parallel to the view direction.
+    // Use Z as screen-up so lookAt never falls back to an oblique orientation.
+    this.camera.up.set(0, 0, -1)
+    this.camera.position.set(0, 48, 0)
     this.camera.lookAt(this.target)
     canvas.addEventListener('pointerdown', this.handlePointerDown)
     canvas.addEventListener('pointermove', this.handlePointerMove)
@@ -37,7 +40,8 @@ export class OrthographicCameraController {
 
   fitToWorld(bounds: CameraBounds): void {
     this.target.set((bounds.width - 1) / 2, 0, (bounds.height - 1) / 2)
-    this.camera.position.set(this.target.x + 18, 18, this.target.z + 18)
+    // True zenith: the city is read as a plan, never as an isometric miniature.
+    this.camera.position.set(this.target.x, 48, this.target.z)
     this.camera.lookAt(this.target)
     this.camera.zoom = Math.min(1, 42 / Math.max(bounds.width, bounds.height))
     this.camera.updateProjectionMatrix()
@@ -68,8 +72,9 @@ export class OrthographicCameraController {
     const panScale = 0.025 / this.camera.zoom
     this.target.x -= deltaX * panScale
     this.target.z -= deltaY * panScale
-    this.camera.position.x = this.target.x + 18
-    this.camera.position.z = this.target.z + 18
+    this.camera.position.x = this.target.x
+    this.camera.position.y = 48
+    this.camera.position.z = this.target.z
     this.camera.lookAt(this.target)
   }
 

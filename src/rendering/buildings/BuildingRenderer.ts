@@ -5,11 +5,11 @@ import { CELL_SIZE } from '../terrain/TerrainRenderer'
 
 export class BuildingRenderer {
   private readonly group = new THREE.Group()
-  private readonly baseGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.58, 0.8, CELL_SIZE * 0.58)
-  private readonly roofGeometry = new THREE.ConeGeometry(CELL_SIZE * 0.45, 0.32, 4)
-  private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xf1bd78, roughness: 0.78 })
-  private readonly roofMaterial = new THREE.MeshStandardMaterial({ color: 0xc85f4e, roughness: 0.82 })
-  private readonly previewMaterial = new THREE.MeshStandardMaterial({ color: 0x82d3bf, transparent: true, opacity: 0.42, wireframe: true })
+  private readonly baseGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.62, 0.32, CELL_SIZE * 0.62)
+  private readonly roofGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.48, 0.035, CELL_SIZE * 0.48)
+  private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x64736f, roughness: 0.88 })
+  private readonly roofMaterial = new THREE.MeshStandardMaterial({ color: 0xc8a26b, emissive: 0x3a2b18, emissiveIntensity: 0.3, roughness: 0.7 })
+  private readonly previewMaterial = new THREE.MeshStandardMaterial({ color: 0x9fe3ce, transparent: true, opacity: 0.5, wireframe: true })
   private readonly buildingGroups = new Map<string, THREE.Group>()
   private preview: THREE.Mesh | null = null
 
@@ -45,15 +45,15 @@ export class BuildingRenderer {
       this.preview = null
     }
     if (!position) return
-    this.preview = new THREE.Mesh(new THREE.BoxGeometry(CELL_SIZE * 0.62, 0.9, CELL_SIZE * 0.62), this.previewMaterial)
-    this.previewMaterial.color.set(valid ? 0x82d3bf : 0xe87868)
-    this.preview.position.set(position.x * CELL_SIZE, 0.45, position.y * CELL_SIZE)
+    this.preview = new THREE.Mesh(new THREE.BoxGeometry(CELL_SIZE * 0.7, 0.08, CELL_SIZE * 0.7), this.previewMaterial)
+    this.previewMaterial.color.set(valid ? 0x9fe3ce : 0xe87868)
+    this.preview.position.set(position.x * CELL_SIZE, 0.18, position.y * CELL_SIZE)
     this.group.add(this.preview)
   }
 
   setSelected(buildingId: string | null): void {
     this.buildingGroups.forEach((buildingGroup, currentId) => {
-      buildingGroup.scale.setScalar(currentId === buildingId ? 1.1 : 1)
+      buildingGroup.scale.setScalar(currentId === buildingId ? 1.12 : 1)
     })
   }
 
@@ -76,10 +76,9 @@ export class BuildingRenderer {
     const buildingGroup = new THREE.Group()
     buildingGroup.userData.buildingId = building.id
     const base = new THREE.Mesh(this.baseGeometry, this.buildingMaterial)
-    base.position.y = 0.4
+    base.position.y = 0.2
     const roof = new THREE.Mesh(this.roofGeometry, this.roofMaterial)
-    roof.position.y = 0.96
-    roof.rotation.y = Math.PI / 4
+    roof.position.y = 0.39
     buildingGroup.add(base, roof)
     this.positionGroup(buildingGroup, building.position)
     return buildingGroup
