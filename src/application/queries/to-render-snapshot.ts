@@ -18,5 +18,6 @@ export function toRenderSnapshot(state: SimulationState): RenderSnapshot {
       orientation: road.orientation,
       connectionMask: getRoadConnectionMask(state.city, road.position),
     })),
+    population: { total: state.population.total },
   }
 }

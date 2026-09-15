@@ -1,6 +1,7 @@
 import { placeBuilding as placeBuildingInCity, placeRoad as placeRoadInCity, removeBuilding as removeBuildingFromCity, removeRoad as removeRoadFromCity, type PlacementResult, type RemoveBuildingResult, type RoadPlacementResult } from '../../domain/construction'
 import type { BuildingId, BuildingTypeId, GridPosition, RoadId } from '../../domain/city'
 import type { SimulationRuntimePort } from '../contracts/simulation-runtime'
+import { clampPopulationToHousing } from '../../domain/population'
 
 export interface PlaceBuildingCommand {
   readonly type: BuildingTypeId
@@ -22,14 +23,14 @@ export interface RemoveRoadCommand {
 export function placeBuilding(runtime: SimulationRuntimePort, command: PlaceBuildingCommand): PlacementResult {
   const state = runtime.getState()
   const result = placeBuildingInCity(state.world, state.city, command.type, command.position)
-  if (result.valid) runtime.commitState({ ...state, city: result.city })
+  if (result.valid) runtime.commitState({ ...state, city: result.city, population: clampPopulationToHousing(state.population, result.city) })
   return result
 }
 
 export function removeBuilding(runtime: SimulationRuntimePort, command: RemoveBuildingCommand): RemoveBuildingResult {
   const state = runtime.getState()
   const result = removeBuildingFromCity(state.city, command.buildingId)
-  if (result.removed) runtime.commitState({ ...state, city: result.city })
+  if (result.removed) runtime.commitState({ ...state, city: result.city, population: clampPopulationToHousing(state.population, result.city) })
   return result
 }
 

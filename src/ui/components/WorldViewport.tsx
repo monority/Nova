@@ -8,7 +8,7 @@ import { ThreeWorldRenderer } from '../../rendering/core/ThreeWorldRenderer'
 interface WorldViewportProps {
   runtime: SimulationRuntimePort
   constructionMode: boolean
-  constructionType: 'house' | 'road'
+  constructionType: 'house' | 'farm' | 'road'
   placementPosition: GridPosition | null
   placementValid: boolean
   placementConnectionMask: RoadConnectionMask

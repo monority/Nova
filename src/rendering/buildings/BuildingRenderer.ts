@@ -9,6 +9,7 @@ export class BuildingRenderer {
   private readonly roofGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.48, 0.035, CELL_SIZE * 0.48)
   private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x64736f, roughness: 0.88 })
   private readonly roofMaterial = new THREE.MeshStandardMaterial({ color: 0xc8a26b, emissive: 0x3a2b18, emissiveIntensity: 0.3, roughness: 0.7 })
+  private readonly farmMaterial = new THREE.MeshStandardMaterial({ color: 0x668b78, emissive: 0x14281f, emissiveIntensity: 0.25, roughness: 0.9 })
   private readonly previewMaterial = new THREE.MeshStandardMaterial({ color: 0x9fe3ce, transparent: true, opacity: 0.5, wireframe: true })
   private readonly buildingGroups = new Map<string, THREE.Group>()
   private preview: THREE.Mesh | null = null
@@ -67,6 +68,7 @@ export class BuildingRenderer {
     this.roofGeometry.dispose()
     this.buildingMaterial.dispose()
     this.roofMaterial.dispose()
+    this.farmMaterial.dispose()
     this.previewMaterial.dispose()
     this.preview?.geometry.dispose()
     this.buildingGroups.clear()
@@ -75,7 +77,7 @@ export class BuildingRenderer {
   private createBuilding(building: RenderBuilding): THREE.Group {
     const buildingGroup = new THREE.Group()
     buildingGroup.userData.buildingId = building.id
-    const base = new THREE.Mesh(this.baseGeometry, this.buildingMaterial)
+    const base = new THREE.Mesh(this.baseGeometry, building.type === 'farm' ? this.farmMaterial : this.buildingMaterial)
     base.position.y = 0.2
     const roof = new THREE.Mesh(this.roofGeometry, this.roofMaterial)
     roof.position.y = 0.39

@@ -19,7 +19,7 @@ export function App() {
     ))
     const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
     const [constructionMode, setConstructionMode] = useState(false)
-    const [constructionType, setConstructionType] = useState<'house' | 'road'>('house')
+    const [constructionType, setConstructionType] = useState<'house' | 'farm' | 'road'>('house')
     const [hoveredPosition, setHoveredPosition] = useState<GridPosition | null>(null)
     const [selectedBuildingId, setSelectedBuildingId] = useState<BuildingId | null>(null)
     const [selectedRoadId, setSelectedRoadId] = useState<RoadId | null>(null)
@@ -31,7 +31,7 @@ export function App() {
     const placementCheck = constructionMode && hoveredPosition
         ? constructionType === 'road'
             ? validateRoadPlacement(state.world, state.city, hoveredPosition)
-            : validatePlacement(state.world, state.city, 'house', hoveredPosition)
+            : validatePlacement(state.world, state.city, constructionType, hoveredPosition)
         : { valid: false as const, reason: 'out_of_bounds' as const }
     const placementConnectionMask = hoveredPosition ? getRoadConnectionMask(state.city, hoveredPosition) : 0
     const exitConstruction = () => {
@@ -43,7 +43,7 @@ export function App() {
             const result = placeRoad(runtime, { position })
             if (result.valid) setSelectedRoadId(result.road.id)
         } else {
-            const result = placeBuilding(runtime, { type: 'house', position })
+            const result = placeBuilding(runtime, { type: constructionType, position })
             if (result.valid) setSelectedBuildingId(result.building.id)
         }
     }
@@ -81,6 +81,7 @@ export function App() {
                     <strong>NOVA</strong>
                     <small>EMERGENCE PROTOCOL</small>
                 </div>
+                <div className="population-readout"><small>POPULATION</small><strong data-testid="population-count">{state.population.total.toLocaleString('en-US')}</strong></div>
             </header>
             <section className="world-stage" aria-labelledby="app-title">
                 <div className="stage-label">
@@ -107,10 +108,11 @@ export function App() {
             <aside className="construction-panel" aria-label="Construction tools">
                 <p className="eyebrow">CONSTRUCTION</p>
                 {!constructionMode ? (
-                    <><button type="button" aria-label="Enter house construction mode" onClick={() => { setConstructionType('house'); setConstructionMode(true) }}>HOUSE</button><button type="button" aria-label="Enter road construction mode" onClick={() => { setConstructionType('road'); setConstructionMode(true) }}>ROAD</button></>
+                    <><button type="button" aria-label="Enter house construction mode" onClick={() => { setConstructionType('house'); setConstructionMode(true) }}>HOUSE</button><button type="button" aria-label="Enter farm construction mode" onClick={() => { setConstructionType('farm'); setConstructionMode(true) }}>FARM</button><button type="button" aria-label="Enter road construction mode" onClick={() => { setConstructionType('road'); setConstructionMode(true) }}>ROAD</button></>
                 ) : (
                     <>
                         <button type="button" className={constructionType === 'house' ? 'building-choice active' : 'building-choice'} aria-label="Select house building" onClick={() => setConstructionType('house')}>HOUSE</button>
+                        <button type="button" className={constructionType === 'farm' ? 'building-choice active' : 'building-choice'} aria-label="Select farm building" onClick={() => setConstructionType('farm')}>FARM</button>
                         <button type="button" className={constructionType === 'road' ? 'building-choice active' : 'building-choice'} aria-label="Select road construction" onClick={() => setConstructionType('road')}>ROAD</button>
                         <p className={placementCheck.valid ? 'placement-status valid' : 'placement-status'}>{placementCheck.valid ? 'VALID PLACEMENT' : placementCheck.reason.replace('_', ' ').toUpperCase()}</p>
                         <button type="button" onClick={exitConstruction}>CANCEL</button>
@@ -126,7 +128,7 @@ export function App() {
                 <span>{state.clock.timeScale}×</span>
                 <button type="button" onClick={() => changeSpeed(1)} aria-label="Increase simulation speed">+</button>
                 <button type="button" aria-label="Advance one simulation tick" onClick={() => stepSimulation(runtime)}>STEP</button>
-                <span className="debug-time">YEAR {Math.floor(state.clock.simulationTimeSeconds / (360 * 24 * 60 * 60))} / TICK {state.clock.currentTick}</span>
+                <span className="debug-time">FOOD {state.economy.food.toFixed(1)} / SHORTAGE {state.economy.foodShortage.toFixed(1)} / YEAR {Math.floor(state.clock.simulationTimeSeconds / (360 * 24 * 60 * 60))} / TICK {state.clock.currentTick}</span>
                 <button type="button" onClick={handleReset}>RESET</button>
             </footer>
         </main>

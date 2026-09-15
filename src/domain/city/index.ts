@@ -1,5 +1,5 @@
 export type { Building, BuildingId, BuildingTypeDefinition, BuildingTypeId } from './building-types'
-export { BUILDING_TYPES, HOUSE_BUILDING, toBuildingId } from './building-types'
+export { BUILDING_TYPES, FARM_BUILDING, HOUSE_BUILDING, toBuildingId } from './building-types'
 export type { CityState, Occupant } from './city-state'
 export { createCityState } from './city-state'
 export type { GridPosition } from './grid-position'

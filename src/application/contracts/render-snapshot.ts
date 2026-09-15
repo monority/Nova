@@ -21,6 +21,11 @@ export interface RenderSnapshot {
     readonly world: RenderWorld
     readonly buildings: readonly RenderBuilding[]
     readonly roads: readonly RenderRoad[]
+    readonly population: RenderPopulation
+}
+
+export interface RenderPopulation {
+    readonly total: number
 }
 
 export interface RenderRoad {
