@@ -1,6 +1,7 @@
 import type { Buildability } from '../../domain/world'
 import type { BuildingId, BuildingTypeId, GridPosition } from '../../domain/city'
 import type { RoadConnectionMask, RoadId, RoadOrientation } from '../../domain/construction'
+import type { ZoneId, ZoneType } from '../../domain/city'
 
 export interface RenderWorldCell {
     readonly x: number
@@ -22,7 +23,10 @@ export interface RenderSnapshot {
     readonly buildings: readonly RenderBuilding[]
     readonly roads: readonly RenderRoad[]
     readonly population: RenderPopulation
+    readonly zones: readonly RenderZone[]
 }
+
+export interface RenderZone { readonly id: ZoneId; readonly type: ZoneType; readonly cells: readonly GridPosition[] }
 
 export interface RenderPopulation {
     readonly total: number

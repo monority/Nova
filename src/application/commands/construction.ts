@@ -2,6 +2,7 @@ import { placeBuilding as placeBuildingInCity, placeRoad as placeRoadInCity, rem
 import type { BuildingId, BuildingTypeId, GridPosition, RoadId } from '../../domain/city'
 import type { SimulationRuntimePort } from '../contracts/simulation-runtime'
 import { clampPopulationToHousing } from '../../domain/population'
+import { createZone, type ZonePlacementResult, type ZoneType } from '../../domain/city'
 
 export interface PlaceBuildingCommand {
   readonly type: BuildingTypeId
@@ -18,6 +19,21 @@ export interface PlaceRoadCommand {
 
 export interface RemoveRoadCommand {
   readonly roadId: RoadId
+}
+
+export interface CreateZoneCommand { readonly type: ZoneType; readonly cells: readonly GridPosition[] }
+export interface RemoveZoneCommand { readonly zoneId: string }
+
+export function createDevelopmentZone(runtime: SimulationRuntimePort, command: CreateZoneCommand): ZonePlacementResult {
+  const state = runtime.getState()
+  const result = createZone(state.world, state.city.zones, command.type, command.cells, state.city.nextZoneSequence)
+  if (result.valid) runtime.commitState({ ...state, city: { ...state.city, zones: result.zones, nextZoneSequence: state.city.nextZoneSequence + 1 } })
+  return result
+}
+
+export function removeDevelopmentZone(runtime: SimulationRuntimePort, command: RemoveZoneCommand): void {
+  const state = runtime.getState()
+  runtime.commitState({ ...state, city: { ...state.city, zones: state.city.zones.filter((zone) => zone.id !== command.zoneId) } })
 }
 
 export function placeBuilding(runtime: SimulationRuntimePort, command: PlaceBuildingCommand): PlacementResult {

@@ -2,6 +2,8 @@ export type { Building, BuildingId, BuildingTypeDefinition, BuildingTypeId } fro
 export { BUILDING_TYPES, FARM_BUILDING, HOUSE_BUILDING, toBuildingId } from './building-types'
 export type { CityState, Occupant } from './city-state'
 export { createCityState } from './city-state'
+export type { DevelopmentZone, ZoneId, ZonePlacementResult, ZoneType } from './zones'
+export { createZone, toZoneId } from './zones'
 export type { GridPosition } from './grid-position'
 export { isIntegerGridPosition } from './grid-position'
 export type { Road, RoadId, RoadOrientation } from './road-types'

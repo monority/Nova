@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { createWorld } from '../../application/commands/create-world'
-import { placeBuilding, placeRoad, removeBuilding, removeRoad } from '../../application/commands/construction'
+import { createDevelopmentZone, placeBuilding, placeRoad, removeBuilding, removeDevelopmentZone, removeRoad } from '../../application/commands/construction'
 import { pauseSimulation, resetSimulation, setSimulationSpeed, startSimulation, stepSimulation } from '../../application/commands/simulation-controls'
 import { createSimulationState } from '../../domain/simulation/simulation-state'
 import { SIMULATION_SPEEDS, type SimulationSpeed } from '../../domain/simulation/simulation-clock'
@@ -19,7 +19,9 @@ export function App() {
     ))
     const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
     const [constructionMode, setConstructionMode] = useState(false)
-    const [constructionType, setConstructionType] = useState<'house' | 'farm' | 'road'>('house')
+    const [constructionType, setConstructionType] = useState<'house' | 'farm' | 'road' | 'zone'>('house')
+    const [zoneType, setZoneType] = useState<'residential' | 'agricultural'>('residential')
+    const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
     const [hoveredPosition, setHoveredPosition] = useState<GridPosition | null>(null)
     const [selectedBuildingId, setSelectedBuildingId] = useState<BuildingId | null>(null)
     const [selectedRoadId, setSelectedRoadId] = useState<RoadId | null>(null)
@@ -31,7 +33,7 @@ export function App() {
     const placementCheck = constructionMode && hoveredPosition
         ? constructionType === 'road'
             ? validateRoadPlacement(state.world, state.city, hoveredPosition)
-            : validatePlacement(state.world, state.city, constructionType, hoveredPosition)
+            : constructionType === 'zone' ? { valid: true as const } : validatePlacement(state.world, state.city, constructionType, hoveredPosition)
         : { valid: false as const, reason: 'out_of_bounds' as const }
     const placementConnectionMask = hoveredPosition ? getRoadConnectionMask(state.city, hoveredPosition) : 0
     const exitConstruction = () => {
@@ -39,7 +41,10 @@ export function App() {
         setHoveredPosition(null)
     }
     const handlePlaceBuilding = (position: GridPosition) => {
-        if (constructionType === 'road') {
+        if (constructionType === 'zone') {
+            const result = createDevelopmentZone(runtime, { type: zoneType, cells: [position] })
+            if (result.valid) setSelectedZoneId(result.zone.id)
+        } else if (constructionType === 'road') {
             const result = placeRoad(runtime, { position })
             if (result.valid) setSelectedRoadId(result.road.id)
         } else {
@@ -55,6 +60,7 @@ export function App() {
         resetSimulation(runtime)
         setSelectedBuildingId(null)
         setSelectedRoadId(null)
+        setSelectedZoneId(null)
         exitConstruction()
     }
 
@@ -108,11 +114,13 @@ export function App() {
             <aside className="construction-panel" aria-label="Construction tools">
                 <p className="eyebrow">CONSTRUCTION</p>
                 {!constructionMode ? (
-                    <><button type="button" aria-label="Enter house construction mode" onClick={() => { setConstructionType('house'); setConstructionMode(true) }}>HOUSE</button><button type="button" aria-label="Enter farm construction mode" onClick={() => { setConstructionType('farm'); setConstructionMode(true) }}>FARM</button><button type="button" aria-label="Enter road construction mode" onClick={() => { setConstructionType('road'); setConstructionMode(true) }}>ROAD</button></>
+                    <><button type="button" aria-label="Enter house construction mode" onClick={() => { setConstructionType('house'); setConstructionMode(true) }}>HOUSE</button><button type="button" aria-label="Enter farm construction mode" onClick={() => { setConstructionType('farm'); setConstructionMode(true) }}>FARM</button><button type="button" aria-label="Enter road construction mode" onClick={() => { setConstructionType('road'); setConstructionMode(true) }}>ROAD</button><button type="button" aria-label="Enter zoning mode" onClick={() => { setConstructionType('zone'); setConstructionMode(true) }}>ZONE</button></>
                 ) : (
                     <>
                         <button type="button" className={constructionType === 'house' ? 'building-choice active' : 'building-choice'} aria-label="Select house building" onClick={() => setConstructionType('house')}>HOUSE</button>
                         <button type="button" className={constructionType === 'farm' ? 'building-choice active' : 'building-choice'} aria-label="Select farm building" onClick={() => setConstructionType('farm')}>FARM</button>
+                        <button type="button" className={constructionType === 'zone' ? 'building-choice active' : 'building-choice'} aria-label="Select zone mode" onClick={() => setConstructionType('zone')}>ZONE</button>
+                        {constructionType === 'zone' && <><button type="button" className={zoneType === 'residential' ? 'building-choice active' : 'building-choice'} onClick={() => setZoneType('residential')}>RESIDENTIAL</button><button type="button" className={zoneType === 'agricultural' ? 'building-choice active' : 'building-choice'} onClick={() => setZoneType('agricultural')}>AGRICULTURAL</button></>}
                         <button type="button" className={constructionType === 'road' ? 'building-choice active' : 'building-choice'} aria-label="Select road construction" onClick={() => setConstructionType('road')}>ROAD</button>
                         <p className={placementCheck.valid ? 'placement-status valid' : 'placement-status'}>{placementCheck.valid ? 'VALID PLACEMENT' : placementCheck.reason.replace('_', ' ').toUpperCase()}</p>
                         <button type="button" onClick={exitConstruction}>CANCEL</button>
@@ -120,6 +128,7 @@ export function App() {
                 )}
                 {selectedBuildingId && !constructionMode && <button type="button" className="remove-building" onClick={() => handleRemoveBuilding(selectedBuildingId)}>REMOVE SELECTED</button>}
                 {selectedRoadId && !constructionMode && <button type="button" className="remove-building" onClick={() => { removeRoad(runtime, { roadId: selectedRoadId }); setSelectedRoadId(null) }}>REMOVE ROAD</button>}
+                {selectedZoneId && !constructionMode && <button type="button" className="remove-building" onClick={() => { removeDevelopmentZone(runtime, { zoneId: selectedZoneId }); setSelectedZoneId(null) }}>REMOVE ZONE</button>}
                 <p className="building-count" data-testid="building-count">BUILDINGS {state.city.buildings.length} / ROADS {state.city.roads.length}</p>
             </aside>
             <footer className="debug-controls" aria-label="Simulation controls">

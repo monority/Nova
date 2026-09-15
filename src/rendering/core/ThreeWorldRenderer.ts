@@ -7,6 +7,7 @@ import { BuildingRenderer } from '../buildings/BuildingRenderer'
 import type { BuildingId, GridPosition } from '../../domain/city'
 import type { RoadId } from '../../domain/city'
 import { RoadRenderer } from '../roads/RoadRenderer'
+import { ZoneRenderer } from '../zones/ZoneRenderer'
 
 export class ThreeWorldRenderer implements RendererPort {
   private canvas: HTMLCanvasElement | null = null
@@ -16,6 +17,7 @@ export class ThreeWorldRenderer implements RendererPort {
   private terrainRenderer: TerrainRenderer | null = null
   private buildingRenderer: BuildingRenderer | null = null
   private roadRenderer: RoadRenderer | null = null
+  private zoneRenderer: ZoneRenderer | null = null
   private raycaster = new THREE.Raycaster()
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private worldKey: string | null = null
@@ -36,6 +38,7 @@ export class ThreeWorldRenderer implements RendererPort {
     this.terrainRenderer = new TerrainRenderer(this.scene)
     this.buildingRenderer = new BuildingRenderer(this.scene)
     this.roadRenderer = new RoadRenderer(this.scene)
+    this.zoneRenderer = new ZoneRenderer(this.scene)
     this.resize()
     window.addEventListener('resize', this.resize)
     this.animate()
@@ -54,6 +57,7 @@ export class ThreeWorldRenderer implements RendererPort {
     }
     this.buildingRenderer.sync(snapshot.buildings)
     this.roadRenderer.sync(snapshot.roads)
+    this.zoneRenderer?.sync(snapshot.zones ?? [])
   }
 
   screenToGrid(clientX: number, clientY: number): GridPosition | null {
@@ -134,6 +138,7 @@ export class ThreeWorldRenderer implements RendererPort {
     this.terrainRenderer?.dispose()
     this.buildingRenderer?.dispose()
     this.roadRenderer?.dispose()
+    this.zoneRenderer?.dispose()
     this.renderer?.dispose()
     this.canvas = null
     this.renderer = null
@@ -142,6 +147,7 @@ export class ThreeWorldRenderer implements RendererPort {
     this.terrainRenderer = null
     this.buildingRenderer = null
     this.roadRenderer = null
+    this.zoneRenderer = null
     this.worldKey = null
     this.cameraWorldKey = null
   }

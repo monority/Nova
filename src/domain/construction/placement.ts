@@ -58,6 +58,8 @@ export function placeBuilding(world: World, city: CityState, type: BuildingTypeI
       occupancy,
       nextBuildingSequence: city.nextBuildingSequence + 1,
       nextRoadSequence: city.nextRoadSequence,
+      zones: city.zones,
+      nextZoneSequence: city.nextZoneSequence,
     },
   }
 }
