@@ -1,4 +1,4 @@
-import { BUILDING_TYPES, toBuildingId, type Building, type BuildingTypeId } from '../city/building-types'
+import { BUILDING_TYPES, toBuildingId, type Building, type BuildingId, type BuildingTypeId } from '../city/building-types'
 import type { CityState } from '../city/city-state'
 import type { GridPosition } from '../city/grid-position'
 import { getWorldCell, type World } from '../world'
@@ -60,6 +60,8 @@ export function placeBuilding(world: World, city: CityState, type: BuildingTypeI
       nextRoadSequence: city.nextRoadSequence,
       zones: city.zones,
       nextZoneSequence: city.nextZoneSequence,
+      services: city.services,
+      nextServiceSequence: city.nextServiceSequence,
     },
   }
 }
@@ -81,4 +83,9 @@ export function removeBuilding(city: CityState, buildingId: string): RemoveBuild
     removed: true,
     city: { ...city, buildings, occupancy },
   }
+}
+
+export function evolveBuilding(city: CityState, buildingId: BuildingId, type: BuildingTypeId): CityState {
+  const buildings = city.buildings.map((building) => building.id === buildingId ? { ...building, type } : building)
+  return { ...city, buildings }
 }

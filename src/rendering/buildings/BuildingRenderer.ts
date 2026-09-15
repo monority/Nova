@@ -10,6 +10,7 @@ export class BuildingRenderer {
   private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x64736f, roughness: 0.88 })
   private readonly roofMaterial = new THREE.MeshStandardMaterial({ color: 0xc8a26b, emissive: 0x3a2b18, emissiveIntensity: 0.3, roughness: 0.7 })
   private readonly farmMaterial = new THREE.MeshStandardMaterial({ color: 0x668b78, emissive: 0x14281f, emissiveIntensity: 0.25, roughness: 0.9 })
+  private readonly apartmentMaterial = new THREE.MeshStandardMaterial({ color: 0x7b8291, emissive: 0x242532, emissiveIntensity: 0.3, roughness: 0.82 })
   private readonly previewMaterial = new THREE.MeshStandardMaterial({ color: 0x9fe3ce, transparent: true, opacity: 0.5, wireframe: true })
   private readonly buildingGroups = new Map<string, THREE.Group>()
   private preview: THREE.Mesh | null = null
@@ -30,6 +31,13 @@ export class BuildingRenderer {
     buildings.forEach((building) => {
       const existing = this.buildingGroups.get(building.id)
       if (existing) {
+        if (existing.userData.buildingType !== building.type) {
+          this.group.remove(existing)
+          const evolved = this.createBuilding(building)
+          this.buildingGroups.set(building.id, evolved)
+          this.group.add(evolved)
+          return
+        }
         this.positionGroup(existing, building.position)
         return
       }
@@ -74,6 +82,7 @@ export class BuildingRenderer {
     this.buildingMaterial.dispose()
     this.roofMaterial.dispose()
     this.farmMaterial.dispose()
+    this.apartmentMaterial.dispose()
     this.previewMaterial.dispose()
     this.preview?.geometry.dispose()
     this.buildingGroups.clear()
@@ -82,10 +91,15 @@ export class BuildingRenderer {
   private createBuilding(building: RenderBuilding): THREE.Group {
     const buildingGroup = new THREE.Group()
     buildingGroup.userData.buildingId = building.id
-    const base = new THREE.Mesh(this.baseGeometry, building.type === 'farm' ? this.farmMaterial : this.buildingMaterial)
-    base.position.y = 0.2
+    buildingGroup.userData.buildingType = building.type
+    const baseMaterial = building.type === 'farm' ? this.farmMaterial : building.type === 'apartment' ? this.apartmentMaterial : this.buildingMaterial
+    const base = new THREE.Mesh(this.baseGeometry, baseMaterial)
+    base.position.y = building.type === 'apartment' ? 0.34 : 0.2
+    if (building.type === 'apartment') base.scale.set(1.1, 1.8, 1.1)
+    if (building.type === 'farm') base.scale.set(1.12, 0.65, 1.12)
     const roof = new THREE.Mesh(this.roofGeometry, this.roofMaterial)
-    roof.position.y = 0.39
+    roof.position.y = building.type === 'apartment' ? 0.68 : building.type === 'farm' ? 0.3 : 0.39
+    if (building.type === 'apartment') roof.scale.set(1.1, 1, 1.1)
     buildingGroup.add(base, roof)
     this.positionGroup(buildingGroup, building.position)
     return buildingGroup

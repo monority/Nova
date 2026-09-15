@@ -6,7 +6,8 @@ export interface PopulationState {
   readonly growthProgress: number
 }
 
-export const POPULATION_GROWTH_PER_DAY = 1
+// Abstract population scale: fast enough to observe settlement growth at high simulation speeds.
+export const POPULATION_GROWTH_PER_DAY = 60
 export const SIMULATION_SECONDS_PER_DAY = 24 * 60 * 60
 
 export function createPopulationState(): PopulationState {

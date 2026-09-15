@@ -1,7 +1,7 @@
 import type { GridPosition } from './grid-position'
 
 export type BuildingId = string & { readonly __brand: 'BuildingId' }
-export type BuildingTypeId = 'house' | 'farm'
+export type BuildingTypeId = 'house' | 'farm' | 'apartment'
 
 export interface BuildingTypeDefinition {
   readonly id: BuildingTypeId
@@ -33,9 +33,18 @@ export const FARM_BUILDING: BuildingTypeDefinition = {
   foodPerDay: 8,
 }
 
+export const APARTMENT_BUILDING: BuildingTypeDefinition = {
+  id: 'apartment',
+  width: 1,
+  height: 1,
+  housingCapacity: 12,
+  foodPerDay: 0,
+}
+
 export const BUILDING_TYPES: Readonly<Record<BuildingTypeId, BuildingTypeDefinition>> = {
   house: HOUSE_BUILDING,
   farm: FARM_BUILDING,
+  apartment: APARTMENT_BUILDING,
 }
 
 export function toBuildingId(value: string): BuildingId {

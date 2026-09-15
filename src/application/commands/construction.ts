@@ -2,7 +2,7 @@ import { placeBuilding as placeBuildingInCity, placeRoad as placeRoadInCity, rem
 import type { BuildingId, BuildingTypeId, GridPosition, RoadId } from '../../domain/city'
 import type { SimulationRuntimePort } from '../contracts/simulation-runtime'
 import { clampPopulationToHousing } from '../../domain/population'
-import { createZone, type ZonePlacementResult, type ZoneType } from '../../domain/city'
+import { createZone, placeCommunityService, removeCommunityService, type ZonePlacementResult, type ZoneType, type ServicePlacementResult } from '../../domain/city'
 
 export interface PlaceBuildingCommand {
   readonly type: BuildingTypeId
@@ -23,6 +23,7 @@ export interface RemoveRoadCommand {
 
 export interface CreateZoneCommand { readonly type: ZoneType; readonly cells: readonly GridPosition[] }
 export interface RemoveZoneCommand { readonly zoneId: string }
+export interface PlaceServiceCommand { readonly position: GridPosition }
 
 export function createDevelopmentZone(runtime: SimulationRuntimePort, command: CreateZoneCommand): ZonePlacementResult {
   const state = runtime.getState()
@@ -34,6 +35,16 @@ export function createDevelopmentZone(runtime: SimulationRuntimePort, command: C
 export function removeDevelopmentZone(runtime: SimulationRuntimePort, command: RemoveZoneCommand): void {
   const state = runtime.getState()
   runtime.commitState({ ...state, city: { ...state.city, zones: state.city.zones.filter((zone) => zone.id !== command.zoneId) } })
+}
+
+export function placeService(runtime: SimulationRuntimePort, command: PlaceServiceCommand): ServicePlacementResult {
+  const state = runtime.getState(); const result = placeCommunityService(state.world, state.city, command.position)
+  if (result.valid) runtime.commitState({ ...state, city: result.city })
+  return result
+}
+
+export function removeService(runtime: SimulationRuntimePort, serviceId: string): void {
+  const state = runtime.getState(); runtime.commitState({ ...state, city: removeCommunityService(state.city, serviceId as import('../../domain/city').ServiceBuildingId) })
 }
 
 export function placeBuilding(runtime: SimulationRuntimePort, command: PlaceBuildingCommand): PlacementResult {

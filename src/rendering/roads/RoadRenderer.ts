@@ -87,14 +87,14 @@ export class RoadRenderer {
   }
 
   private createRoad(road: RenderRoad): THREE.Group {
-    const roadGroup = this.createRoadGroup(road.position.x, road.position.y, road.connectionMask, road.id === this.selectedRoadId ? this.selectedMaterial : this.material)
+    const roadGroup = this.createRoadGroup(road.position.x, road.position.y, road.connectionMask, road.id === this.selectedRoadId ? this.selectedMaterial : this.material, road.roadClass)
     roadGroup.userData.roadId = road.id
     return roadGroup
   }
 
   private updateGroup(roadGroup: THREE.Group, road: RenderRoad): void {
     roadGroup.clear()
-    const rebuilt = this.createRoadGroup(road.position.x, road.position.y, road.connectionMask, road.id === this.selectedRoadId ? this.selectedMaterial : this.material)
+    const rebuilt = this.createRoadGroup(road.position.x, road.position.y, road.connectionMask, road.id === this.selectedRoadId ? this.selectedMaterial : this.material, road.roadClass)
     while (rebuilt.children.length > 0) roadGroup.add(rebuilt.children[0])
     roadGroup.userData.roadId = road.id
   }
@@ -103,20 +103,21 @@ export class RoadRenderer {
     return `${road.position.x}:${road.position.y}:${road.connectionMask}`
   }
 
-  private createRoadGroup(x: number, y: number, mask: number, material: THREE.Material): THREE.Group {
+  private createRoadGroup(x: number, y: number, mask: number, material: THREE.Material, roadClass: 'local' | 'arterial' = 'local'): THREE.Group {
     const roadGroup = new THREE.Group()
     roadGroup.position.set(x * CELL_SIZE, 0.14, y * CELL_SIZE)
-    const center = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH, ROAD_HEIGHT, ROAD_WIDTH), material)
+    const width = roadClass === 'arterial' ? ROAD_WIDTH * 1.35 : ROAD_WIDTH
+    const center = new THREE.Mesh(new THREE.BoxGeometry(width, ROAD_HEIGHT, width), material)
     roadGroup.add(center)
     const addArm = (offsetX: number, offsetZ: number, width: number, depth: number) => {
       const arm = new THREE.Mesh(new THREE.BoxGeometry(width, ROAD_HEIGHT, depth), material)
       arm.position.set(offsetX, 0, offsetZ)
       roadGroup.add(arm)
     }
-    if (mask & ROAD_CONNECTION.north) addArm(0, -CELL_SIZE / 2, ROAD_WIDTH, CELL_SIZE)
-    if (mask & ROAD_CONNECTION.east) addArm(CELL_SIZE / 2, 0, CELL_SIZE, ROAD_WIDTH)
-    if (mask & ROAD_CONNECTION.south) addArm(0, CELL_SIZE / 2, ROAD_WIDTH, CELL_SIZE)
-    if (mask & ROAD_CONNECTION.west) addArm(-CELL_SIZE / 2, 0, CELL_SIZE, ROAD_WIDTH)
+    if (mask & ROAD_CONNECTION.north) addArm(0, -CELL_SIZE / 2, width, CELL_SIZE)
+    if (mask & ROAD_CONNECTION.east) addArm(CELL_SIZE / 2, 0, CELL_SIZE, width)
+    if (mask & ROAD_CONNECTION.south) addArm(0, CELL_SIZE / 2, width, CELL_SIZE)
+    if (mask & ROAD_CONNECTION.west) addArm(-CELL_SIZE / 2, 0, CELL_SIZE, width)
     return roadGroup
   }
 

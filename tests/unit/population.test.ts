@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createWorld } from '../../src/application/commands/create-world'
 import { createCityState } from '../../src/domain/city'
 import { placeBuilding } from '../../src/domain/construction'
-import { advancePopulation, createPopulationState, getHousingCapacity, SIMULATION_SECONDS_PER_DAY } from '../../src/domain/population'
+import { advancePopulation, createPopulationState, getHousingCapacity, POPULATION_GROWTH_PER_DAY, SIMULATION_SECONDS_PER_DAY } from '../../src/domain/population'
 
 function cityWithHouse() {
   const world = createWorld({ seed: 4242, width: 16, height: 16 })
@@ -24,7 +24,7 @@ describe('population system', () => {
     const second = advancePopulation(createPopulationState(), city, SIMULATION_SECONDS_PER_DAY)
     expect(getHousingCapacity(city)).toBe(4)
     expect(first).toEqual(second)
-    expect(first.total).toBe(1)
+    expect(first.total).toBe(Math.min(4, POPULATION_GROWTH_PER_DAY))
   })
 
   it('never exceeds housing capacity', () => {

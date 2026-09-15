@@ -8,6 +8,7 @@ export type SelectableObject =
   | { readonly kind: 'building'; readonly id: BuildingId }
   | { readonly kind: 'road'; readonly id: RoadId }
   | { readonly kind: 'zone'; readonly id: ZoneId }
+  | { readonly kind: 'service'; readonly id: import('./service-types').ServiceBuildingId }
 
 export function resolveSelectableAt(city: CityState, position: GridPosition): SelectableObject | null {
   const building = city.buildings.find((candidate) => candidate.position.x === position.x && candidate.position.y === position.y)
@@ -15,5 +16,7 @@ export function resolveSelectableAt(city: CityState, position: GridPosition): Se
   const road = city.roads.find((candidate) => candidate.position.x === position.x && candidate.position.y === position.y)
   if (road) return { kind: 'road', id: road.id }
   const zone = city.zones.find((candidate) => candidate.cells.some((cell) => cell.x === position.x && cell.y === position.y))
-  return zone ? { kind: 'zone', id: zone.id } : null
+  if (zone) return { kind: 'zone', id: zone.id }
+  const service = city.services.find((candidate) => candidate.position.x === position.x && candidate.position.y === position.y)
+  return service ? { kind: 'service', id: service.id } : null
 }

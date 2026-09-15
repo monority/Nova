@@ -1,14 +1,14 @@
 import { useEffect, useRef, type PointerEvent } from 'react'
 import type { SimulationRuntimePort } from '../../application/contracts/simulation-runtime'
 import { toRenderSnapshot } from '../../application/queries/to-render-snapshot'
-import { resolveSelectableAt, type BuildingId, type GridPosition, type RoadId } from '../../domain/city'
+import { resolveSelectableAt, type BuildingId, type GridPosition, type RoadId, type ServiceBuildingId } from '../../domain/city'
 import type { RoadConnectionMask } from '../../domain/construction'
 import { ThreeWorldRenderer } from '../../rendering/core/ThreeWorldRenderer'
 
 interface WorldViewportProps {
   runtime: SimulationRuntimePort
   constructionMode: boolean
-  constructionType: 'house' | 'farm' | 'road' | 'zone'
+  constructionType: 'house' | 'farm' | 'road' | 'zone' | 'service'
   placementPosition: GridPosition | null
   placementValid: boolean
   placementConnectionMask: RoadConnectionMask
@@ -18,10 +18,11 @@ interface WorldViewportProps {
   onPlaceBuilding: (position: GridPosition) => void
   onSelectBuilding: (buildingId: BuildingId | null) => void
   onSelectRoad: (roadId: RoadId | null) => void
+  onSelectService: (serviceId: ServiceBuildingId | null) => void
   onExitConstruction: () => void
 }
 
-export function WorldViewport({ runtime, constructionMode, constructionType, placementPosition, placementValid, placementConnectionMask, selectedBuildingId, selectedRoadId, onHoverGrid, onPlaceBuilding, onSelectBuilding, onSelectRoad, onExitConstruction }: WorldViewportProps) {
+export function WorldViewport({ runtime, constructionMode, constructionType, placementPosition, placementValid, placementConnectionMask, selectedBuildingId, selectedRoadId, onHoverGrid, onPlaceBuilding, onSelectBuilding, onSelectRoad, onSelectService, onExitConstruction }: WorldViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<ThreeWorldRenderer | null>(null)
   const drawingRoadRef = useRef(false)
@@ -91,7 +92,14 @@ export function WorldViewport({ runtime, constructionMode, constructionType, pla
       onSelectBuilding(null)
       return
     }
+    if (selectable?.kind === 'service') {
+      onSelectService(selectable.id)
+      onSelectBuilding(null)
+      onSelectRoad(null)
+      return
+    }
     onSelectRoad(null)
+    onSelectService(null)
     onSelectBuilding(selectable?.kind === 'building' ? selectable.id : null)
   }
 

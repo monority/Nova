@@ -1,8 +1,9 @@
 import type { CityState } from '../city'
-import { placeBuilding, placeRoad, validatePlacement } from '../construction'
+import { evolveBuilding, placeBuilding, placeRoad, validatePlacement } from '../construction'
 import type { EconomyState } from '../economy'
 import type { PopulationState } from '../population'
 import { getHousingCapacity } from '../population'
+import { hasServiceCoverage } from '../city'
 import type { World } from '../world'
 import type { Building, GridPosition, BuildingTypeId, Road } from '../city'
 
@@ -11,6 +12,8 @@ export interface DevelopmentPressure { readonly position: GridPosition; readonly
 export const ROAD_ADJACENCY_BONUS = 4
 export const RESIDENTIAL_ROAD_INFLUENCE_WEIGHT = 5
 export const MAX_AUTONOMOUS_ROAD_EXTENSION = 4
+export const DENSIFICATION_MIN_HOUSING_PRESSURE = 1
+export const COMMUNITY_SERVICE_BONUS = 8
 
 export const DEVELOPMENT_INTERVAL_TICKS = 60 * 10
 export function advanceDevelopment(world: World, city: CityState, population: PopulationState, economy: EconomyState, currentTick: number): CityState {
@@ -18,6 +21,14 @@ export function advanceDevelopment(world: World, city: CityState, population: Po
   const residentialPressure = population.total >= getHousingCapacity(city)
   const agriculturalPressure = economy.foodShortage > 0
   const zoneOrder = agriculturalPressure ? ['agricultural', 'residential'] as const : residentialPressure ? ['residential', 'agricultural'] as const : []
+  if (residentialPressure) {
+    const denseCandidates = city.zones
+      .filter((zone) => zone.type === 'residential')
+      .flatMap((zone) => zone.cells.map((cell) => city.buildings.find((building) => building.type === 'house' && building.position.x === cell.x && building.position.y === cell.y)))
+      .filter((building): building is NonNullable<typeof building> => Boolean(building))
+      .sort((a, b) => scoreDevelopmentCell(city, b.position, 'house') - scoreDevelopmentCell(city, a.position, 'house') || a.position.y - b.position.y || a.position.x - b.position.x)
+    if (denseCandidates[0]) return evolveBuilding(city, denseCandidates[0].id, 'apartment')
+  }
   for (const type of zoneOrder) {
     const buildingType = type === 'agricultural' ? 'farm' : 'house'
     for (const zone of city.zones.filter((candidate) => candidate.type === type)) {
@@ -64,7 +75,8 @@ export function scoreDevelopmentCell(city: CityState, position: GridPosition, bu
   if (buildingType !== 'house') return buildingScore
   const roadInfluence = getRoadInfluence(position, city.roads)
   const roadAdjacency = city.roads.some((road) => manhattanDistance(road.position, position) === 1) ? ROAD_ADJACENCY_BONUS : 0
-  return buildingScore + roadInfluence * RESIDENTIAL_ROAD_INFLUENCE_WEIGHT + roadAdjacency
+  const serviceBonus = hasServiceCoverage(city, position) ? COMMUNITY_SERVICE_BONUS : 0
+  return buildingScore + roadInfluence * RESIDENTIAL_ROAD_INFLUENCE_WEIGHT + roadAdjacency + serviceBonus
 }
 
 export function getRoadInfluence(position: GridPosition, roads: readonly Road[]): number {

@@ -1,5 +1,5 @@
 export type { PlacementCheck, PlacementFailureReason, PlacementResult, RemoveBuildingResult } from './placement'
-export { getFootprintCells, placeBuilding, removeBuilding, validatePlacement } from './placement'
+export { evolveBuilding, getFootprintCells, placeBuilding, removeBuilding, validatePlacement } from './placement'
 export type { RoadConnectionMask, RoadPlacementFailureReason, RoadPlacementResult } from './roads'
 export { getRoadConnectionMask, placeRoad, removeRoad, roadAt, validateRoadPlacement, ROAD_CONNECTION } from './roads'
 export type { RoadId, RoadOrientation } from '../city/road-types'
