@@ -1,3 +1,3 @@
 export interface RenderSnapshot {
-  simulationTick: number
+    simulationTick: number
 }

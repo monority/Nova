@@ -5,29 +5,29 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'playwright-report', 'test-results'] },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    files: ['**/*.{ts,tsx}'],
-    languageOptions: { globals: { ...globals.browser, ...globals.node } },
-    plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
-    rules: {
-      ...reactHooks.configs['recommended-latest'].rules,
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    { ignores: ['dist', 'node_modules', 'playwright-report', 'test-results'] },
+    js.configs.recommended,
+    ...tseslint.configs.recommended,
+    {
+        files: ['**/*.{ts,tsx}'],
+        languageOptions: { globals: { ...globals.browser, ...globals.node } },
+        plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
+        rules: {
+            ...reactHooks.configs['recommended-latest'].rules,
+            'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+        },
     },
-  },
-  {
-    files: ['src/domain/**/*.{ts,tsx}'],
-    rules: {
-      'no-restricted-imports': ['error', {
-        paths: [
-          { name: 'react', message: 'The domain must remain framework-independent.' },
-          { name: 'three', message: 'The domain must not depend on rendering.' },
-        ],
-        patterns: [{ group: ['**/ui/**', '**/rendering/**', '**/infrastructure/**'], message: 'The domain cannot depend on outer layers.' }],
-      }],
-      'no-restricted-globals': ['error', 'window', 'document', 'localStorage', 'indexedDB', 'navigator'],
+    {
+        files: ['src/domain/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-imports': ['error', {
+                paths: [
+                    { name: 'react', message: 'The domain must remain framework-independent.' },
+                    { name: 'three', message: 'The domain must not depend on rendering.' },
+                ],
+                patterns: [{ group: ['**/ui/**', '**/rendering/**', '**/infrastructure/**'], message: 'The domain cannot depend on outer layers.' }],
+            }],
+            'no-restricted-globals': ['error', 'window', 'document', 'localStorage', 'indexedDB', 'navigator'],
+        },
     },
-  },
 )
