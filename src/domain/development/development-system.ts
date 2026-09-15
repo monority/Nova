@@ -1,9 +1,13 @@
 import type { CityState } from '../city'
 import { placeBuilding } from '../construction'
+import { validatePlacement } from '../construction'
 import type { EconomyState } from '../economy'
 import type { PopulationState } from '../population'
 import { getHousingCapacity } from '../population'
 import type { World } from '../world'
+import type { GridPosition, BuildingTypeId } from '../city'
+
+export interface DevelopmentPressure { readonly position: GridPosition; readonly score: number }
 
 export const DEVELOPMENT_INTERVAL_TICKS = 60 * 10
 export function advanceDevelopment(world: World, city: CityState, population: PopulationState, economy: EconomyState, currentTick: number): CityState {
@@ -14,12 +18,28 @@ export function advanceDevelopment(world: World, city: CityState, population: Po
   for (const type of zoneOrder) {
     const buildingType = type === 'agricultural' ? 'farm' : 'house'
     for (const zone of city.zones.filter((candidate) => candidate.type === type)) {
-      const cells = [...zone.cells].sort((a, b) => a.y - b.y || a.x - b.x)
-      for (const cell of cells) {
-        const result = placeBuilding(world, city, buildingType, cell)
+      const candidates = zone.cells
+        .filter((cell) => validatePlacement(world, city, buildingType, cell).valid)
+        .map((position) => ({ position, score: scoreDevelopmentCell(city, position, buildingType) }))
+        .sort(comparePressure)
+      if (candidates.length > 0) {
+        const result = placeBuilding(world, city, buildingType, candidates[0].position)
         if (result.valid) return result.city
       }
     }
   }
   return city
+}
+
+export function scoreDevelopmentCell(city: CityState, position: GridPosition, buildingType: BuildingTypeId): number {
+  const existing = city.buildings.filter((building) => building.type === buildingType)
+  if (existing.length === 0) return 0
+  const nearestDistance = Math.min(...existing.map((building) => manhattanDistance(building.position, position)))
+  const adjacent = existing.some((candidate) => manhattanDistance(candidate.position, position) === 1)
+  return (adjacent ? 100 : 0) + Math.max(0, 50 - nearestDistance * 10)
+}
+
+function manhattanDistance(a: GridPosition, b: GridPosition): number { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) }
+function comparePressure(a: DevelopmentPressure, b: DevelopmentPressure): number {
+  return b.score - a.score || a.position.y - b.position.y || a.position.x - b.position.x
 }
