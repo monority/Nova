@@ -1,17 +1,16 @@
 import type { CityState } from '../city'
-import { placeBuilding } from '../construction'
-import { validatePlacement } from '../construction'
+import { placeBuilding, placeRoad, validatePlacement } from '../construction'
 import type { EconomyState } from '../economy'
 import type { PopulationState } from '../population'
 import { getHousingCapacity } from '../population'
 import type { World } from '../world'
-import type { GridPosition, BuildingTypeId } from '../city'
-import type { Road } from '../city'
+import type { Building, GridPosition, BuildingTypeId, Road } from '../city'
 
 export interface DevelopmentPressure { readonly position: GridPosition; readonly score: number }
 
 export const ROAD_ADJACENCY_BONUS = 4
 export const RESIDENTIAL_ROAD_INFLUENCE_WEIGHT = 5
+export const MAX_AUTONOMOUS_ROAD_EXTENSION = 4
 
 export const DEVELOPMENT_INTERVAL_TICKS = 60 * 10
 export function advanceDevelopment(world: World, city: CityState, population: PopulationState, economy: EconomyState, currentTick: number): CityState {
@@ -28,11 +27,33 @@ export function advanceDevelopment(world: World, city: CityState, population: Po
         .sort(comparePressure)
       if (candidates.length > 0) {
         const result = placeBuilding(world, city, buildingType, candidates[0].position)
-        if (result.valid) return result.city
+        if (result.valid) return extendRoadNetwork(world, result.city, result.building)
       }
     }
   }
   return city
+}
+
+export function buildRoadConnection(from: GridPosition, target: GridPosition): readonly GridPosition[] {
+  const cells: GridPosition[] = []
+  const stepX = Math.sign(target.x - from.x)
+  const stepY = Math.sign(target.y - from.y)
+  for (let x = from.x + stepX; x !== target.x; x += stepX) cells.push({ x, y: from.y })
+  for (let y = from.y + stepY; y !== target.y; y += stepY) cells.push({ x: target.x, y })
+  return cells
+}
+
+function extendRoadNetwork(world: World, city: CityState, building: Building): CityState {
+  if (city.roads.some((road) => manhattanDistance(road.position, building.position) === 1)) return city
+  if (city.roads.length === 0) return city
+  const target = [...city.roads].sort((a, b) => manhattanDistance(a.position, building.position) - manhattanDistance(b.position, building.position) || a.position.y - b.position.y || a.position.x - b.position.x)[0]
+  let nextCity = city
+  for (const cell of buildRoadConnection(building.position, target.position).slice(0, MAX_AUTONOMOUS_ROAD_EXTENSION)) {
+    const result = placeRoad(world, nextCity, cell)
+    if (!result.valid) break
+    nextCity = result.city
+  }
+  return nextCity
 }
 
 export function scoreDevelopmentCell(city: CityState, position: GridPosition, buildingType: BuildingTypeId): number {

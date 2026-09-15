@@ -1,7 +1,7 @@
 import { useEffect, useRef, type PointerEvent } from 'react'
 import type { SimulationRuntimePort } from '../../application/contracts/simulation-runtime'
 import { toRenderSnapshot } from '../../application/queries/to-render-snapshot'
-import type { BuildingId, GridPosition, RoadId } from '../../domain/city'
+import { resolveSelectableAt, type BuildingId, type GridPosition, type RoadId } from '../../domain/city'
 import type { RoadConnectionMask } from '../../domain/construction'
 import { ThreeWorldRenderer } from '../../rendering/core/ThreeWorldRenderer'
 
@@ -84,14 +84,15 @@ export function WorldViewport({ runtime, constructionMode, constructionType, pla
       }
       return
     }
-    const roadId = rendererRef.current.pickRoadId(event.clientX, event.clientY)
-    if (roadId) {
-      onSelectRoad(roadId)
+    const position = rendererRef.current.screenToGrid(event.clientX, event.clientY)
+    const selectable = position ? resolveSelectableAt(runtime.getState().city, position) : null
+    if (selectable?.kind === 'road') {
+      onSelectRoad(selectable.id)
       onSelectBuilding(null)
       return
     }
     onSelectRoad(null)
-    onSelectBuilding(rendererRef.current.pickBuildingId(event.clientX, event.clientY))
+    onSelectBuilding(selectable?.kind === 'building' ? selectable.id : null)
   }
 
   const stopDrawingRoad = () => {
