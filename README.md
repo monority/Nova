@@ -7,7 +7,8 @@ NOVA is a deterministic, contemplative city-builder. This repository follows [do
 ```bash
 pnpm install
 pnpm dev
-pnpm test:run
+pnpm typecheck
+pnpm test
 pnpm test:e2e
 pnpm lint
 pnpm build

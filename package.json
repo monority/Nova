@@ -5,9 +5,11 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc -b && vite build",
+        "build": "pnpm typecheck && vite build",
+        "typecheck": "tsc -b",
         "lint": "eslint .",
-        "test": "vitest",
+        "test": "vitest run",
+        "test:watch": "vitest",
         "test:run": "vitest run",
         "test:e2e": "playwright test",
         "preview": "vite preview"

@@ -52,6 +52,8 @@ Use plain TypeScript data structures.
 
 Avoid putting simulation state into React state.
 
+Simulation time is owned by the domain clock. The engine runtime converts real elapsed time into fixed simulation ticks and invokes the domain stepper; rendering frame rate and React updates must never determine simulation time.
+
 ## 5. Commands
 
 Player actions become commands.
