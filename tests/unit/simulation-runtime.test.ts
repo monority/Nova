@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createWorld } from '../../src/application/commands/create-world'
 import { createSimulationState } from '../../src/domain/simulation/simulation-state'
+import { SIMULATION_TIME } from '../../src/domain/simulation/simulation-clock'
 import { SimulationRuntime } from '../../src/engine/simulation/SimulationRuntime'
 import { deterministicSimulationStepper } from '../../src/engine/simulation/simulation-stepper'
 
@@ -19,11 +20,14 @@ describe('simulation runtime', () => {
     expect(runtime.getState().clock.currentTick).toBe(0)
   })
 
-  it('advances fixed ticks from controlled elapsed time', () => {
+  it('runs one tick per second at 1x (1 tick = 1 day)', () => {
     const runtime = createRuntime()
     runtime.start()
-    expect(runtime.update(100)).toBe(6)
-    expect(runtime.getState().clock.currentTick).toBe(6)
+    let processed = 0
+    for (let frame = 0; frame < 4; frame += 1) processed += runtime.update(250)
+    expect(processed).toBe(1)
+    expect(runtime.getState().clock.currentTick).toBe(1)
+    expect(runtime.getState().clock.simulationTimeSeconds).toBe(SIMULATION_TIME.SECONDS_PER_DAY)
   })
 
   it('is independent of elapsed-time frame partitioning', () => {
@@ -31,8 +35,8 @@ describe('simulation runtime', () => {
     const partitioned = createRuntime()
     whole.start()
     partitioned.start()
-    whole.update(100)
-    ;[16, 16, 16, 16, 16, 20].forEach((delta) => partitioned.update(delta))
+    for (let frame = 0; frame < 8; frame += 1) whole.update(250)
+    for (let frame = 0; frame < 16; frame += 1) partitioned.update(125)
     expect(partitioned.getState().clock.currentTick).toBe(whole.getState().clock.currentTick)
     expect(partitioned.getState().clock.simulationTimeSeconds).toBe(whole.getState().clock.simulationTimeSeconds)
   })
@@ -41,8 +45,10 @@ describe('simulation runtime', () => {
     const runtime = createRuntime()
     runtime.start()
     runtime.setSpeed(5)
-    expect(runtime.update(100)).toBe(30)
-    expect(runtime.getState().clock.currentTick).toBe(30)
+    let processed = 0
+    for (let frame = 0; frame < 8; frame += 1) processed += runtime.update(250)
+    expect(processed).toBe(10)
+    expect(runtime.getState().clock.currentTick).toBe(10)
   })
 
   it('steps exactly one tick regardless of speed', () => {
@@ -50,6 +56,7 @@ describe('simulation runtime', () => {
     runtime.setSpeed(100)
     runtime.step()
     expect(runtime.getState().clock.currentTick).toBe(1)
+    expect(runtime.getState().clock.simulationTimeSeconds).toBe(SIMULATION_TIME.SECONDS_PER_DAY)
   })
 
   it('advances explicit ticks through the simulation stepper', () => {
@@ -65,15 +72,16 @@ describe('simulation runtime', () => {
       { maxTicksPerUpdate: 4 },
     )
     runtime.start()
+    runtime.setSpeed(100)
     expect(runtime.update(10_000)).toBe(4)
     expect(runtime.getMetrics().droppedRealSeconds).toBe(9.75)
-    expect(runtime.getMetrics().droppedSimulationTicks).toBeGreaterThan(0)
+    expect(runtime.getMetrics().droppedSimulationTicks).toBe(21)
   })
 
   it('resets to the initial simulation state', () => {
     const runtime = createRuntime()
     runtime.start()
-    runtime.update(100)
+    runtime.advance(3)
     runtime.reset()
     expect(runtime.getState().clock.currentTick).toBe(0)
     expect(runtime.getState().clock.status).toBe('paused')

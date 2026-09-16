@@ -10,7 +10,12 @@ export const ROAD_CONNECTION = {
 } as const
 
 export type RoadConnectionMask = number
-export type RoadPlacementFailureReason = 'out_of_bounds' | 'water' | 'not_buildable' | 'occupied'
+export type RoadPlacementFailureReason =
+  | 'out_of_bounds'
+  | 'water'
+  | 'not_buildable'
+  | 'occupied'
+  | 'insufficient_materials'
 
 export type RoadPlacementResult =
   | { readonly valid: true; readonly road: Road; readonly city: CityState }

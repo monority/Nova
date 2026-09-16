@@ -19,14 +19,17 @@ interface WorldViewportProps {
   onSelectBuilding: (buildingId: BuildingId | null) => void
   onSelectRoad: (roadId: RoadId | null) => void
   onSelectService: (serviceId: ServiceBuildingId | null) => void
+  onSelectZone: (zoneId: string | null) => void
+  onCreateZone: (cells: readonly GridPosition[]) => void
   onExitConstruction: () => void
 }
 
-export function WorldViewport({ runtime, constructionMode, constructionType, placementPosition, placementValid, placementConnectionMask, selectedBuildingId, selectedRoadId, onHoverGrid, onPlaceBuilding, onSelectBuilding, onSelectRoad, onSelectService, onExitConstruction }: WorldViewportProps) {
+export function WorldViewport({ runtime, constructionMode, constructionType, placementPosition, placementValid, placementConnectionMask, selectedBuildingId, selectedRoadId, onHoverGrid, onPlaceBuilding, onSelectBuilding, onSelectRoad, onSelectService, onSelectZone, onCreateZone, onExitConstruction }: WorldViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<ThreeWorldRenderer | null>(null)
   const drawingRoadRef = useRef(false)
   const lastRoadCellRef = useRef<GridPosition | null>(null)
+  const zoneStartRef = useRef<GridPosition | null>(null)
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -79,6 +82,11 @@ export function WorldViewport({ runtime, constructionMode, constructionType, pla
     if (constructionMode) {
       const position = rendererRef.current.screenToGrid(event.clientX, event.clientY)
       if (position) {
+        if (constructionType === 'zone') {
+          zoneStartRef.current = position
+          onHoverGrid(position)
+          return
+        }
         onPlaceBuilding(position)
         drawingRoadRef.current = constructionType === 'road'
         lastRoadCellRef.current = position
@@ -98,12 +106,29 @@ export function WorldViewport({ runtime, constructionMode, constructionType, pla
       onSelectRoad(null)
       return
     }
+    if (selectable?.kind === 'zone') {
+      onSelectZone(selectable.id)
+      onSelectBuilding(null)
+      onSelectRoad(null)
+      onSelectService(null)
+      return
+    }
     onSelectRoad(null)
     onSelectService(null)
+    onSelectZone(null)
     onSelectBuilding(selectable?.kind === 'building' ? selectable.id : null)
   }
 
   const stopDrawingRoad = () => {
+    if (constructionType === 'zone' && zoneStartRef.current && placementPosition) {
+      const start = zoneStartRef.current
+      const cells: GridPosition[] = []
+      for (let y = Math.min(start.y, placementPosition.y); y <= Math.max(start.y, placementPosition.y); y += 1) {
+        for (let x = Math.min(start.x, placementPosition.x); x <= Math.max(start.x, placementPosition.x); x += 1) cells.push({ x, y })
+      }
+      onCreateZone(cells)
+      zoneStartRef.current = null
+    }
     drawingRoadRef.current = false
     lastRoadCellRef.current = null
   }

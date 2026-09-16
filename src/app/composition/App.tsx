@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createWorld } from '../../application/commands/create-world'
 import { createDevelopmentZone, placeBuilding, placeRoad, placeService, removeBuilding, removeDevelopmentZone, removeRoad, removeService } from '../../application/commands/construction'
 import { pauseSimulation, resetSimulation, setSimulationSpeed, startSimulation, stepSimulation } from '../../application/commands/simulation-controls'
@@ -12,6 +12,12 @@ import { deterministicSimulationStepper } from '../../engine/simulation/simulati
 import { WorldViewport } from '../../ui/components/WorldViewport'
 import './app.css'
 import { createInitialSettlement } from '../../application/scenarios/create-initial-settlement'
+import { toInspection } from '../../application/queries/to-inspection'
+import { toResourceSummary } from '../../application/queries/to-resource-summary'
+import { projectStageTransitionGroup, toCivilizationStage } from '../../application/queries/to-civilization-stage'
+import { STAGE_LABELS } from '../../domain/civilization'
+import { InspectionPanel } from '../../ui/components/InspectionPanel'
+import { groupUrbanChanges, projectUrbanChanges, type UrbanChangeGroup } from '../../application/queries/simulation-events'
 
 export function App() {
     const [runtime] = useState(() => new SimulationRuntime(
@@ -19,19 +25,21 @@ export function App() {
         deterministicSimulationStepper,
     ))
     const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
+    const previousStateRef = useRef<typeof state | null>(null)
+    const [eventHistory, setEventHistory] = useState<UrbanChangeGroup[]>([])
     const [constructionMode, setConstructionMode] = useState(false)
     const [constructionType, setConstructionType] = useState<'house' | 'farm' | 'road' | 'zone' | 'service'>('house')
     const [zoneType, setZoneType] = useState<'residential' | 'agricultural'>('residential')
-    const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
     const [selectedServiceId, setSelectedServiceId] = useState<ServiceBuildingId | null>(null)
+    const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
     const [hoveredPosition, setHoveredPosition] = useState<GridPosition | null>(null)
     const [selectedBuildingId, setSelectedBuildingId] = useState<BuildingId | null>(null)
     const [selectedRoadId, setSelectedRoadId] = useState<RoadId | null>(null)
-    const speedIndex = SIMULATION_SPEEDS.indexOf(state.clock.timeScale)
-    const changeSpeed = (direction: -1 | 1) => {
-        const nextIndex = Math.max(0, Math.min(SIMULATION_SPEEDS.length - 1, speedIndex + direction))
-        setSimulationSpeed(runtime, SIMULATION_SPEEDS[nextIndex] as SimulationSpeed)
-    }
+    const selection = selectedBuildingId ? { kind: 'building' as const, id: selectedBuildingId } : selectedRoadId ? { kind: 'road' as const, id: selectedRoadId } : selectedServiceId ? { kind: 'service' as const, id: selectedServiceId } : selectedZoneId ? { kind: 'zone' as const, id: selectedZoneId } : null
+    const inspection = toInspection(state, selection)
+    const resources = toResourceSummary(state)
+    const stage = toCivilizationStage(state)
+    const selectSpeed = (speed: SimulationSpeed) => setSimulationSpeed(runtime, speed)
     const placementCheck = constructionMode && hoveredPosition
         ? constructionType === 'road'
             ? validateRoadPlacement(state.world, state.city, hoveredPosition)
@@ -57,18 +65,50 @@ export function App() {
             if (result.valid) setSelectedBuildingId(result.building.id)
         }
     }
+    const handleCreateZone = (cells: readonly GridPosition[]) => {
+        const result = createDevelopmentZone(runtime, { type: zoneType, cells })
+        if (result.valid) setSelectedZoneId(result.zone.id)
+    }
     const handleRemoveBuilding = (buildingId: BuildingId) => {
         removeBuilding(runtime, { buildingId })
         setSelectedBuildingId(null)
     }
     const handleReset = () => {
         resetSimulation(runtime)
+        previousStateRef.current = runtime.getState()
+        setEventHistory([])
         setSelectedBuildingId(null)
         setSelectedRoadId(null)
         setSelectedZoneId(null)
         setSelectedServiceId(null)
         exitConstruction()
     }
+
+    useEffect(() => {
+        if (!previousStateRef.current) {
+            previousStateRef.current = state
+            return
+        }
+        const previous = previousStateRef.current
+        const changes = projectUrbanChanges(previous, state)
+        const stageGroup = projectStageTransitionGroup(previous, state)
+        previousStateRef.current = state
+        const groups = [...(stageGroup ? [stageGroup] : []), ...groupUrbanChanges(changes)]
+        if (groups.length > 0) setEventHistory((history) => [...groups, ...history].slice(0, 5))
+    }, [state])
+
+    const selectChange = (group: UrbanChangeGroup) => {
+        if (group.changes.length === 0) return
+        const change = group.changes[0]
+        if (change.kind === 'ROAD_CREATED') setSelectedRoadId(change.id as RoadId)
+        else setSelectedBuildingId(change.id as BuildingId)
+        setSelectedServiceId(null)
+        setSelectedZoneId(null)
+    }
+    // Step 23 — canonical time: 1 tick = 1 simulated day.
+    const simulationTick = state.clock.currentTick
+    const simulationYear = Math.floor(simulationTick / 360) + 1
+    const dayOfYear = (simulationTick % 360) + 1
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,7 +134,9 @@ export function App() {
                     <small>EMERGENCE PROTOCOL</small>
                 </div>
                 <div className="population-readout"><small>POPULATION</small><strong data-testid="population-count">{state.population.total.toLocaleString('en-US')}</strong></div>
-                <div className="population-readout"><small>HOUSING / FOOD</small><strong>{getHousingCapacity(state.city)} / {state.economy.food.toFixed(0)}</strong></div>
+                <div className="population-readout"><small>HOUSING / FOOD</small><strong>{getHousingCapacity(state.city)} / {resources.food}</strong></div>
+                <div className="population-readout" data-testid="resource-summary"><small>RESOURCES</small><strong>FOOD {resources.food} · ENERGY {resources.energy} · MATERIALS {resources.materials}{resources.constrained ? ' · CONSTRAINED' : ''}</strong></div>
+                <div className="population-readout" data-testid="civilization-stage"><small>STAGE</small><strong>{STAGE_LABELS[stage]}</strong></div>
             </header>
             <section className="world-stage" aria-labelledby="app-title">
                 <div className="stage-label">
@@ -116,6 +158,8 @@ export function App() {
                     onSelectBuilding={setSelectedBuildingId}
                     onSelectRoad={setSelectedRoadId}
                     onSelectService={setSelectedServiceId}
+                    onSelectZone={setSelectedZoneId}
+                    onCreateZone={handleCreateZone}
                     onExitConstruction={exitConstruction}
                 />
             </section>
@@ -141,15 +185,26 @@ export function App() {
                 {selectedServiceId && !constructionMode && <button type="button" className="remove-building" onClick={() => { removeService(runtime, selectedServiceId); setSelectedServiceId(null) }}>REMOVE COMMUNITY</button>}
                 <p className="building-count" data-testid="building-count">BUILDINGS {state.city.buildings.length} / ROADS {state.city.roads.length}</p>
             </aside>
+            <InspectionPanel inspection={inspection} />
             <footer className="debug-controls" aria-label="Simulation controls">
                 <button type="button" aria-label={state.clock.status === 'running' ? 'Pause simulation' : 'Start simulation'} onClick={() => state.clock.status === 'running' ? pauseSimulation(runtime) : startSimulation(runtime)}>{state.clock.status === 'running' ? '❚❚' : '▶'}</button>
-                <button type="button" onClick={() => changeSpeed(-1)} aria-label="Decrease simulation speed">−</button>
-                <span>{state.clock.timeScale}×</span>
-                <button type="button" onClick={() => changeSpeed(1)} aria-label="Increase simulation speed">+</button>
+                {SIMULATION_SPEEDS.filter((speed) => speed > 0).map((speed) => <button key={speed} type="button" className={state.clock.timeScale === speed ? 'speed-active' : ''} onClick={() => selectSpeed(speed)}>{speed}×</button>)}
                 <button type="button" aria-label="Advance one simulation tick" onClick={() => stepSimulation(runtime)}>STEP</button>
-                <span className="debug-time">FOOD {state.economy.food.toFixed(1)} / SHORTAGE {state.economy.foodShortage.toFixed(1)} / YEAR {Math.floor(state.clock.simulationTimeSeconds / (360 * 24 * 60 * 60))} / TICK {state.clock.currentTick}</span>
+                <span className="debug-time">YEAR {simulationYear} / DAY {String(dayOfYear).padStart(2, '0')} · TICK {simulationTick} · {state.clock.status === 'paused' ? 'PAUSED' : 'RUNNING'}</span>
                 <button type="button" onClick={handleReset}>RESET</button>
             </footer>
+            <aside className="event-feed" aria-label="Recent simulation events">
+                <p className="eyebrow">RECENT CHANGES</p>
+                {eventHistory.length === 0 ? <span className="event-empty">NO RECENT CHANGES</span> : eventHistory.map((group, index) => <button type="button" className={index === 0 ? 'event-entry event-current' : 'event-entry'} key={group.key} onClick={() => selectChange(group)}>
+                    <span className="event-time">TICK {group.tick}</span>
+                    <span className="event-label">{group.label}</span>
+                    {group.context.from && group.context.to && <span>{group.context.from.toUpperCase()} → {group.context.to.toUpperCase()}</span>}
+                    <span>{group.context.zone ? `${group.context.zone.toUpperCase()} ZONE` : 'OUTSIDE DESIGNATED ZONE'}</span>
+                    {group.context.adjacentToRoad && <span>ADJACENT TO ROAD</span>}
+                    {group.context.nearCommunityService && <span>NEAR COMMUNITY SERVICE</span>}
+                    {group.context.roadClass && <span>{group.context.roadClass.toUpperCase()} ROAD</span>}
+                </button>)}
+            </aside>
         </main>
     )
 }

@@ -2,6 +2,8 @@ import { placeBuilding as placeBuildingInCity, placeRoad as placeRoadInCity, rem
 import type { BuildingId, BuildingTypeId, GridPosition, RoadId } from '../../domain/city'
 import type { SimulationRuntimePort } from '../contracts/simulation-runtime'
 import { clampPopulationToHousing } from '../../domain/population'
+import { canAffordMaterials, trySpendMaterials } from '../../domain/economy'
+import { CONSTRUCTION_COSTS } from '../../domain/economy/resource-costs'
 import { createZone, placeCommunityService, removeCommunityService, type ZonePlacementResult, type ZoneType, type ServicePlacementResult } from '../../domain/city'
 
 export interface PlaceBuildingCommand {
@@ -38,8 +40,15 @@ export function removeDevelopmentZone(runtime: SimulationRuntimePort, command: R
 }
 
 export function placeService(runtime: SimulationRuntimePort, command: PlaceServiceCommand): ServicePlacementResult {
-  const state = runtime.getState(); const result = placeCommunityService(state.world, state.city, command.position)
-  if (result.valid) runtime.commitState({ ...state, city: result.city })
+  const state = runtime.getState()
+  if (!canAffordMaterials(state.economy, CONSTRUCTION_COSTS.community)) {
+    return { valid: false, reason: 'insufficient_materials' }
+  }
+  const result = placeCommunityService(state.world, state.city, command.position)
+  if (!result.valid) return result
+  const economy = trySpendMaterials(state.economy, CONSTRUCTION_COSTS.community)
+  if (!economy) return { valid: false, reason: 'insufficient_materials' }
+  runtime.commitState({ ...state, city: result.city, economy })
   return result
 }
 
@@ -49,8 +58,14 @@ export function removeService(runtime: SimulationRuntimePort, serviceId: string)
 
 export function placeBuilding(runtime: SimulationRuntimePort, command: PlaceBuildingCommand): PlacementResult {
   const state = runtime.getState()
+  if (!canAffordMaterials(state.economy, CONSTRUCTION_COSTS[command.type])) {
+    return { valid: false, reason: 'insufficient_materials' }
+  }
   const result = placeBuildingInCity(state.world, state.city, command.type, command.position)
-  if (result.valid) runtime.commitState({ ...state, city: result.city, population: clampPopulationToHousing(state.population, result.city) })
+  if (!result.valid) return result
+  const economy = trySpendMaterials(state.economy, CONSTRUCTION_COSTS[command.type])
+  if (!economy) return { valid: false, reason: 'insufficient_materials' }
+  runtime.commitState({ ...state, city: result.city, population: clampPopulationToHousing(state.population, result.city), economy })
   return result
 }
 
@@ -63,8 +78,14 @@ export function removeBuilding(runtime: SimulationRuntimePort, command: RemoveBu
 
 export function placeRoad(runtime: SimulationRuntimePort, command: PlaceRoadCommand): RoadPlacementResult {
   const state = runtime.getState()
+  if (!canAffordMaterials(state.economy, CONSTRUCTION_COSTS.road)) {
+    return { valid: false, reason: 'insufficient_materials' }
+  }
   const result = placeRoadInCity(state.world, state.city, command.position)
-  if (result.valid) runtime.commitState({ ...state, city: result.city })
+  if (!result.valid) return result
+  const economy = trySpendMaterials(state.economy, CONSTRUCTION_COSTS.road)
+  if (!economy) return { valid: false, reason: 'insufficient_materials' }
+  runtime.commitState({ ...state, city: result.city, economy })
   return result
 }
 

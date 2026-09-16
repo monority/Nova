@@ -3,7 +3,7 @@ import type { CityState } from '../city/city-state'
 import type { GridPosition } from '../city/grid-position'
 import { getWorldCell, type World } from '../world'
 
-export type PlacementFailureReason = 'out_of_bounds' | 'water' | 'not_buildable' | 'occupied'
+export type PlacementFailureReason = 'out_of_bounds' | 'water' | 'not_buildable' | 'occupied' | 'insufficient_materials'
 
 export type PlacementResult =
   | { readonly valid: true; readonly building: Building; readonly city: CityState }

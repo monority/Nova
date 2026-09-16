@@ -3,14 +3,18 @@ import { createWorld } from '../../src/application/commands/create-world'
 import { placeBuilding, removeBuilding } from '../../src/application/commands/construction'
 import { toBuildingId } from '../../src/domain/city'
 import { createSimulationState } from '../../src/domain/simulation/simulation-state'
+import { createInitialEconomyState } from '../../src/domain/economy'
 import { SimulationRuntime } from '../../src/engine/simulation/SimulationRuntime'
 import { deterministicSimulationStepper } from '../../src/engine/simulation/simulation-stepper'
 
 function createRuntime() {
-  return new SimulationRuntime(
+  const runtime = new SimulationRuntime(
     createSimulationState(createWorld({ seed: 4242, width: 16, height: 16 })),
     deterministicSimulationStepper,
   )
+  const funded = runtime.getState()
+  runtime.commitState({ ...funded, economy: createInitialEconomyState() })
+  return runtime
 }
 
 function buildablePosition(runtime: ReturnType<typeof createRuntime>) {

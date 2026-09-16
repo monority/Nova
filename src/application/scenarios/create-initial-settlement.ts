@@ -1,4 +1,5 @@
 import { createSimulationState, type SimulationState } from '../../domain/simulation/simulation-state'
+import { createInitialEconomyState } from '../../domain/economy'
 import { createZone, placeCommunityService } from '../../domain/city'
 import { placeBuilding, placeRoad } from '../../domain/construction'
 import type { GridPosition } from '../../domain/city'
@@ -46,7 +47,7 @@ export function createInitialSettlement(world: World): SimulationState {
     ...initial,
     city,
     population: { total: Math.min(12, city.buildings.filter((building) => building.type === 'house').length * 4), growthProgress: 0 },
-    economy: { ...initial.economy, food: 18 },
+    economy: createInitialEconomyState(),
   }
 }
 

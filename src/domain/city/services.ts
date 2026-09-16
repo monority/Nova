@@ -6,7 +6,15 @@ import { getWorldCell } from '../world'
 import type { CityState } from './city-state'
 
 export const COMMUNITY_SERVICE_RADIUS = 4
-export type ServicePlacementResult = { readonly valid: true; readonly service: ServiceBuilding; readonly city: CityState } | { readonly valid: false; readonly reason: 'out_of_bounds' | 'water' | 'not_buildable' | 'occupied' }
+export type ServicePlacementFailureReason =
+  | 'out_of_bounds'
+  | 'water'
+  | 'not_buildable'
+  | 'occupied'
+  | 'insufficient_materials'
+export type ServicePlacementResult =
+  | { readonly valid: true; readonly service: ServiceBuilding; readonly city: CityState }
+  | { readonly valid: false; readonly reason: ServicePlacementFailureReason }
 export function isWithinServiceCoverage(servicePosition: GridPosition, targetPosition: GridPosition): boolean { return Math.abs(servicePosition.x - targetPosition.x) + Math.abs(servicePosition.y - targetPosition.y) <= COMMUNITY_SERVICE_RADIUS }
 export function hasServiceCoverage(city: CityState, position: GridPosition): boolean { return city.services.some((service) => isWithinServiceCoverage(service.position, position)) }
 export function placeCommunityService(world: World, city: CityState, position: GridPosition): ServicePlacementResult {

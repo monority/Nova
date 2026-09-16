@@ -1,5 +1,5 @@
 import {
-  FIXED_TIMESTEP_SECONDS,
+  BASE_TICKS_PER_SECOND,
   pauseClock,
   setClockSpeed,
   startClock,
@@ -9,7 +9,6 @@ import type { SimulationState } from '../../domain/simulation/simulation-state'
 import type { SimulationStepper } from './simulation-stepper'
 
 export interface SimulationRuntimeOptions {
-  fixedTimestepSeconds?: number
   maxFrameDeltaSeconds?: number
   maxTicksPerUpdate?: number
 }
@@ -23,14 +22,17 @@ export interface SimulationRuntimeMetrics {
 const DEFAULT_MAX_FRAME_DELTA_SECONDS = 0.25
 const DEFAULT_MAX_TICKS_PER_UPDATE = 120
 
+/**
+ * Step 23 — The runtime schedules whole simulation ticks (1 tick = 1 day).
+ * Speed N executes N ticks per real second; it never changes tick math.
+ */
 export class SimulationRuntime {
   private readonly initialState: SimulationState
   private readonly stepper: SimulationStepper
-  private readonly fixedTimestepSeconds: number
   private readonly maxFrameDeltaSeconds: number
   private readonly maxTicksPerUpdate: number
   private state: SimulationState
-  private accumulatorSeconds = 0
+  private accumulatorTicks = 0
   private frameHandle: number | null = null
   private lastFrameTimestamp: number | null = null
   private metrics: SimulationRuntimeMetrics = {
@@ -43,10 +45,9 @@ export class SimulationRuntime {
   constructor(initialState: SimulationState, stepper: SimulationStepper, options: SimulationRuntimeOptions = {}) {
     this.initialState = initialState
     this.stepper = stepper
-    this.fixedTimestepSeconds = options.fixedTimestepSeconds ?? FIXED_TIMESTEP_SECONDS
     this.maxFrameDeltaSeconds = options.maxFrameDeltaSeconds ?? DEFAULT_MAX_FRAME_DELTA_SECONDS
     this.maxTicksPerUpdate = options.maxTicksPerUpdate ?? DEFAULT_MAX_TICKS_PER_UPDATE
-    if (this.fixedTimestepSeconds <= 0 || this.maxFrameDeltaSeconds <= 0 || this.maxTicksPerUpdate <= 0) {
+    if (this.maxFrameDeltaSeconds <= 0 || this.maxTicksPerUpdate <= 0) {
       throw new Error('Runtime limits must be positive')
     }
     this.state = initialState
@@ -80,9 +81,10 @@ export class SimulationRuntime {
     this.notify()
   }
 
+  /** Exactly one canonical tick (one simulated day), regardless of speed. */
   step(): void {
     this.state = this.stepper.step(this.state)
-    this.accumulatorSeconds = 0
+    this.accumulatorTicks = 0
     this.notify()
   }
 
@@ -95,7 +97,7 @@ export class SimulationRuntime {
 
   reset(): void {
     this.stopLoop()
-    this.accumulatorSeconds = 0
+    this.accumulatorTicks = 0
     this.metrics = { droppedRealSeconds: 0, droppedSimulationTicks: 0, lastProcessedTicks: 0 }
     this.state = this.initialState
     this.notify()
@@ -103,7 +105,7 @@ export class SimulationRuntime {
 
   commitState(state: SimulationState): void {
     this.state = state
-    this.accumulatorSeconds = 0
+    this.accumulatorTicks = 0
     this.notify()
   }
 
@@ -116,17 +118,17 @@ export class SimulationRuntime {
     const elapsedSeconds = elapsedMilliseconds / 1000
     const boundedSeconds = Math.min(elapsedSeconds, this.maxFrameDeltaSeconds)
     const droppedRealSeconds = elapsedSeconds - boundedSeconds
-    this.accumulatorSeconds += boundedSeconds * this.state.clock.timeScale
+    this.accumulatorTicks += boundedSeconds * BASE_TICKS_PER_SECOND * this.state.clock.timeScale
 
     let processedTicks = 0
-    while (this.accumulatorSeconds + Number.EPSILON >= this.fixedTimestepSeconds && processedTicks < this.maxTicksPerUpdate) {
+    while (this.accumulatorTicks >= 1 && processedTicks < this.maxTicksPerUpdate) {
       this.state = this.stepper.step(this.state)
-      this.accumulatorSeconds -= this.fixedTimestepSeconds
+      this.accumulatorTicks -= 1
       processedTicks += 1
     }
 
-    const overdueTicks = Math.floor(this.accumulatorSeconds / this.fixedTimestepSeconds)
-    this.accumulatorSeconds %= this.fixedTimestepSeconds
+    const overdueTicks = Math.floor(this.accumulatorTicks)
+    this.accumulatorTicks -= overdueTicks
     this.metrics = {
       droppedRealSeconds: this.metrics.droppedRealSeconds + droppedRealSeconds,
       droppedSimulationTicks: this.metrics.droppedSimulationTicks + overdueTicks,

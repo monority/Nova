@@ -139,6 +139,8 @@
     background: rgba(130, 211, 191, .1);
 }
 
+.debug-controls .speed-active { color: #091313; background: #9fe3ce; }
+
 .debug-time {
     padding: 0 8px;
     color: #78918c;
@@ -152,6 +154,22 @@
         .construction-panel { top: 18px; right: 18px; width: 148px; }
 }
 
+.inspection-panel {
+    position: absolute;
+    left: 28px;
+    bottom: 28px;
+    z-index: 2;
+    width: 190px;
+    padding: 14px;
+    background: rgba(8, 18, 18, .94);
+    border: 1px solid rgba(159, 227, 206, .16);
+    color: #a4bab1;
+}
+.inspection-panel h2 { margin: 9px 0 3px; color: #dbe9df; font: 500 18px 'DM Mono', monospace; letter-spacing: .08em; }
+.inspection-description { margin: 0 0 12px; color: #78918c; font-size: 11px; }
+.inspection-line { display: flex; justify-content: space-between; gap: 8px; margin: 7px 0 0; font: 9px 'DM Mono', monospace; letter-spacing: .06em; }
+.inspection-line strong { color: #9fe3ce; font-weight: 500; text-align: right; }
+
 .population-readout {
     display: grid;
     gap: 2px;
@@ -161,3 +179,12 @@
 
 .population-readout small { color: #6f8982; }
 .population-readout strong { color: #d7e8df; font: 500 16px 'DM Mono', monospace; letter-spacing: .08em; }
+
+.event-feed { position: absolute; left: 28px; top: 160px; z-index: 2; display: grid; gap: 6px; width: 190px; padding: 12px 14px; background: rgba(8, 18, 18, .86); border-left: 2px solid rgba(159, 227, 206, .58); color: #a4bab1; }
+.event-feed .eyebrow { margin: 0 0 3px; }
+.event-empty, .event-entry { color: #78918c; font: 9px monospace; letter-spacing: .08em; }
+.event-entry { display: grid; gap: 3px; padding: 6px 0; border: 0; border-top: 1px solid rgba(159,227,206,.1); background: transparent; text-align: left; cursor: pointer; }
+.event-entry:hover, .event-entry:focus-visible { color: #dbe9df; }
+.event-current { color: #dbe9df; }
+.event-time { color: #5e7971; }
+.event-label { color: #9fe3ce; letter-spacing: .12em; }

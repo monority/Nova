@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { createWorld } from '../../src/application/commands/create-world'
 import { placeRoad, removeRoad } from '../../src/application/commands/construction'
 import { createSimulationState } from '../../src/domain/simulation/simulation-state'
+import { createInitialEconomyState } from '../../src/domain/economy'
 import { SimulationRuntime } from '../../src/engine/simulation/SimulationRuntime'
 import { deterministicSimulationStepper } from '../../src/engine/simulation/simulation-stepper'
 import { toRoadId } from '../../src/domain/city'
 
 function createRuntime() {
-  return new SimulationRuntime(createSimulationState(createWorld({ seed: 4242, width: 16, height: 16 })), deterministicSimulationStepper)
+  const runtime = new SimulationRuntime(createSimulationState(createWorld({ seed: 4242, width: 16, height: 16 })), deterministicSimulationStepper)
+  const funded = runtime.getState()
+  runtime.commitState({ ...funded, economy: createInitialEconomyState() })
+  return runtime
 }
 
 function position(runtime: ReturnType<typeof createRuntime>) {

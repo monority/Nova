@@ -12,6 +12,7 @@
         "test:watch": "vitest",
         "test:run": "vitest run",
         "test:e2e": "playwright test",
+        "test:e2e:gpu": "playwright test --config=playwright.gpu.config.ts",
         "preview": "vite preview"
     },
     "dependencies": {

@@ -4,6 +4,7 @@ import type { EconomyState } from '../economy'
 import type { PopulationState } from '../population'
 import { getHousingCapacity } from '../population'
 import { hasServiceCoverage } from '../city'
+import { CONSTRUCTION_COSTS, EVOLVE_COST } from '../economy/resource-costs'
 import type { World } from '../world'
 import type { Building, GridPosition, BuildingTypeId, Road } from '../city'
 
@@ -15,13 +16,15 @@ export const MAX_AUTONOMOUS_ROAD_EXTENSION = 4
 export const DENSIFICATION_MIN_HOUSING_PRESSURE = 1
 export const COMMUNITY_SERVICE_BONUS = 8
 
-export const DEVELOPMENT_INTERVAL_TICKS = 60 * 10
+/** Step 23 — autonomous development cadence in canonical ticks (1 tick = 1 day). */
+export const DEVELOPMENT_INTERVAL_TICKS = 10
 export function advanceDevelopment(world: World, city: CityState, population: PopulationState, economy: EconomyState, currentTick: number): CityState {
   if (currentTick === 0 || currentTick % DEVELOPMENT_INTERVAL_TICKS !== 0) return city
+  let remaining = economy.materials
   const residentialPressure = population.total >= getHousingCapacity(city)
   const agriculturalPressure = economy.foodShortage > 0
   const zoneOrder = agriculturalPressure ? ['agricultural', 'residential'] as const : residentialPressure ? ['residential', 'agricultural'] as const : []
-  if (residentialPressure) {
+  if (residentialPressure && remaining >= EVOLVE_COST) {
     const denseCandidates = city.zones
       .filter((zone) => zone.type === 'residential')
       .flatMap((zone) => zone.cells.map((cell) => city.buildings.find((building) => building.type === 'house' && building.position.x === cell.x && building.position.y === cell.y)))
@@ -31,6 +34,8 @@ export function advanceDevelopment(world: World, city: CityState, population: Po
   }
   for (const type of zoneOrder) {
     const buildingType = type === 'agricultural' ? 'farm' : 'house'
+    const cost = CONSTRUCTION_COSTS[buildingType]
+    if (remaining < cost) continue
     for (const zone of city.zones.filter((candidate) => candidate.type === type)) {
       const candidates = zone.cells
         .filter((cell) => validatePlacement(world, city, buildingType, cell).valid)
@@ -38,7 +43,12 @@ export function advanceDevelopment(world: World, city: CityState, population: Po
         .sort(comparePressure)
       if (candidates.length > 0) {
         const result = placeBuilding(world, city, buildingType, candidates[0].position)
-        if (result.valid) return extendRoadNetwork(world, result.city, result.building)
+        if (result.valid) {
+          remaining -= cost
+          const maxRoads = Math.min(MAX_AUTONOMOUS_ROAD_EXTENSION, Math.floor(remaining / CONSTRUCTION_COSTS.road))
+          const extended = extendRoadNetwork(world, result.city, result.building, maxRoads)
+          return extended
+        }
       }
     }
   }
@@ -54,15 +64,19 @@ export function buildRoadConnection(from: GridPosition, target: GridPosition): r
   return cells
 }
 
-function extendRoadNetwork(world: World, city: CityState, building: Building): CityState {
+function extendRoadNetwork(world: World, city: CityState, building: Building, maxRoads: number = MAX_AUTONOMOUS_ROAD_EXTENSION): CityState {
   if (city.roads.some((road) => manhattanDistance(road.position, building.position) === 1)) return city
   if (city.roads.length === 0) return city
+  if (maxRoads <= 0) return city
   const target = [...city.roads].sort((a, b) => manhattanDistance(a.position, building.position) - manhattanDistance(b.position, building.position) || a.position.y - b.position.y || a.position.x - b.position.x)[0]
   let nextCity = city
-  for (const cell of buildRoadConnection(building.position, target.position).slice(0, MAX_AUTONOMOUS_ROAD_EXTENSION)) {
+  let placed = 0
+  for (const cell of buildRoadConnection(building.position, target.position).slice(0, maxRoads)) {
     const result = placeRoad(world, nextCity, cell)
     if (!result.valid) break
     nextCity = result.city
+    placed += 1
+    if (placed >= maxRoads) break
   }
   return nextCity
 }
