@@ -157,6 +157,7 @@ const matrixFixture = (workers: number, staffed: number): SimulationState => {
     counters: {
       nextBuildingId: Object.keys(buildings).length + 1,
       nextColonistId: workers + 1,
+      nextRoadId: 1,
     },
   }
 }

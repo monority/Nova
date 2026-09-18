@@ -46,6 +46,14 @@ import {
 import { countEmployedWorkers, countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
 import type { ColonistState } from '../population/colonist.js'
 import {
+  isOperationalRoad,
+  isRoadOccupied,
+  normalizeRoadCells,
+  ROAD_CONSTRUCTION_COST,
+  type RoadState,
+} from '../road/road.js'
+import { iterateRoads } from '../road/road.js'
+import {
   deductFood,
   deductResources,
   FOOD_PER_COLONIST_PER_TICK,
@@ -62,6 +70,7 @@ import type { SimulationCommand } from './command.js'
 import {
   createBuilding,
   createColonist,
+  createRoads,
   type SimulationState,
 } from './state.js'
 
@@ -82,6 +91,16 @@ export const isCellOccupied = (
   return false
 }
 
+/**
+ * A cell is blocked iff it holds a building OR a road (Step 09C Phase B).
+ * One occupant per cell: building XOR road. Both placement validators gate
+ * on this so roads and buildings can never stack.
+ */
+export const isCellBlocked = (
+  state: SimulationState,
+  cell: CellCoordinate
+): boolean => isCellOccupied(state, cell) || isRoadOccupied(state, cell)
+
 export interface CommandApplicationResult {
   readonly state: SimulationState
   readonly accepted: boolean
@@ -93,6 +112,12 @@ export interface CommandApplicationResult {
    * progress, so the placed building missed its progress slot (Step 08G).
    */
   readonly placedBuildingId: string | null
+  /**
+   * Ids of the roads created by an accepted placeRoads command, in
+   * deterministic cell order, else empty. Same catch-up contract as
+   * placedBuildingId (Step 09C Phase D).
+   */
+  readonly placedRoadIds: readonly string[]
 }
 
 /**
@@ -117,13 +142,55 @@ export const validatePlacement = (
   if (!isInBounds(state.config.world, cell)) {
     return { valid: false, reason: 'outOfBounds' }
   }
-  if (isCellOccupied(state, cell)) {
+  if (isCellBlocked(state, cell)) {
     return { valid: false, reason: 'cellOccupied' }
   }
   if (!hasSufficientResources(state.resources, definition.constructionCost)) {
     return { valid: false, reason: 'insufficientResources' }
   }
   return { valid: true }
+}
+
+/**
+ * Road placement validation (Step 09C Phase C/G). The input list is
+ * normalized first (dedupe + deterministic (x, y) order), then the ENTIRE
+ * set is validated before anything mutates: empty set, out-of-bounds cell,
+ * building collision, road collision, then total-cost affordability. The
+ * first failing cell in deterministic order decides the spatial reason, so
+ * the result never depends on drag direction or input order.
+ */
+export type RoadPlacementValidation =
+  | { readonly valid: true; readonly cells: CellCoordinate[]; readonly totalCost: number }
+  | { readonly valid: false; readonly reason: 'emptyCells' | 'outOfBounds' | 'cellOccupiedByBuilding' | 'cellOccupiedByRoad' | 'insufficientResources' }
+
+export const validateRoadsPlacement = (
+  state: SimulationState,
+  cells: readonly CellCoordinate[]
+): RoadPlacementValidation => {
+  const normalized = normalizeRoadCells(cells)
+  if (normalized.length === 0) {
+    return { valid: false, reason: 'emptyCells' }
+  }
+  for (const cell of normalized) {
+    if (!isInBounds(state.config.world, cell)) {
+      return { valid: false, reason: 'outOfBounds' }
+    }
+  }
+  for (const cell of normalized) {
+    if (isCellOccupied(state, cell)) {
+      return { valid: false, reason: 'cellOccupiedByBuilding' }
+    }
+  }
+  for (const cell of normalized) {
+    if (isRoadOccupied(state, cell)) {
+      return { valid: false, reason: 'cellOccupiedByRoad' }
+    }
+  }
+  const totalCost = normalized.length * ROAD_CONSTRUCTION_COST
+  if (!hasSufficientResources(state.resources, totalCost)) {
+    return { valid: false, reason: 'insufficientResources' }
+  }
+  return { valid: true, cells: normalized, totalCost }
 }
 
 /**
@@ -141,14 +208,14 @@ export const applyCommand = (
   command: SimulationCommand | undefined
 ): CommandApplicationResult => {
   if (command === undefined) {
-    return { state, accepted: false, reason: null, placedBuildingId: null }
+    return { state, accepted: false, reason: null, placedBuildingId: null, placedRoadIds: [] }
   }
   switch (command.type) {
     case 'placeBuilding': {
       const cell = { x: command.x, y: command.y }
       const validation = validatePlacement(state, cell, command.buildingType)
       if (!validation.valid) {
-        return { state, accepted: false, reason: validation.reason, placedBuildingId: null }
+        return { state, accepted: false, reason: validation.reason, placedBuildingId: null, placedRoadIds: [] }
       }
       const definition = BUILDING_CATALOG[command.buildingType]
       // Atomic (Step 4 §6, Step 08G §7/§14): building creation and resource
@@ -167,6 +234,26 @@ export const applyCommand = (
         accepted: true,
         reason: null,
         placedBuildingId: created.buildingId,
+        placedRoadIds: [],
+      }
+    }
+    case 'placeRoads': {
+      // Atomic multi-cell transaction (Step 09C Phase G): validate the whole
+      // normalized set and price the total BEFORE creating anything. Any
+      // failure returns the input state reference: zero mutation of roads,
+      // buildings, resources, counters and time.
+      const validation = validateRoadsPlacement(state, command.cells)
+      if (!validation.valid) {
+        return { state, accepted: false, reason: validation.reason, placedBuildingId: null, placedRoadIds: [] }
+      }
+      const created = createRoads(state, validation.cells)
+      const deducted = deductResources(created.state.resources, validation.totalCost)
+      return {
+        state: { ...created.state, resources: deducted },
+        accepted: true,
+        reason: null,
+        placedBuildingId: null,
+        placedRoadIds: created.roadIds,
       }
     }
   }
@@ -224,6 +311,24 @@ export const progressOneBuilding = (
   return { ...building, constructionRemaining: remaining }
 }
 
+/**
+ * Road construction progress (Step 09C Phase D). Same countdown semantics
+ * as progressOneBuilding — one shared lifecycle shape, not a second system.
+ */
+export const progressOneRoad = (road: RoadState): RoadState => {
+  if (road.status === 'operational') {
+    return road
+  }
+  const remaining = road.constructionRemaining - 1
+  if (remaining < 0) {
+    throw new Error(`Construction below zero for ${road.id}`)
+  }
+  if (remaining === 0) {
+    return { ...road, status: 'operational', constructionRemaining: 0 }
+  }
+  return { ...road, constructionRemaining: remaining }
+}
+
 export const advanceConstruction = (
   state: SimulationState
 ): SimulationState => {
@@ -236,10 +341,49 @@ export const advanceConstruction = (
       changed = true
     }
   }
+  const nextRoads: Record<string, RoadState> = {}
+  for (const road of iterateRoads(state)) {
+    const progressed = progressOneRoad(road)
+    nextRoads[road.id] = progressed
+    if (progressed !== road) {
+      changed = true
+    }
+  }
   if (!changed) {
     return state
   }
-  return { ...state, buildings: nextBuildings }
+  return { ...state, buildings: nextBuildings, roads: nextRoads }
+}
+
+/**
+ * Catch-up progress for newly placed roads (Step 09C Phase D). Mirrors
+ * progressPlacedBuilding exactly: the phase-8a transaction runs after this
+ * tick's advanceConstruction, so placed roads missed their progress slot
+ * and each is progressed once to preserve the 2-tick completion contract
+ * (placed tick 2 -> 1, next tick 1 -> 0 operational). No-op when no roads
+ * were placed or an id is absent (defensive: never throws).
+ */
+export const progressPlacedRoads = (
+  state: SimulationState,
+  result: CommandApplicationResult
+): SimulationState => {
+  if (result.placedRoadIds.length === 0) {
+    return state
+  }
+  let roads = state.roads
+  let changed = false
+  for (const id of result.placedRoadIds) {
+    const placed = roads[id]
+    if (placed === undefined || isOperationalRoad(placed)) {
+      continue
+    }
+    roads = { ...roads, [id]: progressOneRoad(placed) }
+    changed = true
+  }
+  if (!changed) {
+    return state
+  }
+  return { ...state, roads }
 }
 
 // ---------------------------------------------------------------------------

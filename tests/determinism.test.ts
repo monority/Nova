@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createInitialState,
   hashCanonicalState,
-  type PlaceBuildingCommand,
   serializeCanonicalState,
   stepSimulation,
+  type PlaceBuildingCommand,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, testConfig } from './helpers.js'
 
 const placeResidence = (x: number, y: number): PlaceBuildingCommand => ({
   type: 'placeBuilding',
@@ -37,24 +38,22 @@ describe('determinism', () => {
   })
 
   it('key insertion order does not affect serialization', () => {
-    let state = createTestState()
-    state = stepSimulation(state, placeResidence(1, 1))
-    state = stepSimulation(state, placeResidence(6, 6))
-    state = stepSimulation(state)
-    state = stepSimulation(state)
-
+    const a = createInitialState(testConfig)
+    const b = createInitialState(testConfig)
+    // Same logical state built with different insertion order.
     const reordered = {
-      counters: state.counters,
-      colonists: state.colonists,
-      buildings: state.buildings,
-      time: state.time,
-      resources: state.resources,
-      config: state.config,
+      counters: { ...b.counters, nextRoadId: 1 },
+      colonists: b.colonists,
+      buildings: b.buildings,
+      time: b.time,
+      resources: b.resources,
+      config: b.config,
+      roads: {},
     }
-    expect(serializeCanonicalState(state)).toBe(
+    expect(serializeCanonicalState(a)).toBe(
       serializeCanonicalState(reordered)
     )
-    expect(hashCanonicalState(state)).toBe(hashCanonicalState(reordered))
+    expect(hashCanonicalState(a)).toBe(hashCanonicalState(reordered))
   })
 
   it('different command sequences produce different states', () => {

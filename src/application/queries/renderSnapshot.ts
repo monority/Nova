@@ -7,6 +7,8 @@
  */
 
 import { iterateBuildings, iterateColonists } from '../../domain/housing/housing.js'
+import { iterateRoads } from '../../domain/road/road.js'
+import type { RoadStatus } from '../../domain/road/road.js'
 import type { BuildingStatus, BuildingType } from '../../domain/building/building.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
@@ -36,6 +38,13 @@ export interface RenderColonist {
   readonly cell: { readonly x: number; readonly y: number } | null
 }
 
+export interface RenderRoad {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+  readonly status: RoadStatus
+}
+
 export interface RenderSnapshot {
   readonly tick: number
   readonly world: {
@@ -44,6 +53,8 @@ export interface RenderSnapshot {
   }
   readonly buildings: readonly RenderBuilding[]
   readonly colonists: readonly RenderColonist[]
+  /** Step 09C: authoritative road cells projected for rendering. */
+  readonly roads: readonly RenderRoad[]
 }
 
 export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
@@ -78,6 +89,12 @@ export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
               return residence ? { x: residence.x, y: residence.y } : null
             })()
           : null,
+    })),
+    roads: [...iterateRoads(state)].map((r) => ({
+      id: r.id,
+      x: r.x,
+      y: r.y,
+      status: r.status,
     })),
   }
 }

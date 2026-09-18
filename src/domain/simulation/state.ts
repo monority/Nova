@@ -12,6 +12,7 @@
 
 import type { BuildingState, BuildingType } from '../building/building.js'
 import type { ColonistState } from '../population/colonist.js'
+import { ROAD_CONSTRUCTION_TICKS, type RoadState } from '../road/road.js'
 import { createInitialResourceStock, type ResourceStock } from '../resource/resource.js'
 import type { WorldConfig } from '../world/grid.js'
 
@@ -23,6 +24,7 @@ export interface SimulationTime {
 interface EntityCounters {
   readonly nextBuildingId: number
   readonly nextColonistId: number
+  readonly nextRoadId: number
 }
 
 export interface SimulationState {
@@ -31,6 +33,9 @@ export interface SimulationState {
   readonly resources: ResourceStock
   readonly buildings: Readonly<Record<string, BuildingState>>
   readonly colonists: Readonly<Record<string, ColonistState>>
+  /** Authoritative mobility infrastructure (Step 09C). Derived road
+   * connectivity is never stored here. */
+  readonly roads: Readonly<Record<string, RoadState>>
   readonly counters: EntityCounters
 }
 
@@ -50,7 +55,8 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
     resources: createInitialResourceStock(),
     buildings: {},
     colonists: {},
-    counters: { nextBuildingId: 1, nextColonistId: 1 },
+    roads: {},
+    counters: { nextBuildingId: 1, nextColonistId: 1, nextRoadId: 1 },
   }
 }
 
@@ -69,6 +75,7 @@ const assertValidConfig = (config: SimulationConfig): void => {
 
 export const makeBuildingId = (n: number): string => `building-${n}`
 export const makeColonistId = (n: number): string => `colonist-${n}`
+export const makeRoadId = (n: number): string => `road-${n}`
 
 export const createBuilding = (
   state: SimulationState,
@@ -110,6 +117,42 @@ export const createColonist = (
       ...state,
       colonists: { ...state.colonists, [id]: colonist },
       counters: { ...state.counters, nextColonistId: state.counters.nextColonistId + 1 },
+    },
+  }
+}
+
+/**
+ * Create road pieces for already-normalized cells (Step 09C). IDs allocate
+ * in cell order from the canonical nextRoadId counter — never random, never
+ * wall-clock. Every road starts underConstruction with the domain
+ * ROAD_CONSTRUCTION_TICKS duration.
+ */
+export const createRoads = (
+  state: SimulationState,
+  cells: readonly { readonly x: number; readonly y: number }[]
+): { state: SimulationState; roadIds: string[] } => {
+  const roadIds: string[] = []
+  let nextId = state.counters.nextRoadId
+  let roads = state.roads
+  for (const cell of cells) {
+    const id = makeRoadId(nextId)
+    nextId += 1
+    const road: RoadState = {
+      id,
+      x: cell.x,
+      y: cell.y,
+      status: 'underConstruction',
+      constructionRemaining: ROAD_CONSTRUCTION_TICKS,
+    }
+    roads = { ...roads, [id]: road }
+    roadIds.push(id)
+  }
+  return {
+    roadIds,
+    state: {
+      ...state,
+      roads,
+      counters: { ...state.counters, nextRoadId: nextId },
     },
   }
 }

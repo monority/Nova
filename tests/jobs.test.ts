@@ -641,6 +641,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
       'config',
       'counters',
       'resources',
+      'roads',
       'time',
     ])
     expect(withConstruction(state, 10).resources.construction).toBe(10)

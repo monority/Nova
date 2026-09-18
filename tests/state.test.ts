@@ -28,12 +28,13 @@ describe('canonical state', () => {
     const b = createInitialState(testConfig)
     // Same logical state built with different insertion order.
     const reordered = {
-      counters: b.counters,
+      counters: { ...b.counters, nextRoadId: 1 },
       colonists: b.colonists,
       buildings: b.buildings,
       time: b.time,
       resources: b.resources,
       config: b.config,
+      roads: {},
     }
     expect(serializeCanonicalState(a)).toBe(serializeCanonicalState(reordered))
   })

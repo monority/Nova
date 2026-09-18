@@ -18,6 +18,7 @@ import {
   produceFood,
   produceMaterial,
   progressPlacedBuilding,
+  progressPlacedRoads,
   updateNeeds,
   updatePopulation,
   upkeepBuildings,
@@ -54,9 +55,12 @@ export const stepSimulation = (
   // authoritative stock only: overflow was already discarded by the 08F
   // storage clamp, and affordability still means current stock >= cost (§13).
   const commanded = applyCommand(materialized, command)
-  // The placed building missed this tick's construction progress: catch it
-  // up once so catalog completion timing is unchanged (Step 08G).
-  const progressed = progressPlacedBuilding(commanded)
+  // The placed building / roads missed this tick's construction progress:
+  // catch each up once so catalog completion timing is unchanged (Step 08G,
+  // Step 09C Phase D). At most one command type applies per tick, so only
+  // one of the two catch-ups ever does work.
+  const progressedBuilding = progressPlacedBuilding(commanded)
+  const progressed = progressPlacedRoads(progressedBuilding, commanded)
   // Phase 8b: operational upkeep (Step 08C). Runs after production so
   // same-tick output pays same-tick upkeep, and after construction so a
   // 25-cost build from a 25 stock leaves upkeep 0 under the existing

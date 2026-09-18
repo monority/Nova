@@ -10,6 +10,7 @@ import { canonicalJson } from '../../domain/simulation/hash.js'
 import type { BuildingState } from '../../domain/building/building.js'
 import type { ColonistState } from '../../domain/population/colonist.js'
 import type { ResourceStock } from '../../domain/resource/resource.js'
+import { type RoadState } from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 export const SAVE_FORMAT = 'nova-save'
@@ -150,6 +151,26 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     food: resources['food'] as number,
   }
 
+  const validatedRoads: Record<string, RoadState> = {}
+  for (const [id, value] of Object.entries(raw['roads'] ?? {})) {
+    if (!isRecord(value)) {
+      throw new SaveValidationError(`Malformed save: road ${id}`)
+    }
+    assertString(value['id'], `roads.${id}.id`)
+    assertFiniteInt(value['x'], `roads.${id}.x`)
+    assertFiniteInt(value['y'], `roads.${id}.y`)
+    assertString(value['status'], `roads.${id}.status`)
+    assertFiniteInt(value['constructionRemaining'], `roads.${id}.constructionRemaining`)
+    if (value['id'] !== id) {
+      throw new SaveValidationError(`Malformed save: road key/id mismatch for ${id}`)
+    }
+    validatedRoads[id] = value as unknown as RoadState
+  }
+
+  if (Object.keys(validatedRoads).length !== Object.keys(raw['roads'] ?? {}).length) {
+    throw new SaveValidationError('Malformed save: road key/id mismatch count')
+  }
+
   const state: SimulationState = {
     config: {
       world: {
@@ -162,9 +183,11 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     resources: resourcesStock,
     buildings: validatedBuildings,
     colonists: validatedColonists,
+    roads: validatedRoads,
     counters: {
       nextBuildingId: counters['nextBuildingId'] as number,
       nextColonistId: counters['nextColonistId'] as number,
+      nextRoadId: counters['nextRoadId'] as number,
     },
   }
   // Round-trip consistency: re-serializing the validated state must match,

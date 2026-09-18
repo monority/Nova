@@ -6,6 +6,7 @@
  */
 
 import type { BuildingType } from '../building/building.js'
+import type { CellCoordinate } from '../world/grid.js'
 
 export interface PlaceBuildingCommand {
   readonly type: 'placeBuilding'
@@ -14,4 +15,15 @@ export interface PlaceBuildingCommand {
   readonly buildingType: BuildingType
 }
 
-export type SimulationCommand = PlaceBuildingCommand
+/**
+ * Multi-cell mobility construction (Step 09C Phase G). One command carries
+ * the whole drag: the domain normalizes (dedupe + deterministic order),
+ * validates the entire set, prices the total, and applies all cells or
+ * rejects with zero mutation. Atomic from the simulation's point of view.
+ */
+export interface PlaceRoadsCommand {
+  readonly type: 'placeRoads'
+  readonly cells: readonly CellCoordinate[]
+}
+
+export type SimulationCommand = PlaceBuildingCommand | PlaceRoadsCommand
