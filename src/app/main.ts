@@ -27,6 +27,7 @@ import {
   getHousingSummary,
   getMaterialProductionPerTick,
   getMaterialUpkeepPerTick,
+  getProductiveWorkerCount,
   getNetMaterialPerTick,
   getResourceStock,
   INITIAL_CONSTRUCTION_MATERIAL,
@@ -316,8 +317,11 @@ const refreshUi = (): void => {
       parts.push(`${pluralize(farms, 'farm')} produced ${produced} food`)
     }
     if (material > 0) {
+      // Step 08E §18: X is productive workers (valid Workshop assignments),
+      // never raw population — excess unassigned colonists are excluded.
+      const productive = getProductiveWorkerCount(s)
       parts.push(
-        `${pluralize(employment.employed, 'worker')} produced ${material} material`
+        `${pluralize(productive, 'worker')} produced ${material} material`
       )
       // Step 08C §7: upkeep cause from real values. Paid is reconstructed
       // from the stock transition (one command per tick, every catalog cost

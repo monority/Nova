@@ -311,6 +311,34 @@ async function main() {
     } else ok(`H post-starvation stable: material ${s.construction}, upkeep 0`);
     await shot('07-starvation.png');
 
+    // I. Excess workers (08E E2E-E): 2 colonists, 1 Workshop capacity.
+    // Only the assigned worker produces; status X counts productive workers.
+    await page.goto(URL, { waitUntil: 'load' });
+    await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await placeAt(page, { x: 1, y: 1 });
+    await placeAt(page, { x: 1, y: 6 });
+    s = await stepUntil(page, (v) => v.colonists === '2', 'two colonists', 20);
+    ok(`I two colonists admitted, material ${s.construction}`);
+    await selectPalette(page, 'build-workshop', 'Workshop selected');
+    await placeAt(page, { x: 4, y: 4 });
+    // J. Under construction (08E E2E-F): placed but not operational.
+    s = await stats(page);
+    if (s.materialProduction !== '0' || s.materialUpkeep !== '0') {
+      fail(`J under-construction flows bad: ${JSON.stringify(s)}`);
+    } else ok(`J under construction: production 0, upkeep 0`);
+    s = await stepUntil(page, (v) => v.materialUpkeep === '1', 'staffed workshop', 10);
+    s = await stats(page);
+    if (s.materialProduction !== '2' || s.netMaterial !== '1' || s.employed !== '1' || s.unemployed !== '1') {
+      fail(`I excess flows bad: ${JSON.stringify(s)}`);
+    } else ok(`I excess: production ${s.materialProduction}, upkeep ${s.materialUpkeep}, net +${s.netMaterial} (employed ${s.employed}, unemployed ${s.unemployed})`);
+    s = await step(page); // steady tick: causal readout names productive workers
+    const excessCausal = await statusText(page);
+    if (!excessCausal.includes('1 worker produced 2 material') || !excessCausal.includes('upkeep 1')) {
+      fail(`I causal text bad (X must be productive, not population): ${JSON.stringify(excessCausal)}`);
+    } else ok(`I status: "${excessCausal}"`);
+    await shot('08-excess.png');
+
     const realErrors = errors.filter((e) => !e.includes('favicon'));
     if (realErrors.length > 0) fail(`browser errors: ${realErrors.join(' | ')}`);
     else ok('zero console/page errors');

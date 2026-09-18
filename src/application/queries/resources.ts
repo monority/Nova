@@ -77,6 +77,16 @@ export const isFoodSupplySustainable = (state: SimulationState): boolean => {
 }
 
 /**
+ * Productive workers this tick (Step 08E): colonists actually assigned to
+ * operational Workshop capacity. This is the ONLY labor that produces
+ * Material — population alone never produces. Thin name over the canonical
+ * employment relation so UI and tests share the 08E vocabulary.
+ * Derived, never stored, never persisted, never hashed.
+ */
+export const getProductiveWorkerCount = (state: SimulationState): number =>
+  countEmployedWorkers(state)
+
+/**
  * Deterministic construction-material output per tick (Step 07C §6): every
  * employed colonist produces 2 material directly into the shared stock.
  * Derived, never stored as a `labour` resource.
