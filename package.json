@@ -18,7 +18,8 @@
     "test:e2e:food": "node e2e/foodRun.mjs",
     "test:e2e:production": "node e2e/productionRun.mjs",
     "test:e2e:jobs": "node e2e/jobsRun.mjs",
-    "test:e2e:upkeep": "node e2e/upkeepRun.mjs"
+    "test:e2e:upkeep": "node e2e/upkeepRun.mjs",
+    "test:e2e:transport": "node e2e/transportRun.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
