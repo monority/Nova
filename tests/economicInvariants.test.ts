@@ -61,19 +61,24 @@ const untilAffordable = (state: SimulationState): SimulationState => {
 
 /**
  * N employed colonists staffing N operational Workshops, food kept
- * sustainable with two farms. Reachable, deterministic, no randomness.
+ * sustainable with two farms. Step 08F: a single staffed Workshop
+ * equilibrates at stock 24, so the second Workshop comes from bootstrap
+ * funds; worker income under the growing capacity funds the rest.
  */
 const colony = (n: number): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('farm', 6, 6)) // t3
-  state = stepSimulation(state) // t4: farm operational
+  state = stepSimulation(state, place('workshop', 0, 5)) // t3: stock 50
+  state = stepSimulation(state) // t4: colonist-1 employed, stock 49
   if (n === 0) {
     return state
   }
-  state = stepSimulation(state, place('workshop', 0, 5)) // t5
-  state = stepSimulation(state) // t6: colonist-1 employed
+  state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
+  state = stepSimulation(state) // t6: second operational, cap 50, stock 25
+  state = untilAffordable(state)
+  state = stepSimulation(state, place('farm', 6, 6))
+  state = stepSimulation(state)
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 7, 7))
   state = stepSimulation(state)
@@ -81,9 +86,11 @@ const colony = (n: number): SimulationState => {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
     state = stepSimulation(state)
-    state = untilAffordable(state)
-    state = stepSimulation(state, place('workshop', i, 5))
-    state = stepSimulation(state)
+    if (i >= 2) {
+      state = untilAffordable(state)
+      state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = stepSimulation(state)
+    }
   }
   return state
 }
@@ -345,8 +352,8 @@ describe('economic invariants (Step 08D)', () => {
     state = stepSimulation(state) // t2: colonist-1 admitted
     const stockBefore = getResourceStock(state).construction
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
-    state = stepSimulation(state) // t4: operational + staffed + net +1
-    expect(getResourceStock(state).construction).toBe(stockBefore - 25 + 1)
+    state = stepSimulation(state) // t4: operational + staffed; bootstrap stock covers capacity, so stored 0, upkeep −1
+    expect(getResourceStock(state).construction).toBe(stockBefore - 25 - 1)
   })
 
   it('balance matrix (§5) — production / upkeep / net per fixture row', () => {

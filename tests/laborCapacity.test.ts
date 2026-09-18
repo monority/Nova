@@ -56,30 +56,40 @@ const untilAffordable = (state: SimulationState): SimulationState => {
 }
 
 /**
- * R residences + W workshops, food sustained by two early farms. Income
- * from the first staffed Workshop funds later builds deterministically.
+ * R residences + W workshops, food sustained (1 farm up to 2 pop, 2 beyond).
+ * Step 08F: one staffed Workshop equilibrates at 24, so workshops precede
+ * farms — the second Workshop is funded from bootstrap, income under the
+ * growing capacity funds the rest. The w=0 case fits bootstrap exactly.
  */
 const capacityState = (residences: number, workshops: number): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('farm', 6, 6)) // t3
-  state = stepSimulation(state) // t4: farm operational
-  if (workshops > 0) {
-    state = stepSimulation(state, place('workshop', 0, 5)) // t5
-    state = stepSimulation(state) // t6: colonist-1 employed
+  let built = 0
+  if (workshops >= 1) {
+    state = stepSimulation(state, place('workshop', 0, 5)) // stock 50
+    state = stepSimulation(state) // colonist-1 employed, stock 49
+    built = 1
   }
-  state = untilAffordable(state)
-  state = stepSimulation(state, place('farm', 7, 7))
-  state = stepSimulation(state)
+  if (workshops >= 2) {
+    state = stepSimulation(state, place('workshop', 1, 5)) // stock 24
+    state = stepSimulation(state) // second operational, cap 50, stock 25
+    built = 2
+  }
+  const farms = residences <= 2 ? 1 : 2
+  for (let f = 0; f < farms; f++) {
+    state = untilAffordable(state)
+    state = stepSimulation(state, place('farm', 6 + f, 6))
+    state = stepSimulation(state)
+  }
   for (let i = 1; i < residences; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
     state = stepSimulation(state)
   }
-  for (let i = 1; i < workshops; i++) {
+  for (let k = built; k < workshops; k++) {
     state = untilAffordable(state)
-    state = stepSimulation(state, place('workshop', i, 5))
+    state = stepSimulation(state, place('workshop', k + 2, 5))
     state = stepSimulation(state)
   }
   return state

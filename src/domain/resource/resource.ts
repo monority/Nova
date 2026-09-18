@@ -4,9 +4,10 @@
  * Step 4: an abstract construction material used to start building.
  * Step 05: food, the first colonist need, consumed all-or-nothing at the
  * colony level. Step 06B added food production (farms); Step 07C added
- * material production (employed colonists). Neither stock is capped; the
- * stock is canonical simulation state — the UI/renderer never mutate or
- * interpret it beyond queries.
+ * material production (employed colonists). Food is uncapped; construction
+ * material inflow is bounded by operational Workshop storage (Step 08F).
+ * Stocks are canonical simulation state — the UI/renderer never mutate or
+ * interpret them beyond queries.
  */
 
 export interface ResourceStock {
@@ -38,6 +39,14 @@ export const MATERIAL_PER_WORKER_PER_TICK = 2
  * negative, no deactivation, no debt).
  */
 export const MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK = 1
+/**
+ * Material storage per operational Workshop (Step 08F). Capacity is an
+ * infrastructure-derived gameplay constant on the construction-cost scale:
+ * one operational Workshop stores one building's worth of Material.
+ * Staffing-independent (vacant counts, under-construction does not).
+ * Bounds production inflow only — never retroactively mutates stock.
+ */
+export const MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP = 25
 
 export const createInitialResourceStock = (): ResourceStock => ({
   construction: INITIAL_CONSTRUCTION_MATERIAL,

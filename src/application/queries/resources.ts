@@ -15,6 +15,8 @@ import { countEmployedWorkers } from '../../domain/jobs/jobs.js'
 import {
   countOperationalFarms,
   countStaffedOperationalWorkshops,
+  materialStorageCapacityForTick,
+  materialStoredProductionForTick,
 } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
@@ -107,3 +109,21 @@ export const getMaterialUpkeepPerTick = (state: SimulationState): number =>
 /** Net material flow per tick: production − upkeep (Step 08C). */
 export const getNetMaterialPerTick = (state: SimulationState): number =>
   getMaterialProductionPerTick(state) - getMaterialUpkeepPerTick(state)
+
+/**
+ * Material storage capacity (Step 08F §9): operational Workshops × 25,
+ * vacant included, under-construction excluded. Pure derivation, never
+ * stored, never persisted, never hashed.
+ */
+export const getMaterialStorageCapacity = (state: SimulationState): number =>
+  materialStorageCapacityForTick(state)
+
+/**
+ * Production actually stored after the storage clamp (Step 08F §10):
+ * gross production minus deterministically discarded overflow. The existing
+ * getMaterialProductionPerTick keeps its gross contract; this query names
+ * the stored part explicitly. Derived, never stored/persisted/hashed.
+ */
+export const getMaterialStoredProductionPerTick = (
+  state: SimulationState
+): number => materialStoredProductionForTick(state)

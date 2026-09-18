@@ -185,7 +185,7 @@ async function main() {
     s = await stepToTick(page, 4); // workshop operational -> staffed -> producing
     assert(s.employed === '1' && s.jobCapacity === '1', `expected 1/1 employment at tick 4, got ${JSON.stringify(s)}`);
     assert(await jobsText(page) === '1 / 1', `HUD jobs expected "1 / 1", got "${await jobsText(page)}"`);
-    assert(s.construction === '51', `material at tick 4 expected 51 (50 + 2 labor - 1 upkeep), got ${s.construction}`);
+    assert(s.construction === '49', `material at tick 4 expected 49 (50 bootstrap + 0 stored - 1 upkeep under the 25 capacity), got ${s.construction}`);
     assert(s.materialProduction === '2', `material production expected 2, got ${s.materialProduction}`);
     assert(s.status.includes('Colonist assigned to Workshop'), `employment feedback missing: ${JSON.stringify(s.status)}`);
     assert(s.status.includes('1 worker produced 2 material'), `material feedback missing: ${JSON.stringify(s.status)}`);
@@ -198,25 +198,27 @@ async function main() {
     ok(`causal status: "${s.status}"`);
     await shot('03-employed-workshop.png');
 
-    // Phase D - material production (exact deltas).
+    // Phase D - material production (exact deltas, Step 08F: over-capacity
+    // stock drains -1/tick since stored production is 0 above capacity 25).
     let materialBefore = Number(s.construction);
     s = await step(page);
-    assert(Number(s.construction) - materialBefore === 1, `one worker tick expected +1 net material (+2 labor - 1 upkeep), got ${Number(s.construction) - materialBefore}`);
+    assert(Number(s.construction) - materialBefore === -1, `over-capacity tick expected -1 drain (0 stored - 1 upkeep), got ${Number(s.construction) - materialBefore}`);
     materialBefore = Number(s.construction);
     for (let i = 0; i < 3; i++) {
       s = await step(page);
     }
-    assert(Number(s.construction) - materialBefore === 1 * 3, `3 ticks x 1 worker expected +3 net material, got ${Number(s.construction) - materialBefore}`);
+    assert(Number(s.construction) - materialBefore === -3, `3 over-capacity ticks expected -3 drain, got ${Number(s.construction) - materialBefore}`);
+    assert(s.materialProduction === '2', `gross production must stay 2 with one worker, got ${s.materialProduction}`);
     assert(s.status.includes('1 worker produced 2 material'), `steady material feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`material deltas exact: +1 net/tick, +3 over 3 ticks at tick ${s.tick} (material ${s.construction})`);
+    ok(`material deltas exact: -1 drain/tick over capacity, gross stays 2 at tick ${s.tick} (material ${s.construction})`);
     ok(`steady status: "${s.status}"`);
     await shot('04-material-production.png');
 
-    // Phase E - construction loop financed by labor.
+    // Phase E - construction loop financed by labor (Step 08F: the second
+    // workshop raises capacity to 50, so the refill below capacity lands).
     await selectPalette(page, 'build-residence', 'Residence selected');
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 2, y: 2 }); // tick 9
-    await placeAt(page, { x: 0, y: 0 }); // tick 10
+    await placeAt(page, { x: 2, y: 2 }); // one workshop: stock 45 -> 20
     s = await stats(page);
     assert(Number(s.construction) < 25, `material should be below the 25 cost here, got ${s.construction}`);
     // Rejected while below cost (real hover + click on a free cell).
@@ -230,7 +232,7 @@ async function main() {
     assert(rejectedAfter.construction === rejectedBefore.construction, `rejected placement changed material: ${JSON.stringify(rejectedAfter)}`);
     ok(`below-cost placement rejected at material ${rejectedAfter.construction}: buildings ${rejectedAfter.buildings} unchanged`);
     // Only worker output can raise the stock back to the construction cost.
-    // Step 08C: refill runs at net +1/tick (7 -> 25 = 18 ticks).
+    // Refill runs at net +1/tick below capacity (21 -> 25 = 4 ticks).
     let laborTicks = 0;
     while (Number((await stats(page)).construction) < 25) {
       await step(page);
@@ -238,7 +240,7 @@ async function main() {
       assert(laborTicks <= 30, 'labor never produced enough material to build again');
     }
     s = await stats(page);
-    assert(laborTicks === 18, `expected 18 labor ticks from ${Number(rejectedAfter.construction)} to >= 25, got ${laborTicks}`);
+    assert(laborTicks === 4, `expected 4 labor ticks to >= 25, got ${laborTicks}`);
     assert(s.construction === '25', `expected 25 material after refill, got ${s.construction}`);
     const productionPerTick = Number(s.materialProduction);
     const beforeBuild = Number(s.construction);
@@ -246,7 +248,7 @@ async function main() {
     await placeAt(page, { x: 8, y: 8 });
     s = await stats(page);
     assert(Number(s.construction) === beforeBuild - 25 + productionPerTick - 1, `exact deduction expected ${beforeBuild} - 25 + ${productionPerTick} labor - 1 upkeep, got ${s.construction}`);
-    assert(s.buildings === '5', `expected 5 buildings, got ${s.buildings}`);
+    assert(s.buildings === '4', `expected 4 buildings, got ${s.buildings}`);
     assert(Number(beforeBuild) < 25 + 2, `material ${beforeBuild} should be just above the cost (labor-driven)`);
     ok(`labor enabled construction at tick ${s.tick}: ${beforeBuild} -> ${s.construction} (25 deducted, +${productionPerTick} labor, -1 upkeep), buildings ${s.buildings}`);
     await shot('05-construction-enabled.png');
@@ -259,31 +261,34 @@ async function main() {
     await placeAt(page, { x: 2, y: 2 }); // t1 residence
     await step(page); // t2 colonist-1
     await placeAt(page, { x: 4, y: 4 }); // t3 residence
-    s = await step(page); // t4 colonist-2
+    s = await step(page); // t4 colonist-2, stock 50
     assert(s.colonists === '2', `expected 2 colonists, got ${s.colonists}`);
+    // Farm first (Step 08F): the 25-cost farm is affordable at stock 50 and
+    // keeps the forecast check meaningful before the workshop drains stock.
+    await selectPalette(page, 'build-farm', 'Farm selected');
+    await placeAt(page, { x: 8, y: 8 }); // t5 farm, stock 25
+    s = await step(page); // t6 farm operational: +2 food, -2 food
+    assert(s.foodForecast === 'sustainable', `production = consumption must read sustainable, got "${s.foodForecast}"`);
+    assert((await forecastText(page)).includes('sustainable'), `UI must show " · sustainable", got "${await forecastText(page)}"`);
+    ok(`forecast with production = consumption: "${(await forecastText(page)).trim()}" (stats "${s.foodForecast}")`);
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 6, y: 6 }); // t5 workshop
-    s = await step(page); // t6 workshop operational
+    await placeAt(page, { x: 6, y: 6 }); // t7 workshop, stock 0
+    s = await step(page); // t8 workshop operational
     assert(s.colonists === '2' && s.jobCapacity === '1', `expected 2 colonists / 1 job, got ${JSON.stringify(s)}`);
     assert(s.employed === '1' && s.unemployed === '1', `expected 1 employed / 1 unemployed, got ${JSON.stringify(s)}`);
     assert(await jobsText(page) === '1 / 1', `HUD jobs expected "1 / 1", got "${await jobsText(page)}"`);
     assert(s.status.includes('Colonist assigned to Workshop'), `employment feedback missing: ${JSON.stringify(s.status)}`);
     const surplusInspection = await inspectionJobsText(page).then(() => selectAt(page, { x: 6, y: 6 })).then(() => inspectionJobsText(page));
     assert(surplusInspection === 'Jobs — Capacity 1 · Workers 1/1 · upkeep 1/tick', `single workshop must not hold two workers: "${surplusInspection}"`);
+    assert(s.materialProduction === '2', `gross production must be exactly one worker's output, got ${s.materialProduction}`);
     const surplusMaterial = Number(s.construction);
     s = await step(page);
-    assert(Number(s.construction) - surplusMaterial === 1, `unemployed colonist must not produce material: delta ${Number(s.construction) - surplusMaterial}`);
+    assert(Number(s.construction) - surplusMaterial === 1, `below-capacity tick must net +1 (2 stored - 1 upkeep): delta ${Number(s.construction) - surplusMaterial}`);
     ok(`2 colonists / 1 job: employed ${s.employed}, unemployed ${s.unemployed}, HUD "${await jobsText(page)}", +1 net material/tick only`);
     ok(`workshop inspection while a colonist is unemployed: "${surplusInspection}"`);
     await shot('06-unemployment.png');
 
-    // Sustainable forecast check: 2 colonists + 1 farm (production = consumption).
-    await selectPalette(page, 'build-farm', 'Farm selected');
-    await placeAt(page, { x: 8, y: 8 }); // t7
-    s = await step(page); // t8 farm operational: +2 food, -2 food
-    assert(s.foodForecast === 'sustainable', `production = consumption must read sustainable, got "${s.foodForecast}"`);
-    assert((await forecastText(page)).includes('sustainable'), `UI must show " · sustainable", got "${await forecastText(page)}"`);
-    ok(`forecast with production = consumption: "${(await forecastText(page)).trim()}" (stats "${s.foodForecast}")`);
+    // (Sustainable forecast was verified above at t6: 2 colonists + 1 farm.)
 
     // ---------------------------------------------------------------------
     // Scenario 3 - Phase G: more jobs than colonists (vacancies)
@@ -333,7 +338,8 @@ async function main() {
     s = await stats(page);
     assert(s.colonists === '1', `colony must still be alive when PLAY is paused, got ${JSON.stringify(s)}`);
     assert(Number(s.food) > 0, `expected a positive food reserve before starvation, got ${s.food}`);
-    assert(Number(s.construction) > beforeStarvationMaterial, `workers should have produced material during PLAY, got ${s.construction}`);
+    assert(Number(s.construction) <= 25, `long PLAY must respect the 25 storage capacity, got ${s.construction}`);
+    assert(Number(s.construction) < beforeStarvationMaterial, `over-capacity stock must have drained during PLAY, got ${s.construction}`);
     ok(`PLAY 4x consumed the reserve to food ${s.food} at tick ${s.tick} (material ${s.construction}, jobs "${await jobsText(page)}")`);
 
     let previousMaterial = Number(s.construction);
@@ -345,7 +351,7 @@ async function main() {
         starvedTick = Number(s.tick);
         assert(material === previousMaterial, `death-tick material must not be produced: ${previousMaterial} -> ${material}`);
       } else {
-        assert(material - previousMaterial === 1, `expected +1 net material while employed, got ${material - previousMaterial}`);
+        assert(material - previousMaterial === 0, `capped stock (24) must hold flat while employed (1 stored - 1 upkeep), got ${material - previousMaterial}`);
         previousMaterial = material;
       }
     }

@@ -159,10 +159,15 @@ async function main() {
     // Workshop is under construction at tick 1 and operational at tick 2.
     await selectPalette(page, 'build-workshop', 'Workshop selected');
     await placeAt(page, { x: 4, y: 4 });
+    // J. Under construction (08E E2E-F, 08F E2E-E): no capacity/production/upkeep.
+    s = await stats(page);
+    if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '75') {
+      fail(`J under-construction bad: ${JSON.stringify(s)}`);
+    } else ok(`J under construction: capacity 0, production 0, upkeep 0`);
     s = await step(page); // t2: operational, vacant
-    if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '75' || s.tick !== '2') {
+    if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '75' || s.tick !== '2' || s.storageCapacity !== '25') {
       fail(`B vacant bad: ${JSON.stringify(s)}`);
-    } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.construction} (no leak)`);
+    } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.construction}, capacity ${s.storageCapacity} (no leak)`);
     await selectAt(page, { x: 4, y: 4 });
     const vacantInspection = await inspectionText(page);
     if (!vacantInspection.includes('upkeep 0 (vacant)')) {
@@ -174,9 +179,9 @@ async function main() {
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 6, y: 6 });
     s = await step(page); // t4: residence operational, colonist-1 staffed same tick
-    if (s.colonists !== '1' || s.materialUpkeep !== '1' || s.netMaterial !== '1') {
+    if (s.colonists !== '1' || s.materialUpkeep !== '1' || s.netMaterial !== '1' || s.storageCapacity !== '25') {
       fail(`C staffed bad: ${JSON.stringify(s)}`);
-    } else ok(`C 1 worker: upkeep ${s.materialUpkeep}, net +${s.netMaterial}`);
+    } else ok(`C 1 worker: upkeep ${s.materialUpkeep}, net +${s.netMaterial}, capacity ${s.storageCapacity}`);
     s = await step(page); // t5: no newcomer, production/upkeep readout visible
     const causal = await statusText(page);
     if (!causal.includes('1 worker produced 2 material') || !causal.includes('upkeep 1')) {
@@ -189,32 +194,56 @@ async function main() {
     } else ok(`C inspection: "${staffedInspection}"`);
     await shot('03-staffed.png');
 
-    // C-sustain: exactly +1/tick over 10 ticks (production 2 - upkeep 1).
+    // C-sustain (08F): bootstrap stock sits above the 25 capacity, so stored
+    // production is 0 and upkeep alone drains -1/tick. Never negative.
     let prev = Number((await stats(page)).construction);
+    let peak = prev;
     for (let i = 0; i < 10; i++) {
       s = await step(page);
       const delta = Number(s.construction) - prev;
-      if (delta !== 1 || s.materialUpkeep !== '1' || Number(s.construction) < 0) {
+      peak = Math.max(peak, Number(s.construction));
+      if (delta !== -1 || s.materialUpkeep !== '1' || Number(s.construction) < 0 || Number(s.storageCapacity) !== 25) {
         fail(`C sustain tick ${i + 1}: delta ${delta}, ${JSON.stringify(s)}`);
       }
       prev = Number(s.construction);
     }
-    ok(`C sustained 10 ticks at net +1/tick, material now ${prev}`);
-
-    // D. Second residence + workshop: 2 workers, upkeep 2, net +2.
-    await selectPalette(page, 'build-residence', 'Residence selected');
-    await refill(page);
-    await placeAt(page, { x: 8, y: 8 });
-    s = await stepUntil(page, (v) => v.colonists === '2', 'second colonist');
-    ok('D second colonist admitted');
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await refill(page);
-    await placeAt(page, { x: 2, y: 2 });
-    s = await stepUntil(page, (v) => v.materialUpkeep === '2', 'two staffed workshops');
+    ok(`C over-capacity drains -1/tick (stored 0), material now ${prev}, peak ${peak}`);
+    // K. Equilibrium (08F E2E-C): drain to the 24 floor; stock never exceeds
+    // capacity again, and the freed space stores +1/tick at the floor.
+    s = await stepUntil(page, (v) => v.construction === '24', 'storage equilibrium', 60);
     s = await stats(page);
-    if (s.materialProduction !== '4' || s.netMaterial !== '2') {
+    if (s.storageCapacity !== '25' || s.storedProduction !== '1' || s.materialUpkeep !== '1') {
+      fail(`K equilibrium bad: ${JSON.stringify(s)}`);
+    } else ok(`K equilibrium: material 24 = capacity 25 − upkeep 1, stored ${s.storedProduction}`);
+    await shot('04-equilibrium.png');
+
+    // D. Two workers from a fresh bootstrap (08F): a lone staffed Workshop
+    // equilibrates at 24, so the second Workshop is built from bootstrap
+    // funds first: R -> WS -> WS -> R. Capacity 50, net +2/tick below cap.
+    await page.goto(URL, { waitUntil: 'load' });
+    await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await placeAt(page, { x: 8, y: 8 });
+    s = await stepUntil(page, (v) => v.colonists === '1', 'first colonist', 10);
+    await selectPalette(page, 'build-workshop', 'Workshop selected');
+    await placeAt(page, { x: 2, y: 2 });
+    s = await stepUntil(page, (v) => v.materialUpkeep === '1', 'first staffed workshop', 10);
+    ok(`D first workshop staffed, material ${s.construction}, capacity ${s.storageCapacity}`);
+    await placeAt(page, { x: 2, y: 3 });
+    s = await stepUntil(page, (v) => v.storageCapacity === '50', 'second workshop operational', 10);
+    ok(`D second workshop operational, capacity ${s.storageCapacity}`);
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await stepUntil(page, (v) => Number(v.construction) >= 25, 'second residence funds', 60);
+    await placeAt(page, { x: 8, y: 7 });
+    s = await stepUntil(page, (v) => v.colonists === '2', 'second colonist', 10);
+    ok('D second colonist admitted');
+    s = await stepUntil(page, (v) => v.materialUpkeep === '2', 'two staffed workshops', 10);
+    s = await stats(page);
+    if (s.materialProduction !== '4' || s.netMaterial !== '2' || s.storageCapacity !== '50') {
       fail(`D flows bad: ${JSON.stringify(s)}`);
-    } else ok(`D 2 workers: production ${s.materialProduction}, upkeep ${s.materialUpkeep}, net +${s.netMaterial}`);
+    } else ok(`D 2 workers: production ${s.materialProduction}, upkeep ${s.materialUpkeep}, net +${s.netMaterial}, capacity ${s.storageCapacity}`);
+    await page.mouse.move(20, 20); // off-canvas: STEP click must not cross hover cells
+    s = await step(page); // steady tick: admission message clears, flow readout visible
     const causalD = await statusText(page);
     if (!causalD.includes('upkeep 2')) {
       fail(`D causal text bad: ${JSON.stringify(causalD)}`);

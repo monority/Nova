@@ -26,6 +26,8 @@ import {
   getFoodTicksRemaining,
   getHousingSummary,
   getMaterialProductionPerTick,
+  getMaterialStorageCapacity,
+  getMaterialStoredProductionPerTick,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getNetMaterialPerTick,
@@ -325,13 +327,15 @@ const refreshUi = (): void => {
       )
       // Step 08C §7: upkeep cause from real values. Paid is reconstructed
       // from the stock transition (one command per tick, every catalog cost
-      // is 25 — Step 08C §8 frozen): paid = prev + production − cost − now.
+      // is 25 — Step 08C §8 frozen). Step 08F: production inflow is storage-
+      // clamped, so reconstruction uses STORED production, not gross.
       const upkeepDue = getMaterialUpkeepPerTick(s)
       if (upkeepDue > 0) {
         const buildCost = Math.max(0, Object.keys(s.buildings).length - prevBuildings) * 25
+        const stored = getMaterialStoredProductionPerTick(s)
         const upkeepPaid = Math.max(
           0,
-          prevConstruction + material - buildCost - getResourceStock(s).construction
+          prevConstruction + stored - buildCost - getResourceStock(s).construction
         )
         if (upkeepPaid < upkeepDue) {
           parts.push(`upkeep shortfall — paid ${upkeepPaid}/${upkeepDue}`)
@@ -534,7 +538,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -626,6 +630,8 @@ window.__nova = {
       materialProduction: String(getMaterialProductionPerTick(state)),
       materialUpkeep: String(getMaterialUpkeepPerTick(state)),
       netMaterial: String(getNetMaterialPerTick(state)),
+      storageCapacity: String(getMaterialStorageCapacity(state)),
+      storedProduction: String(getMaterialStoredProductionPerTick(state)),
       status: ui.status?.textContent ?? '',
     }
   },

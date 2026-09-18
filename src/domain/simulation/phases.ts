@@ -10,7 +10,8 @@
  *   5. consumeFood         - all-or-nothing feeding (docs/11 #5)
  *   6. updatePopulation    - starvation then food-gated admission (docs/11 #9)
  *   7. assignJobs          - deterministic Workshop employment (Step 07C §4)
- *   8. produceMaterial     - employed colonists add construction material (§6)
+ *   8. produceMaterial     - employed colonists add construction material,
+ *       clamped to operational Workshop storage (Step 08F §5)
  *   8b. upkeepBuildings    - staffed operational Workshops pay 1 material
  *       (Step 08C, after production, before time: partial payment clamped
  *       to stock, never negative, no deactivation, no debt)
@@ -48,6 +49,7 @@ import {
   hasSufficientFood,
   hasSufficientResources,
   MATERIAL_PER_WORKER_PER_TICK,
+  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
 } from '../resource/resource.js'
 import type { CellCoordinate } from '../world/grid.js'
@@ -423,21 +425,70 @@ export const materialProductionForTick = (state: SimulationState): number =>
   countEmployedWorkers(state) * MATERIAL_PER_WORKER_PER_TICK
 
 /**
- * Add this tick's labor output to the shared construction stock. Pure: returns
- * the input state reference when nothing produces. Runs after assignJobs, so
- * a colonist admitted — or a Workshop completed — on this tick produces on
- * this tick, while a starving colonist produces nothing.
+ * Operational Workshops, staffed or vacant (Step 08F §7). Storage capacity
+ * is infrastructure, not labor: vacant counts, under-construction does not.
+ * Deterministic ascending-id iteration like countOperationalFarms.
+ */
+export const countOperationalWorkshops = (state: SimulationState): number => {
+  let count = 0
+  for (const building of iterateBuildings(state)) {
+    if (isOperationalWorkshop(building)) {
+      count += 1
+    }
+  }
+  return count
+}
+
+/**
+ * Material storage capacity this tick (Step 08F §2): operational Workshops
+ * × 25. Pure derivation, never stored. Zero with no operational Workshop —
+ * the bootstrap stock above capacity is preserved (§4): the cap bounds
+ * production inflow only, never retroactively mutates stock.
+ */
+export const materialStorageCapacityForTick = (
+  state: SimulationState
+): number =>
+  countOperationalWorkshops(state) * MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP
+
+/**
+ * Production actually stored this tick (Step 08F §5): min(gross, available
+ * space). Excess is deterministically discarded — no overflow resource, no
+ * debt, no buffer, no backlog. Integer arithmetic, never negative.
+ */
+export const materialStoredProductionForTick = (
+  state: SimulationState
+): number => {
+  const gross = materialProductionForTick(state)
+  if (gross <= 0) {
+    return 0
+  }
+  const available = Math.max(
+    0,
+    materialStorageCapacityForTick(state) - state.resources.construction
+  )
+  return Math.min(gross, available)
+}
+
+/**
+ * Add this tick's labor output to the shared construction stock, clamped to
+ * available storage (Step 08F §5-6). Pure: returns the input state reference
+ * when nothing is stored. Runs after assignJobs, so a colonist admitted —
+ * or a Workshop completed — on this tick produces on this tick, while a
+ * starving colonist produces nothing. A Workshop operational as of this tick
+ * (advanceConstruction ran before) contributes capacity this same tick.
+ * Upkeep still runs after: production never bypasses the cap merely because
+ * upkeep later frees space.
  */
 export const produceMaterial = (state: SimulationState): SimulationState => {
-  const output = materialProductionForTick(state)
-  if (output === 0) {
+  const stored = materialStoredProductionForTick(state)
+  if (stored === 0) {
     return state
   }
   return {
     ...state,
     resources: {
       ...state.resources,
-      construction: state.resources.construction + output,
+      construction: state.resources.construction + stored,
     },
   }
 }

@@ -5,6 +5,7 @@ import {
   getMaterialUpkeepPerTick,
   getNetMaterialPerTick,
   hashCanonicalState,
+  materialStoredProductionForTick,
   stepSimulation,
   type PlaceBuildingCommand,
   type SimulationState,
@@ -69,18 +70,23 @@ const untilAffordable = (state: SimulationState): SimulationState => {
 }
 
 /**
- * N staffed operational Workshops with N colonists. Funds each build from
- * worker net income (+1/tick) and keeps food sustainable with two farms,
- * so the helper scales past the initial 100 stock.
+ * N staffed operational Workshops with N colonists. Step 08F: a single
+ * staffed Workshop equilibrates at stock 24 (below the 25 build cost), so
+ * the second Workshop is built from bootstrap funds first; worker income
+ * (+1/tick under the 50 capacity, growing with staffing) funds the rest.
+ * Food sustained with two farms.
  */
 const staffedState = (n: number): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('farm', 6, 6)) // t3
-  state = stepSimulation(state) // t4: farm operational
-  state = stepSimulation(state, place('workshop', 0, 5)) // t5
-  state = stepSimulation(state) // t6: colonist-1 employed
+  state = stepSimulation(state, place('workshop', 0, 5)) // t3
+  state = stepSimulation(state) // t4: colonist-1 employed, stock 49
+  state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
+  state = stepSimulation(state) // t6: second operational, stock 25
+  state = untilAffordable(state)
+  state = stepSimulation(state, place('farm', 6, 6))
+  state = stepSimulation(state)
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 7, 7))
   state = stepSimulation(state)
@@ -88,9 +94,12 @@ const staffedState = (n: number): SimulationState => {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
     state = stepSimulation(state)
-    state = untilAffordable(state)
-    state = stepSimulation(state, place('workshop', i, 5))
-    state = stepSimulation(state)
+    if (i >= 2) {
+      // Base already provides two Workshops; further pairs need one more.
+      state = untilAffordable(state)
+      state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = stepSimulation(state)
+    }
   }
   return state
 }
@@ -148,14 +157,20 @@ describe('operational upkeep (Step 08C)', () => {
     expect(getNetMaterialPerTick(state)).toBe(0)
   })
 
-  it('G — production + upkeep: 1 worker nets +1', () => {
+  it('G — production + upkeep: gross 2, upkeep 1, stored clamped', () => {
     const state = workshopState()
     expect(materialProductionForTick(state)).toBe(2)
     expect(materialUpkeepDueForTick(state)).toBe(1)
     expect(getNetMaterialPerTick(state)).toBe(1)
+    // Step 08F: bootstrap stock (49) covers the 25 capacity, so stored
+    // production is 0 and only upkeep drains the stock.
+    expect(materialStoredProductionForTick(state)).toBe(0)
     const before = getResourceStock(state).construction
     const after = stepSimulation(state)
-    expect(getResourceStock(after).construction).toBe(before + 1)
+    expect(getResourceStock(after).construction).toBe(before - 1)
+    // Below capacity the full net flow lands: 0 + 2 − 1 = 1.
+    const low = stepSimulation(withConstruction(state, 0))
+    expect(getResourceStock(low).construction).toBe(1)
   })
 
   it('H — insufficient material: partial payment, never negative', () => {
