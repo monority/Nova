@@ -218,7 +218,7 @@ async function main() {
     // workshop raises capacity to 50, so the refill below capacity lands).
     await selectPalette(page, 'build-residence', 'Residence selected');
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 2, y: 2 }); // one workshop: stock 45 -> 20
+    await placeAt(page, { x: 2, y: 2 }); // one workshop: stock 45 + 0 stored (above cap) - 25 - 1 upkeep -> 19
     s = await stats(page);
     assert(Number(s.construction) < 25, `material should be below the 25 cost here, got ${s.construction}`);
     // Rejected while below cost (real hover + click on a free cell).
@@ -232,7 +232,7 @@ async function main() {
     assert(rejectedAfter.construction === rejectedBefore.construction, `rejected placement changed material: ${JSON.stringify(rejectedAfter)}`);
     ok(`below-cost placement rejected at material ${rejectedAfter.construction}: buildings ${rejectedAfter.buildings} unchanged`);
     // Only worker output can raise the stock back to the construction cost.
-    // Refill runs at net +1/tick below capacity (21 -> 25 = 4 ticks).
+    // Refill runs at net +1/tick below capacity (19 -> 25 = 6 ticks).
     let laborTicks = 0;
     while (Number((await stats(page)).construction) < 25) {
       await step(page);
@@ -240,7 +240,7 @@ async function main() {
       assert(laborTicks <= 30, 'labor never produced enough material to build again');
     }
     s = await stats(page);
-    assert(laborTicks === 4, `expected 4 labor ticks to >= 25, got ${laborTicks}`);
+    assert(laborTicks === 6, `expected 6 labor ticks to >= 25, got ${laborTicks}`);
     assert(s.construction === '25', `expected 25 material after refill, got ${s.construction}`);
     const productionPerTick = Number(s.materialProduction);
     const beforeBuild = Number(s.construction);

@@ -430,16 +430,19 @@ describe('jobs integration: housing -> colonist -> workshop -> employment -> mat
     // Step 08F: workshopState carries bootstrap stock 49 above the single-
     // workshop capacity (25). Spending drops it into the storable range,
     // where worker output refills it; the second Workshop raises capacity.
+    // Step 08G: the construction transaction runs AFTER production and
+    // BEFORE upkeep, so a placement tick stores first, then deducts 25,
+    // then pays upkeep on the remainder.
     let state = workshopState() // t4: 1 worker, material 49 (50 + 0 stored − 1)
-    state = stepSimulation(state, place('workshop', 6, 6)) // t5: 49 − 25 = 24, then +1 stored −1 upkeep → 24
+    state = stepSimulation(state, place('workshop', 6, 6)) // t5: 49 + 0 stored − 25 − 1 upkeep → 23
+    expect(getResourceStock(state).construction).toBe(23)
+    state = stepSimulation(state) // t6: building-3 operational (vacant): cap 50, 23 + 2 − 1 → 24
     expect(getResourceStock(state).construction).toBe(24)
-    state = stepSimulation(state) // t6: building-3 operational (vacant): cap 50, +2 −1 → 25
-    expect(getResourceStock(state).construction).toBe(25)
     expect(getMaterialStorageCapacity(state)).toBe(50)
-    state = stepSimulation(state) // t7: cap 50, +2 −1 → 26
-    expect(getResourceStock(state).construction).toBe(26)
-    state = stepSimulation(state, place('workshop', 7, 7)) // t8: 26 − 25 + 2 − 1 = 2
-    expect(getResourceStock(state).construction).toBe(2)
+    state = stepSimulation(state) // t7: cap 50, 24 + 2 − 1 → 25
+    expect(getResourceStock(state).construction).toBe(25)
+    state = stepSimulation(state, place('workshop', 7, 7)) // t8: 25 + 2 − 25 − 1 = 1
+    expect(getResourceStock(state).construction).toBe(1)
 
     // Below the 25 cost: another building would be rejected right now.
     expect(getResourceStock(state).construction).toBeLessThan(
@@ -447,7 +450,7 @@ describe('jobs integration: housing -> colonist -> workshop -> employment -> mat
     )
 
     // Only worker output can raise the stock back to the construction cost.
-    // Refill runs at net +1/tick (2 → 25 = 23 ticks).
+    // Refill runs at net +1/tick (1 → 25 = 24 ticks).
     let ticks = 0
     while (getResourceStock(state).construction < 25) {
       state = stepSimulation(state)

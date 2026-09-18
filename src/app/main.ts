@@ -329,10 +329,18 @@ const refreshUi = (): void => {
       // from the stock transition (one command per tick, every catalog cost
       // is 25 — Step 08C §8 frozen). Step 08F: production inflow is storage-
       // clamped, so reconstruction uses STORED production, not gross.
+      // Step 08G: stored output filled the space available BEFORE the tick
+      // (capacity − pre-tick stock). The post-tick stock is already reduced
+      // by construction spending, so clamping against it would double-count
+      // stored output as upkeep paid (a 25-build from a 25 stock must read
+      // "shortfall — paid 0/1", not "upkeep 1").
       const upkeepDue = getMaterialUpkeepPerTick(s)
       if (upkeepDue > 0) {
         const buildCost = Math.max(0, Object.keys(s.buildings).length - prevBuildings) * 25
-        const stored = getMaterialStoredProductionPerTick(s)
+        const stored = Math.min(
+          getMaterialProductionPerTick(s),
+          Math.max(0, getMaterialStorageCapacity(s) - prevConstruction)
+        )
         const upkeepPaid = Math.max(
           0,
           prevConstruction + stored - buildCost - getResourceStock(s).construction
@@ -484,7 +492,20 @@ canvas.addEventListener('pointerup', (event) => {
     cell,
     selectedBuildingType
   )
-  if (!attempt.valid) {
+  // Step 08G §5: the construction transaction executes mid-tick, after this
+  // tick's STORED production is authoritative and before upkeep drains it.
+  // A click at 24 with +1 stored this tick therefore succeeds: the domain
+  // (applyCommand) re-validates mid-tick and stays authoritative. This gate
+  // only mirrors that check so a reachable construction is still dispatched.
+  // It never predicts future ticks: stored production is this tick's clamped
+  // 08F inflow, and any other failure reason still refuses without ticking.
+  const coveredSameTick =
+    attempt.valid ||
+    (attempt.reason === 'insufficientResources' &&
+      getResourceStock(controller.getState()).construction +
+        getMaterialStoredProductionPerTick(controller.getState()) >=
+        getBuildingDefinition(selectedBuildingType).constructionCost)
+  if (!coveredSameTick) {
     if (attempt.reason === 'insufficientResources') {
       // Explainable failure (Step 4 §13): explicit reason and real values.
       const required =

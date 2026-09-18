@@ -71,6 +71,18 @@ async function placeAt(page, cell) {
   await waitFor(async () => Number((await stats(page)).buildings) === before + 1, `placed at ${cell.x},${cell.y}`);
 }
 
+/** Real canvas click through an "insufficient" hover (Step 08G): the rest
+ * stock is below cost, but this tick's stored production covers the
+ * shortfall, so the domain accepts the transaction mid-tick. Asserts the
+ * hover still reports current-stock truth, then verifies acceptance. */
+async function placeThroughShortfall(page, cell) {
+  const pt = await moveTo(page, cell);
+  await waitFor(async () => (await stats(page)).status.includes('insufficient material'), `shortfall preview at ${cell.x},${cell.y}`);
+  const before = Number((await stats(page)).buildings);
+  await page.mouse.click(pt.x, pt.y);
+  await waitFor(async () => Number((await stats(page)).buildings) === before + 1, `gate-covered placement at ${cell.x},${cell.y}`);
+}
+
 /** Real canvas click on an occupied cell: selects the building for inspection. */
 async function selectAt(page, cell) {
   const pt = await moveTo(page, cell);
@@ -217,6 +229,28 @@ async function main() {
     } else ok(`K equilibrium: material 24 = capacity 25 − upkeep 1, stored ${s.storedProduction}`);
     await shot('04-equilibrium.png');
 
+    // L. Construction from the 24 floor (08G §18): rest stock 24 never
+    // reaches cost at rest, but this tick stores +1, so the Residence click
+    // dispatches through the shortfall hover and the domain accepts mid-tick:
+    // 24 + 1 stored − 25 cost = 0, then upkeep due 1 clamps to 0 (no debt,
+    // no deactivation). Workshop stays operational and staffed.
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await placeThroughShortfall(page, { x: 6, y: 5 });
+    s = await stats(page);
+    if (s.buildings !== '3' || Number(s.construction) !== 0 || s.workshops !== '1' || s.materialUpkeep !== '1' || s.colonists !== '1') {
+      fail(`L construction-from-floor bad: ${JSON.stringify(s)}`);
+    } else ok(`L 24 + 1 stored -> residence built, material 0, upkeep ${s.materialUpkeep} (clamped, no debt)`);
+    const floorCausal = await statusText(page);
+    if (!floorCausal.includes('Residence placed at 6,5 — under construction')) {
+      fail(`L placement message bad: ${JSON.stringify(floorCausal)}`);
+    } else ok(`L status: "${floorCausal}"`);
+    await selectAt(page, { x: 4, y: 4 });
+    const floorInspection = await inspectionText(page);
+    if (!floorInspection.includes('upkeep 1/tick')) {
+      fail(`L workshop inspection bad: ${JSON.stringify(floorInspection)}`);
+    } else ok(`L inspection: "${floorInspection}"`);
+    await shot('09-construction.png');
+
     // D. Two workers from a fresh bootstrap (08F): a lone staffed Workshop
     // equilibrates at 24, so the second Workshop is built from bootstrap
     // funds first: R -> WS -> WS -> R. Capacity 50, net +2/tick below cap.
@@ -259,7 +293,8 @@ async function main() {
     await shot('04-two-workshops.png');
 
     // E/F. Drain below cost with real builds, then recover to affordable.
-    const farmCells = [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 }, { x: 0, y: 3 }, { x: 10, y: 10 }, { x: 10, y: 9 }, { x: 10, y: 8 }, { x: 9, y: 10 }];
+    const farmCells = [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 }, { x: 0, y: 3 }, { x: 10, y: 10 }, { x: 10, y: 9 }, { x: 10, y: 8 }, { x: 9, y: 10 }, { x: 9, y: 9 }, { x: 9, y: 8 }];
+    const gateCells = [{ x: 3, y: 9 }];
     await selectPalette(page, 'build-farm', 'Farm selected');
     let fi = 0;
     for (;;) {
@@ -271,6 +306,16 @@ async function main() {
       s = await stats(page);
       if (Number(s.construction) < 0) fail(`E negative material after build: ${JSON.stringify(s)}`);
     }
+    // E-gate (08G): rest stock below cost is still buildable while this
+    // tick's stored production covers the shortfall. Step the net +2/tick
+    // refill until the gate passes (never to 25: the gate hits first below
+    // capacity), spend once through the gate, then a true rejection follows.
+    s = await stepUntil(page, (v) => Number(v.construction) + Number(v.storedProduction) >= 25, 'gate-covered stock', 30);
+    ok(`E gate reachable: rest ${s.construction} + stored ${s.storedProduction}`);
+    await placeThroughShortfall(page, gateCells[0]);
+    s = await stats(page);
+    if (Number(s.construction) < 0) fail(`E gate-covered build negative: ${JSON.stringify(s)}`);
+    else ok(`E gate-covered build: through-shortfall placement accepted, material ${s.construction}`);
     s = await stats(page);
     if (Number(s.construction) >= 25 || Number(s.construction) < 0) {
       fail(`E drain bad: ${JSON.stringify(s)}`);

@@ -17,6 +17,7 @@ import {
   consumeFood,
   produceFood,
   produceMaterial,
+  progressPlacedBuilding,
   updateNeeds,
   updatePopulation,
   upkeepBuildings,
@@ -27,10 +28,10 @@ export const stepSimulation = (
   state: SimulationState,
   command?: SimulationCommand
 ): SimulationState => {
-  // Phase 1: apply player command.
-  const applied = applyCommand(state, command)
-  // Phase 2: construction / lifecycle.
-  const constructed = advanceConstruction(applied.state)
+  // Construction progress / lifecycle. Runs BEFORE the player transaction
+  // (Step 08G §5): a placed building misses this slot and is progressed
+  // once explicitly below, preserving the 2-tick completion contract.
+  const constructed = advanceConstruction(state)
   // Phase 3: food need — derived from the colony before admission.
   const requiredFood = updateNeeds(constructed)
   // Phase 4: farm production into the shared stock.
@@ -46,9 +47,21 @@ export const stepSimulation = (
   // Phase 8: labor output into the construction stock. Runs after employment
   // and after starvation, so a starved worker produces nothing this tick.
   const materialized = produceMaterial(staffed)
+  // Phase 8a: player construction transaction (Step 08G §5). Runs after
+  // production so this tick's STORED output is spendable at the valid point
+  // in the flow (a lone staffed Workshop crests 25 mid-tick, never at rest),
+  // before upkeep so upkeep sees the post-construction stock. Consumes
+  // authoritative stock only: overflow was already discarded by the 08F
+  // storage clamp, and affordability still means current stock >= cost (§13).
+  const commanded = applyCommand(materialized, command)
+  // The placed building missed this tick's construction progress: catch it
+  // up once so catalog completion timing is unchanged (Step 08G).
+  const progressed = progressPlacedBuilding(commanded)
   // Phase 8b: operational upkeep (Step 08C). Runs after production so
-  // same-tick output pays same-tick upkeep; partial payment on deficit.
-  const maintained = upkeepBuildings(materialized)
+  // same-tick output pays same-tick upkeep, and after construction so a
+  // 25-cost build from a 25 stock leaves upkeep 0 under the existing
+  // partial-clamp semantics (Step 08G §11). No debt, no deactivation.
+  const maintained = upkeepBuildings(progressed)
   // Phase 9: advance simulation time.
   return advanceTime(maintained)
 }

@@ -1,20 +1,24 @@
 /**
  * Simulation phases (docs/11-time-and-events.md).
  *
- * Phase order is part of the simulation contract. Step 07C order:
+ * Phase order is part of the simulation contract. Step 07C order, with the
+ * Step 08G construction-transaction position:
  *
- *   1. applyCommand        - player placement (validated, deterministic)
- *   2. advanceConstruction - construction progress -> operational
- *   3. updateNeeds         - derive food requirement from the colony (docs/11 #4)
- *   4. produceFood         - operational farms add food (Step 06B, Phase 4)
- *   5. consumeFood         - all-or-nothing feeding (docs/11 #5)
- *   6. updatePopulation    - starvation then food-gated admission (docs/11 #9)
- *   7. assignJobs          - deterministic Workshop employment (Step 07C §4)
- *   8. produceMaterial     - employed colonists add construction material,
+ *   1. advanceConstruction - construction progress -> operational
+ *   2. updateNeeds         - derive food requirement from the colony (docs/11 #4)
+ *   3. produceFood         - operational farms add food (Step 06B, Phase 4)
+ *   4. consumeFood         - all-or-nothing feeding (docs/11 #5)
+ *   5. updatePopulation    - starvation then food-gated admission (docs/11 #9)
+ *   6. assignJobs          - deterministic Workshop employment (Step 07C §4)
+ *   7. produceMaterial     - employed colonists add construction material,
  *       clamped to operational Workshop storage (Step 08F §5)
+ *   8a. applyCommand       - player construction transaction (Step 08G §5):
+ *       validated against the post-production stock, deducted before upkeep,
+ *       never negative, atomic (check -> deduct -> create)
  *   8b. upkeepBuildings    - staffed operational Workshops pay 1 material
- *       (Step 08C, after production, before time: partial payment clamped
- *       to stock, never negative, no deactivation, no debt)
+ *       (Step 08C, after production AND after construction, before time:
+ *       partial payment clamped to stock, never negative, no deactivation,
+ *       no debt)
  *   9. advanceTime         - tick += 1
  *
  * Production (4) precedes consumption (5): food produced on the tick a farm
@@ -62,7 +66,7 @@ import {
 } from './state.js'
 
 // ---------------------------------------------------------------------------
-// Phase 1 - Apply player commands
+// Player construction transaction (Step 08G §5)
 // ---------------------------------------------------------------------------
 
 /** A cell is occupied iff a building exists on it. */
@@ -82,6 +86,13 @@ export interface CommandApplicationResult {
   readonly state: SimulationState
   readonly accepted: boolean
   readonly reason: string | null
+  /**
+   * Id of the building created by an accepted placeBuilding command, else
+   * null. Lets the tick orchestrator (step.ts) progress exactly the new
+   * building once: the transaction runs after this tick's construction
+   * progress, so the placed building missed its progress slot (Step 08G).
+   */
+  readonly placedBuildingId: string | null
 }
 
 /**
@@ -116,27 +127,33 @@ export const validatePlacement = (
 }
 
 /**
- * Valid placement: known type, inside bounds, free cell.
- * Invalid command = explicit no-op (same canonical state), never an error
- * thrown across the phase boundary.
+ * Valid placement: known type, inside bounds, free cell, affordable against
+ * the stock of the state this runs on. Invalid command = explicit no-op
+ * (same canonical state), never an error thrown across the phase boundary.
+ *
+ * Step 08G §5: the orchestrator runs this AFTER produceMaterial, so the
+ * validated stock already includes this tick's STORED production (never
+ * hypothetical overflow: the 08F clamp discarded it before this runs), and
+ * BEFORE upkeepBuildings, so upkeep sees the post-construction stock.
  */
 export const applyCommand = (
   state: SimulationState,
   command: SimulationCommand | undefined
 ): CommandApplicationResult => {
   if (command === undefined) {
-    return { state, accepted: false, reason: null }
+    return { state, accepted: false, reason: null, placedBuildingId: null }
   }
   switch (command.type) {
     case 'placeBuilding': {
       const cell = { x: command.x, y: command.y }
       const validation = validatePlacement(state, cell, command.buildingType)
       if (!validation.valid) {
-        return { state, accepted: false, reason: validation.reason }
+        return { state, accepted: false, reason: validation.reason, placedBuildingId: null }
       }
       const definition = BUILDING_CATALOG[command.buildingType]
-      // Atomic (Step 4 §6): building creation and resource deduction happen in
-      // the same pure step; a rejected placement changes neither.
+      // Atomic (Step 4 §6, Step 08G §7/§14): building creation and resource
+      // deduction happen in the same pure step; a rejected placement changes
+      // neither. Deduction consumes authoritative stock only.
       const created = createBuilding(
         state,
         command.buildingType,
@@ -149,8 +166,38 @@ export const applyCommand = (
         state: { ...created.state, resources: deducted },
         accepted: true,
         reason: null,
+        placedBuildingId: created.buildingId,
       }
     }
+  }
+}
+
+/**
+ * Catch-up progress for a newly placed building (Step 08G). The construction
+ * transaction runs after advanceConstruction, so the placed building missed
+ * this tick's progress slot; progress it once to preserve the catalog 2-tick
+ * completion contract (placed tick: 2 -> 1, next tick: 1 -> 0 operational).
+ * Reuses progressOneBuilding, so a hypothetical 1-tick catalog entry would
+ * complete exactly as if placed before advanceConstruction. No-op when no
+ * building was placed, or when the id is absent (defensive: never throws).
+ */
+export const progressPlacedBuilding = (
+  result: CommandApplicationResult
+): SimulationState => {
+  if (result.placedBuildingId === null) {
+    return result.state
+  }
+  const placed = result.state.buildings[result.placedBuildingId]
+  if (placed === undefined) {
+    return result.state
+  }
+  const advanced = progressOneBuilding(placed)
+  if (advanced === placed) {
+    return result.state
+  }
+  return {
+    ...result.state,
+    buildings: { ...result.state.buildings, [advanced.id]: advanced },
   }
 }
 
