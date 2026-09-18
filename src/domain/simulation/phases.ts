@@ -1,23 +1,55 @@
 /**
  * Simulation phases (docs/11-time-and-events.md).
  *
- * Phase order is part of the simulation contract. Step 0 order:
+ * Phase order is part of the simulation contract. Step 07C order:
  *
- *   1. applyCommand       - player placement (validated, deterministic)
- *   2. advanceConstruction- construction progress -> operational
- *   3. updatePopulation   - colonist arrives iff housing capacity exists
- *   4. advanceTime        - tick += 1
+ *   1. applyCommand        - player placement (validated, deterministic)
+ *   2. advanceConstruction - construction progress -> operational
+ *   3. updateNeeds         - derive food requirement from the colony (docs/11 #4)
+ *   4. produceFood         - operational farms add food (Step 06B, Phase 4)
+ *   5. consumeFood         - all-or-nothing feeding (docs/11 #5)
+ *   6. updatePopulation    - starvation then food-gated admission (docs/11 #9)
+ *   7. assignJobs          - deterministic Workshop employment (Step 07C §4)
+ *   8. produceMaterial     - employed colonists add construction material (§6)
+ *   8b. upkeepBuildings    - staffed operational Workshops pay 1 material
+ *       (Step 08C, after production, before time: partial payment clamped
+ *       to stock, never negative, no deactivation, no debt)
+ *   9. advanceTime         - tick += 1
+ *
+ * Production (4) precedes consumption (5): food produced on the tick a farm
+ * becomes operational — or on any tick the colony would otherwise starve —
+ * saves the colony on THAT tick, not the next one. Deterministic and tested.
+ *
+ * Jobs (7-8) come after population (6) and before time (9), so:
+ *
+ *   - a colonist admitted on tick N is assigned and produces on tick N;
+ *   - a Workshop operational on tick N is staffed and produces on tick N;
+ *   - starvation on tick N removes workers BEFORE produceMaterial, so no
+ *     colonist produces construction material on the tick they starve.
  *
  * Every phase is a pure function: (state, ...) -> new state.
  * No phase mutates its input. No phase depends on rendering, UI,
  * wall-clock time or randomness.
  */
 
-import { BUILDING_CATALOG, type BuildingState } from '../building/building.js'
+import { BUILDING_CATALOG, type BuildingState, type BuildingType } from '../building/building.js'
 import {
   availableResidenceIds,
   iterateBuildings,
+  iterateColonists,
 } from '../housing/housing.js'
+import { countEmployedWorkers, countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
+import type { ColonistState } from '../population/colonist.js'
+import {
+  deductFood,
+  deductResources,
+  FOOD_PER_COLONIST_PER_TICK,
+  FOOD_PER_FARM_PER_TICK,
+  hasSufficientFood,
+  hasSufficientResources,
+  MATERIAL_PER_WORKER_PER_TICK,
+  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+} from '../resource/resource.js'
 import type { CellCoordinate } from '../world/grid.js'
 import { isInBounds } from '../world/grid.js'
 import type { SimulationCommand } from './command.js'
@@ -51,6 +83,37 @@ export interface CommandApplicationResult {
 }
 
 /**
+ * Placement validation. Single source of truth: used by the simulation
+ * phase (applyCommand) and by application queries (hover indicator).
+ * Two distinct constraint categories stay distinguishable (Step 4 §4):
+ * spatial validity and resource availability.
+ */
+export type PlacementValidation =
+  | { readonly valid: true }
+  | { readonly valid: false; readonly reason: 'unknownBuildingType' | 'outOfBounds' | 'cellOccupied' | 'insufficientResources' }
+
+export const validatePlacement = (
+  state: SimulationState,
+  cell: CellCoordinate,
+  buildingType: BuildingType
+): PlacementValidation => {
+  const definition = BUILDING_CATALOG[buildingType]
+  if (definition === undefined) {
+    return { valid: false, reason: 'unknownBuildingType' }
+  }
+  if (!isInBounds(state.config.world, cell)) {
+    return { valid: false, reason: 'outOfBounds' }
+  }
+  if (isCellOccupied(state, cell)) {
+    return { valid: false, reason: 'cellOccupied' }
+  }
+  if (!hasSufficientResources(state.resources, definition.constructionCost)) {
+    return { valid: false, reason: 'insufficientResources' }
+  }
+  return { valid: true }
+}
+
+/**
  * Valid placement: known type, inside bounds, free cell.
  * Invalid command = explicit no-op (same canonical state), never an error
  * thrown across the phase boundary.
@@ -65,16 +128,13 @@ export const applyCommand = (
   switch (command.type) {
     case 'placeBuilding': {
       const cell = { x: command.x, y: command.y }
-      if (BUILDING_CATALOG[command.buildingType] === undefined) {
-        return { state, accepted: false, reason: 'unknownBuildingType' }
-      }
-      if (!isInBounds(state.config.world, cell)) {
-        return { state, accepted: false, reason: 'outOfBounds' }
-      }
-      if (isCellOccupied(state, cell)) {
-        return { state, accepted: false, reason: 'cellOccupied' }
+      const validation = validatePlacement(state, cell, command.buildingType)
+      if (!validation.valid) {
+        return { state, accepted: false, reason: validation.reason }
       }
       const definition = BUILDING_CATALOG[command.buildingType]
+      // Atomic (Step 4 §6): building creation and resource deduction happen in
+      // the same pure step; a rejected placement changes neither.
       const created = createBuilding(
         state,
         command.buildingType,
@@ -82,7 +142,12 @@ export const applyCommand = (
         cell.y,
         definition.constructionTicks
       )
-      return { state: created.state, accepted: true, reason: null }
+      const deducted = deductResources(created.state.resources, definition.constructionCost)
+      return {
+        state: { ...created.state, resources: deducted },
+        accepted: true,
+        reason: null,
+      }
     }
   }
 }
@@ -129,30 +194,310 @@ export const advanceConstruction = (
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3 - Population / housing admission
+// Phase 3 - Food need (Step 05)
+// ---------------------------------------------------------------------------
+
+/** Number of live colonists (pure colony count over canonical state). */
+export const getPopulationCount = (state: SimulationState): number =>
+  Object.keys(state.colonists).length
+
+/**
+ * The need is derived, never stored (Step 05B §Food need semantics): every
+ * live colonist requires FOOD_PER_COLONIST_PER_TICK food unit(s) this tick.
+ * Consumption (phase 4) runs on the population BEFORE admission, so a
+ * colonist admitted in this tick is first fed next tick.
+ */
+export const updateNeeds = (state: SimulationState): number =>
+  getPopulationCount(state) * FOOD_PER_COLONIST_PER_TICK
+
+export interface FoodConsumptionResult {  readonly state: SimulationState
+  /**
+   * True when the whole colony was fed this tick, false on a shortage tick.
+   * Intra-tick value only: never stored in canonical state, never persisted,
+   * never hashed (Step 05C §4).
+   */
+  readonly fed: boolean
+}
+
+/**
+ * All-or-nothing colony feeding (Step 05B §Food resource semantics).
+ *
+ * - requiredFood === 0: nothing is consumed, the tick is vacuously fed.
+ * - food >= requiredFood: deduct exactly `requiredFood`.
+ * - food < requiredFood: shortage — the reserve is exhausted to 0 and the
+ *   tick is NOT fed. No partial deduction, no error thrown across the phase
+ *   boundary (same spirit as Step 04 placement rejection).
+ */
+export const consumeFood = (
+  state: SimulationState,
+  requiredFood: number
+): FoodConsumptionResult => {
+  if (requiredFood < 0) {
+    throw new Error(`Negative food requirement: ${requiredFood}`)
+  }
+  if (requiredFood === 0) {
+    return { state, fed: true }
+  }
+  if (hasSufficientFood(state.resources, requiredFood)) {
+    return {
+      state: { ...state, resources: deductFood(state.resources, requiredFood) },
+      fed: true,
+    }
+  }
+  return {
+    state: { ...state, resources: { ...state.resources, food: 0 } },
+    fed: false,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 - Food production (Step 06B, roadmap Phase 4)
 // ---------------------------------------------------------------------------
 
 /**
- * A colonist is created only when an operational residence without a
- * resident exists (docs/07: first colonist appears only when valid housing
- * capacity exists). Residences are consumed in ascending id order.
+ * Operational farms feeding the shared stock (Step 06B §9-10).
+ * Deterministic ascending-id iteration; outputs simply sum — no priority,
+ * no efficiency, no workers. Addition commutes, so multi-farm output is
+ * order-independent by construction.
  */
-export const updatePopulation = (state: SimulationState): SimulationState => {
-  let nextState = state
-  let pendingCapacity = availableResidenceIds(nextState)
-  while (pendingCapacity.length > 0) {
+export const countOperationalFarms = (state: SimulationState): number => {
+  let count = 0
+  for (const building of iterateBuildings(state)) {
+    if (building.type === 'farm' && building.status === 'operational') {
+      count += 1
+    }
+  }
+  return count
+}
+
+/** Deterministic farm output for this tick (Step 06B §12). */
+export const foodProductionForTick = (state: SimulationState): number =>
+  countOperationalFarms(state) * FOOD_PER_FARM_PER_TICK
+
+/**
+ * Add this tick's farm output to the shared stock. Pure: returns the input
+ * state reference when nothing produces. Runs after construction (a farm
+ * operational as of this tick produces this tick) and before consumption,
+ * so same-tick production can prevent starvation. Produces with zero
+ * colonists (stockpiling); food may exceed the initial 100 — the Step 06B
+ * invariant is food >= 0, with no stock cap.
+ */
+export const produceFood = (state: SimulationState): SimulationState => {
+  const output = foodProductionForTick(state)
+  if (output === 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: { ...state.resources, food: state.resources.food + output },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 - Population / housing admission + shortage consequence
+// ---------------------------------------------------------------------------
+
+/**
+ * Colonists are admitted only when an operational residence without a
+ * resident exists AND the colony still has food after this tick's
+ * consumption (docs/07 growth conditions, Step 05B §Admission gating).
+ * Residences are consumed in ascending id order.
+ *
+ * Shortage consequence: when the tick was NOT fed, the entire colony
+ * starves in the same tick — every colonist leaves, freeing all residences
+ * (all-or-nothing, Step 05B §Shortage consequence).
+ */
+export const updatePopulation = (
+  state: SimulationState,
+  fed: boolean
+): SimulationState => {
+  let nextState = fed
+    ? state
+    : { ...state, colonists: {} }
+  while (nextState.resources.food > 0) {
+    const pendingCapacity = availableResidenceIds(nextState)
+    if (pendingCapacity.length === 0) {
+      break
+    }
     const residenceId = pendingCapacity[0]
     if (residenceId === undefined) {
       break
     }
     nextState = createColonist(nextState, residenceId).state
-    pendingCapacity = availableResidenceIds(nextState)
   }
   return nextState
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4 - Advance simulation time
+// Phase 7 - Jobs / employment (Step 07C §4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic job assignment (Step 07C §4). Exactly:
+ *
+ *   1. any colonist whose `workplaceId` refers to a missing, non-operational
+ *      or non-workshop building becomes unemployed (`workplaceId = null`);
+ *   2. existing valid assignments are preserved untouched — employment never
+ *      churns from one tick to the next;
+ *   3. unemployed colonists (ascending colonist id) fill available operational
+ *      Workshops (ascending building id), one colonist per Workshop;
+ *   4. surplus colonists stay unemployed and surplus Workshops stay vacant.
+ *
+ * No randomness, no distance, no proximity, no skill, no priority, no player
+ * assignment command. Pure: returns the input state reference when nothing
+ * changes.
+ */
+export const assignJobs = (state: SimulationState): SimulationState => {
+  const colonists = [...iterateColonists(state)]
+  if (colonists.length === 0) {
+    return state
+  }
+  // Ascending building-id order (iterateBuildings sorts by id).
+  const availableWorkshopIds = [...iterateBuildings(state)]
+    .filter(isOperationalWorkshop)
+    .map((building) => building.id)
+  const operationalWorkshopIds = new Set(availableWorkshopIds)
+  const takenWorkplaceIds = new Set<string>()
+
+  const nextColonists: Record<string, ColonistState> = {}
+  let changed = false
+
+  // Steps 1-2: drop invalid references, never allow two workers in one
+  // Workshop, and keep every still-valid assignment as it is.
+  for (const colonist of colonists) {
+    const workplaceId = colonist.workplaceId
+    let resolvedWorkplaceId: string | null = null
+    if (
+      workplaceId !== null &&
+      operationalWorkshopIds.has(workplaceId) &&
+      !takenWorkplaceIds.has(workplaceId)
+    ) {
+      resolvedWorkplaceId = workplaceId
+      takenWorkplaceIds.add(workplaceId)
+    }
+    if (resolvedWorkplaceId === workplaceId) {
+      nextColonists[colonist.id] = colonist
+    } else {
+      nextColonists[colonist.id] = { ...colonist, workplaceId: resolvedWorkplaceId }
+      changed = true
+    }
+  }
+
+  // Steps 3-4: fill vacancies. Colonists are iterated in ascending id order
+  // and vacancies are consumed in ascending Workshop id order.
+  const vacancies = availableWorkshopIds.filter(
+    (workshopId) => !takenWorkplaceIds.has(workshopId)
+  )
+  let vacancyIndex = 0
+  for (const colonist of colonists) {
+    const vacancyId = vacancies[vacancyIndex]
+    if (vacancyId === undefined) {
+      break
+    }
+    const current = nextColonists[colonist.id]
+    if (current === undefined || current.workplaceId !== null) {
+      continue
+    }
+    vacancyIndex += 1
+    nextColonists[colonist.id] = { ...current, workplaceId: vacancyId }
+    changed = true
+  }
+
+  if (!changed) {
+    return state
+  }
+  return { ...state, colonists: nextColonists }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8 - Construction-material production (Step 07C §6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic material output for this tick: employed colonists × 2.
+ * Direct production into the existing construction stock — no stored labour,
+ * no recipe, no efficiency, no cap. Workers with zero or non-operational
+ * Workshops produce nothing (no hidden autonomous production, §7).
+ */
+export const materialProductionForTick = (state: SimulationState): number =>
+  countEmployedWorkers(state) * MATERIAL_PER_WORKER_PER_TICK
+
+/**
+ * Add this tick's labor output to the shared construction stock. Pure: returns
+ * the input state reference when nothing produces. Runs after assignJobs, so
+ * a colonist admitted — or a Workshop completed — on this tick produces on
+ * this tick, while a starving colonist produces nothing.
+ */
+export const produceMaterial = (state: SimulationState): SimulationState => {
+  const output = materialProductionForTick(state)
+  if (output === 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: {
+      ...state.resources,
+      construction: state.resources.construction + output,
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8b - Operational upkeep (Step 08C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Staffed operational Workshops: operational AND at least one worker
+ * assigned. Residences, Farms, under-construction and vacant Workshops
+ * cost exactly 0. Deterministic: iterateBuildings sorts by id.
+ */
+export const countStaffedOperationalWorkshops = (
+  state: SimulationState
+): number => {
+  let count = 0
+  for (const building of iterateBuildings(state)) {
+    if (
+      isOperationalWorkshop(building) &&
+      countWorkersAt(state, building.id) > 0
+    ) {
+      count += 1
+    }
+  }
+  return count
+}
+
+/** Deterministic upkeep due this tick: staffed operational Workshops × 1. */
+export const materialUpkeepDueForTick = (state: SimulationState): number =>
+  countStaffedOperationalWorkshops(state) *
+  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK
+
+/**
+ * Deduct this tick's upkeep from the construction stock. Runs after
+ * produceMaterial so same-tick production pays same-tick upkeep, and after
+ * assignJobs/starvation so the staffing served is this tick's. Partial
+ * payment clamped to stock: deduct = min(stock, due). Never throws on
+ * deficit, never deactivates buildings, no debt, no carry-over.
+ */
+export const upkeepBuildings = (state: SimulationState): SimulationState => {
+  const due = materialUpkeepDueForTick(state)
+  if (due <= 0) {
+    return state
+  }
+  const deduct = Math.min(state.resources.construction, due)
+  if (deduct <= 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: {
+      ...state.resources,
+      construction: state.resources.construction - deduct,
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 - Advance simulation time
 // ---------------------------------------------------------------------------
 
 /** Simulation time is canonical state, never wall-clock (docs/11). */

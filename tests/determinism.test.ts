@@ -48,6 +48,7 @@ describe('determinism', () => {
       colonists: state.colonists,
       buildings: state.buildings,
       time: state.time,
+      resources: state.resources,
       config: state.config,
     }
     expect(serializeCanonicalState(state)).toBe(

@@ -9,10 +9,18 @@
 import { canonicalJson } from '../../domain/simulation/hash.js'
 import type { BuildingState } from '../../domain/building/building.js'
 import type { ColonistState } from '../../domain/population/colonist.js'
+import type { ResourceStock } from '../../domain/resource/resource.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 export const SAVE_FORMAT = 'nova-save'
-export const SAVE_VERSION = 1
+/** v2: SimulationState gained a `resources` field (Step 4). */
+/** v3: ResourceStock gained `food` (Step 05). v2 saves are rejected. */
+/**
+ * v4: ColonistState gained `workplaceId` (Step 07C). v3 saves are rejected
+ * explicitly — no silent migration is invented, following the repository's
+ * established versioning policy.
+ */
+export const SAVE_VERSION = 4
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -79,8 +87,9 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   const buildings = raw['buildings']
   const colonists = raw['colonists']
   const counters = raw['counters']
+  const resources = raw['resources']
   if (!isRecord(config) || !isRecord(time) || !isRecord(buildings) ||
-      !isRecord(colonists) || !isRecord(counters)) {
+      !isRecord(colonists) || !isRecord(counters) || !isRecord(resources)) {
     throw new SaveValidationError('Malformed save: state shape mismatch')
   }
   const world = config['world']
@@ -93,6 +102,11 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   assertFiniteInt(time['tick'], 'time.tick')
   assertFiniteInt(counters['nextBuildingId'], 'counters.nextBuildingId')
   assertFiniteInt(counters['nextColonistId'], 'counters.nextColonistId')
+  assertFiniteInt(resources['construction'], 'resources.construction')
+  assertFiniteInt(resources['food'], 'resources.food')
+  if ((resources['food'] as number) < 0) {
+    throw new SaveValidationError('Malformed save: resources.food must be >= 0')
+  }
 
   const validatedBuildings: Record<string, BuildingState> = {}
   for (const [id, value] of Object.entries(buildings)) {
@@ -121,10 +135,19 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     if (residenceId !== null && typeof residenceId !== 'string') {
       throw new SaveValidationError(`Malformed save: colonists.${id}.residenceId`)
     }
+    const workplaceId = value['workplaceId']
+    if (workplaceId !== null && typeof workplaceId !== 'string') {
+      throw new SaveValidationError(`Malformed save: colonists.${id}.workplaceId`)
+    }
     if (value['id'] !== id) {
       throw new SaveValidationError(`Malformed save: colonist key/id mismatch for ${id}`)
     }
     validatedColonists[id] = value as unknown as ColonistState
+  }
+
+  const resourcesStock: ResourceStock = {
+    construction: resources['construction'] as number,
+    food: resources['food'] as number,
   }
 
   const state: SimulationState = {
@@ -136,6 +159,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
       },
     },
     time: { tick: time['tick'] as number },
+    resources: resourcesStock,
     buildings: validatedBuildings,
     colonists: validatedColonists,
     counters: {

@@ -12,6 +12,7 @@
 
 import type { BuildingState, BuildingType } from '../building/building.js'
 import type { ColonistState } from '../population/colonist.js'
+import { createInitialResourceStock, type ResourceStock } from '../resource/resource.js'
 import type { WorldConfig } from '../world/grid.js'
 
 export interface SimulationTime {
@@ -27,6 +28,7 @@ interface EntityCounters {
 export interface SimulationState {
   readonly config: SimulationConfig
   readonly time: SimulationTime
+  readonly resources: ResourceStock
   readonly buildings: Readonly<Record<string, BuildingState>>
   readonly colonists: Readonly<Record<string, ColonistState>>
   readonly counters: EntityCounters
@@ -45,6 +47,7 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
   return {
     config,
     time: { tick: 0 },
+    resources: createInitialResourceStock(),
     buildings: {},
     colonists: {},
     counters: { nextBuildingId: 1, nextColonistId: 1 },
@@ -98,7 +101,9 @@ export const createColonist = (
   residenceId: string
 ): { state: SimulationState; colonistId: string } => {
   const id = makeColonistId(state.counters.nextColonistId)
-  const colonist: ColonistState = { id, residenceId }
+  // New colonists start unemployed: employment is granted only by the
+  // deterministic assignJobs phase (Step 07C §4).
+  const colonist: ColonistState = { id, residenceId, workplaceId: null }
   return {
     colonistId: id,
     state: {

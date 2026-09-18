@@ -32,10 +32,12 @@ describe('render snapshot', () => {
         x: 2,
         y: 3,
         status: 'operational',
+        // Step 07C: employment is projected for rendering (0 for residences).
+        workers: 0,
       },
     ])
     expect(snapshot.colonists).toEqual([
-      { id: 'colonist-1', residenceId: 'building-1' },
+      { id: 'colonist-1', residenceId: 'building-1', cell: { x: 2, y: 3 } },
     ])
   })
 

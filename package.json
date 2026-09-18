@@ -8,14 +8,30 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc -p tsconfig.build.json"
+    "dev": "vite",
+    "preview": "vite preview",
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "test:e2e": "node e2e/run.mjs",
+    "test:e2e:gpu": "node e2e/gpuRun.mjs",
+    "test:e2e:temporal": "node e2e/temporalRun.mjs",
+    "test:e2e:resource": "node e2e/resourceRun.mjs",
+    "test:e2e:food": "node e2e/foodRun.mjs",
+    "test:e2e:production": "node e2e/productionRun.mjs",
+    "test:e2e:jobs": "node e2e/jobsRun.mjs",
+    "test:e2e:upkeep": "node e2e/upkeepRun.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/node": "^22.20.3",
+    "@types/three": "^0.186.0",
     "eslint": "^9.39.2",
+    "playwright": "^1.63.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.1",
+    "vite": "^8.3.0",
     "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "three": "^0.186.0"
   }
 }

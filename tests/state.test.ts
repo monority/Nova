@@ -32,6 +32,7 @@ describe('canonical state', () => {
       colonists: b.colonists,
       buildings: b.buildings,
       time: b.time,
+      resources: b.resources,
       config: b.config,
     }
     expect(serializeCanonicalState(a)).toBe(serializeCanonicalState(reordered))

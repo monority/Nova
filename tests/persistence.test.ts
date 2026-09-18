@@ -63,6 +63,37 @@ describe('persistence', () => {
     )
   })
 
+  it('explicitly rejects v2 saves (no silent food migration)', () => {
+    const save = serializeSave(createTestState())
+    const parsed = JSON.parse(save) as Record<string, unknown>
+    parsed['version'] = 2
+    expect(() => loadSave(JSON.stringify(parsed))).toThrow(
+      SaveValidationError
+    )
+  })
+
+  it('rejects saves missing the food field', () => {
+    const save = serializeSave(createTestState())
+    const parsed = JSON.parse(save) as { state: { resources: Record<string, unknown> } }
+    delete parsed.state.resources['food']
+    expect(() => loadSave(JSON.stringify(parsed))).toThrow(
+      SaveValidationError
+    )
+  })
+
+  it('rejects invalid food values', () => {
+    const save = serializeSave(createTestState())
+    const parsed = JSON.parse(save) as { state: { resources: Record<string, unknown> } }
+    parsed.state.resources['food'] = -1
+    expect(() => loadSave(JSON.stringify(parsed))).toThrow(
+      SaveValidationError
+    )
+    parsed.state.resources['food'] = 1.5
+    expect(() => loadSave(JSON.stringify(parsed))).toThrow(
+      SaveValidationError
+    )
+  })
+
   it('rejects unknown format and malformed JSON', () => {
     expect(() => loadSave('not json')).toThrow(SaveValidationError)
     expect(() => loadSave('{"format":"other","version":1,"state":{}}')).toThrow(
