@@ -286,6 +286,31 @@ async function main() {
     if (s.colonists !== '1') fail(`G admission bad: ${JSON.stringify(s)}`);
     else ok(`G admission still works after idle: colonists ${s.colonists}`);
 
+    // H. Starvation: 4 residences, no farm -> population hits zero.
+    // Expected: workers 0, upkeep 0, material frozen, no failure state.
+    await page.goto(URL, { waitUntil: 'load' });
+    await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    const starveCells = [{ x: 1, y: 1 }, { x: 1, y: 6 }, { x: 6, y: 1 }, { x: 6, y: 6 }];
+    for (const cell of starveCells) {
+      await placeAt(page, cell);
+    }
+    s = await stepUntil(page, (v) => v.colonists === '4', 'four colonists', 20);
+    ok(`H four colonists admitted, food ${s.food}`);
+    s = await stepUntil(page, (v) => v.colonists === '0', 'starvation', 120);
+    if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.materialProduction !== '0') {
+      fail(`H starvation upkeep bad: ${JSON.stringify(s)}`);
+    } else ok(`H starvation: workers 0, upkeep 0, net 0, food ${s.food}`);
+    const frozen = Number(s.construction);
+    await step(page);
+    await step(page);
+    await step(page);
+    s = await stats(page);
+    if (Number(s.construction) !== frozen || s.materialUpkeep !== '0') {
+      fail(`H post-starvation drift: ${JSON.stringify(s)}`);
+    } else ok(`H post-starvation stable: material ${s.construction}, upkeep 0`);
+    await shot('07-starvation.png');
+
     const realErrors = errors.filter((e) => !e.includes('favicon'));
     if (realErrors.length > 0) fail(`browser errors: ${realErrors.join(' | ')}`);
     else ok('zero console/page errors');
