@@ -8,6 +8,7 @@
 
 import { iterateBuildings, iterateColonists } from '../../domain/housing/housing.js'
 import { iterateRoads } from '../../domain/road/road.js'
+import { cellKey } from '../../domain/world/grid.js'
 import type { RoadStatus } from '../../domain/road/road.js'
 import type { BuildingStatus, BuildingType } from '../../domain/building/building.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
@@ -43,6 +44,22 @@ export interface RenderRoad {
   readonly x: number
   readonly y: number
   readonly status: RoadStatus
+  /**
+   * Step 09H: orthogonal continuity, derived for presentation only (road
+   * orientation is never persisted). True iff an OPERATIONAL road occupies
+   * the neighbour cell; all false while this road is still under
+   * construction, so a construction slab is never drawn as a connected
+   * segment. The renderer consumes this instead of deriving domain
+   * adjacency from the projected road list.
+   */
+  readonly connections: RenderRoadConnections
+}
+
+export interface RenderRoadConnections {
+  readonly north: boolean
+  readonly east: boolean
+  readonly south: boolean
+  readonly west: boolean
 }
 
 export interface RenderSnapshot {
@@ -95,6 +112,38 @@ export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
       x: r.x,
       y: r.y,
       status: r.status,
+      connections: roadConnections(state, r),
     })),
   }
+}
+
+/**
+ * Orthogonal continuity of one road (Step 09H). Operational neighbours only;
+ * under-construction roads are neither segments nor connectors (09D).
+ */
+const roadConnections = (
+  state: SimulationState,
+  road: { readonly x: number; readonly y: number; readonly status: RoadStatus }
+): RenderRoadConnections => {
+  if (road.status !== 'operational') {
+    return NO_CONNECTIONS
+  }
+  const operationalCells = new Set(
+    [...iterateRoads(state)]
+      .filter((candidate) => candidate.status === 'operational')
+      .map((candidate) => cellKey(candidate))
+  )
+  return {
+    north: operationalCells.has(cellKey({ x: road.x, y: road.y - 1 })),
+    east: operationalCells.has(cellKey({ x: road.x + 1, y: road.y })),
+    south: operationalCells.has(cellKey({ x: road.x, y: road.y + 1 })),
+    west: operationalCells.has(cellKey({ x: road.x - 1, y: road.y })),
+  }
+}
+
+const NO_CONNECTIONS: RenderRoadConnections = {
+  north: false,
+  east: false,
+  south: false,
+  west: false,
 }

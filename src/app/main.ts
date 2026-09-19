@@ -34,6 +34,10 @@ import {
   getNetMaterialPerTick,
   getBuildingRoadAccess,
   getColonistWorkMobility,
+  expandRoadDrag,
+  ROAD_CONSTRUCTION_COST,
+  validateRoadsPlacement,
+  type CellCoordinate,
   getRoadNetworkCount,
   getResourceStock,
   INITIAL_CONSTRUCTION_MATERIAL,
@@ -75,6 +79,7 @@ const ui = {
   buildResidence: document.querySelector<HTMLButtonElement>('#btn-build-residence'),
   buildFarm: document.querySelector<HTMLButtonElement>('#btn-build-farm'),
   buildWorkshop: document.querySelector<HTMLButtonElement>('#btn-build-workshop'),
+  buildRoad: document.querySelector<HTMLButtonElement>('#btn-build-road'),
   speed: document.querySelector<HTMLSelectElement>('#speed'),
   tick: document.querySelector<HTMLSpanElement>('#ui-tick'),
   construction: document.querySelector<HTMLSpanElement>('#ui-construction'),
@@ -84,6 +89,7 @@ const ui = {
   operational: document.querySelector<HTMLSpanElement>('#ui-operational'),
   colonists: document.querySelector<HTMLSpanElement>('#ui-colonists'),
   jobs: document.querySelector<HTMLSpanElement>('#ui-jobs'),
+  roads: document.querySelector<HTMLSpanElement>('#ui-roads'),
   status: document.querySelector<HTMLDivElement>('#ui-status'),
   insType: document.querySelector<HTMLElement>('#ins-type'),
   insStatus: document.querySelector<HTMLElement>('#ins-status'),
@@ -159,32 +165,45 @@ const refreshInspection = (): void => {
   }
 }
 
-// --- Building selection (Step 06B Part B) ------------------------------------
-// Minimal palette: the placement command carries the selected type through
-// the single sanctioned dispatch path. Costs come from the domain catalog.
-let selectedBuildingType: BuildingType = 'residence'
+// --- Placement tool selection (Step 06B Part B, Road tool Step 09H) ----------
+// Minimal extension of the existing palette convention: exactly one tool is
+// active, `aria-pressed` reflects it, and every cost shown comes from the
+// domain (building catalog / ROAD_CONSTRUCTION_COST). No generic tool
+// framework is introduced for the Road tool.
+type PlacementTool =
+  | { readonly kind: 'building'; readonly type: BuildingType }
+  | { readonly kind: 'road' }
 
-const refreshBuildButtons = (): void => {
+let selectedTool: PlacementTool = { kind: 'building', type: 'residence' }
+
+const refreshToolButtons = (): void => {
+  const activeType = selectedTool.kind === 'building' ? selectedTool.type : null
   ui.buildResidence?.setAttribute(
     'aria-pressed',
-    String(selectedBuildingType === 'residence')
+    String(activeType === 'residence')
   )
-  ui.buildFarm?.setAttribute(
-    'aria-pressed',
-    String(selectedBuildingType === 'farm')
-  )
+  ui.buildFarm?.setAttribute('aria-pressed', String(activeType === 'farm'))
   ui.buildWorkshop?.setAttribute(
     'aria-pressed',
-    String(selectedBuildingType === 'workshop')
+    String(activeType === 'workshop')
   )
+  ui.buildRoad?.setAttribute('aria-pressed', String(selectedTool.kind === 'road'))
 }
 
 const selectBuildingType = (type: BuildingType): void => {
-  selectedBuildingType = type
-  refreshBuildButtons()
+  selectedTool = { kind: 'building', type }
+  refreshToolButtons()
   const cost = getBuildingDefinition(type).constructionCost
   setStatus(
     `${BUILDING_LABELS[type] ?? type} selected — material ${cost} per building`
+  )
+}
+
+const selectRoadTool = (): void => {
+  selectedTool = { kind: 'road' }
+  refreshToolButtons()
+  setStatus(
+    `Road selected — material ${ROAD_CONSTRUCTION_COST} per cell · drag horizontally or vertically`
   )
 }
 
@@ -197,7 +216,12 @@ ui.buildFarm?.addEventListener('click', () => {
 ui.buildWorkshop?.addEventListener('click', () => {
   selectBuildingType('workshop')
 })
-refreshBuildButtons()
+ui.buildRoad?.addEventListener('click', selectRoadTool)
+if (ui.buildRoad !== null) {
+  // Cost label from the domain constant, never a hardcoded duplicate.
+  ui.buildRoad.textContent = `Road · ${ROAD_CONSTRUCTION_COST}`
+}
+refreshToolButtons()
 
 // --- Render + UI update on canonical state change ----------------------------
 
@@ -286,6 +310,13 @@ const refreshUi = (): void => {
   }
   if (ui.jobs !== null) {
     ui.jobs.textContent = `${employment.employed} / ${employment.jobCapacity}`
+  }
+  if (ui.roads !== null) {
+    const roadCount = Object.keys(s.roads).length
+    const operationalRoads = Object.values(s.roads).filter(
+      (road) => road.status === 'operational'
+    ).length
+    ui.roads.textContent = `${roadCount} (${operationalRoads} operational)`
   }
 
   // Causal message from the state transition, highest priority first.
@@ -417,27 +448,46 @@ ui.speed?.addEventListener('change', () => {
 
 const canvas = novaScene.renderer.domElement
 let isPointerDownOnCanvas = false
+/** Road drag anchor (Step 09H): set on pointerdown while the Road tool is active. */
+let roadDragStart: CellCoordinate | null = null
+/** Candidate cells of the current road gesture; empty when the gesture is invalid. */
+let roadDragCells: readonly CellCoordinate[] = []
+let roadDragValid = false
 
-const placementIsValid = (
-  cell: { readonly x: number; readonly y: number }
-): boolean =>
-  validatePlacement(controller.getState(), cell, selectedBuildingType).valid
+const clearPreview = (): void => {
+  novaRenderer.showPlacementIndicator(null, false)
+  novaRenderer.showRoadPreview([], false)
+}
 
-const describeCellStatus = (
-  cell: { readonly x: number; readonly y: number }
-): string => {
-  const placement = validatePlacement(
-    controller.getState(),
-    cell,
-    selectedBuildingType
-  )
+/**
+ * Candidate cells for the Road tool: the hovered cell alone, or the existing
+ * 09C drag expansion from the anchor. `expandRoadDrag` returns null for
+ * diagonal / L-shaped gestures, which the UI reports as unsupported instead of
+ * inventing a geometry the domain would reject.
+ */
+const roadCandidateCells = (
+  cell: CellCoordinate
+): readonly CellCoordinate[] | null => {
+  const start = roadDragStart
+  if (start === null) {
+    return [cell]
+  }
+  return expandRoadDrag(start, cell)
+}
+
+const describeCellStatus = (cell: CellCoordinate): string => {
+  const tool = selectedTool
+  if (tool.kind !== 'building') {
+    return ''
+  }
+  const placement = validatePlacement(controller.getState(), cell, tool.type)
   if (placement.valid) {
-    const cost = getBuildingDefinition(selectedBuildingType).constructionCost
+    const cost = getBuildingDefinition(tool.type).constructionCost
     return `cell ${cell.x},${cell.y} — ready · material ${cost}`
   }
   if (placement.reason === 'insufficientResources') {
     // Explainable failure (Step 4 §13): values come from real queries.
-    const required = getBuildingDefinition(selectedBuildingType).constructionCost
+    const required = getBuildingDefinition(tool.type).constructionCost
     const available = getResourceStock(controller.getState()).construction
     return `cell ${cell.x},${cell.y} — insufficient material (${available}/${required})`
   }
@@ -446,26 +496,113 @@ const describeCellStatus = (
   }`
 }
 
+/**
+ * Road feedback from the authoritative 09C validator — the UI never
+ * re-implements bounds, occupancy, collision, cost or affordability.
+ */
+const describeRoadCells = (cells: readonly CellCoordinate[]): string => {
+  const validation = validateRoadsPlacement(controller.getState(), cells)
+  const prefix = `road ${cells.length} cell${cells.length === 1 ? '' : 's'}`
+  if (validation.valid) {
+    return `${prefix} — ready · material ${validation.totalCost}`
+  }
+  switch (validation.reason) {
+    case 'emptyCells':
+      return `${prefix} — nothing to place`
+    case 'outOfBounds':
+      return `${prefix} — out of bounds`
+    case 'cellOccupiedByBuilding':
+      return `${prefix} — occupied by building`
+    case 'cellOccupiedByRoad':
+      return `${prefix} — road already exists here`
+    case 'insufficientResources':
+      return `${prefix} — insufficient material (${getResourceStock(controller.getState()).construction}/${cells.length * ROAD_CONSTRUCTION_COST})`
+  }
+}
+
 const updateHover = (clientX: number, clientY: number): void => {
   const cell = novaRenderer.pickCell(clientX, clientY)
   if (cell === null) {
-    novaRenderer.showPlacementIndicator(null, false)
+    clearPreview()
     setStatus('')
     return
   }
-  const valid = placementIsValid(cell)
-  novaRenderer.showPlacementIndicator(cell, valid)
-  setStatus(describeCellStatus(cell))
+  if (selectedTool.kind === 'building') {
+    const valid = validatePlacement(
+      controller.getState(),
+      cell,
+      selectedTool.type
+    ).valid
+    novaRenderer.showPlacementIndicator(cell, valid)
+    setStatus(describeCellStatus(cell))
+    return
+  }
+  // Road tool: the preview covers the whole candidate set, colored by the
+  // single authoritative validation of that set (never per-cell guesses).
+  const cells = roadCandidateCells(cell)
+  if (cells === null) {
+    novaRenderer.showRoadPreview([cell], false)
+    roadDragCells = []
+    roadDragValid = false
+    const start = roadDragStart
+    setStatus(
+      start === null
+        ? 'road — invalid cell'
+        : `road ${start.x},${start.y} → ${cell.x},${cell.y} — diagonal drag not supported`
+    )
+    return
+  }
+  const validation = validateRoadsPlacement(controller.getState(), cells)
+  novaRenderer.showRoadPreview(cells, validation.valid)
+  setStatus(describeRoadCells(cells))
+  roadDragCells = cells
+  roadDragValid = validation.valid
+}
+
+/**
+ * Commit the current road gesture (Step 09H). The set is re-validated against
+ * the live state at commit time (the simulation may have ticked since the last
+ * pointermove), and an invalid set dispatches nothing: no tick, no Material
+ * spent. `applyCommand` re-validates again — the domain stays authoritative.
+ */
+const commitRoadPlacement = (): void => {
+  const cells = roadDragCells
+  const wasValid = roadDragValid
+  roadDragStart = null
+  roadDragCells = []
+  roadDragValid = false
+  if (cells.length === 0 || !wasValid) {
+    setStatus('road placement rejected — no valid cells in this gesture')
+    return
+  }
+  const validation = validateRoadsPlacement(controller.getState(), cells)
+  if (!validation.valid) {
+    setStatus(describeRoadCells(cells))
+    return
+  }
+  controller.dispatch({ type: 'placeRoads', cells })
+  clearPreview()
+  setStatus(
+    `${cells.length} road cell${cells.length === 1 ? '' : 's'} placed — under construction`
+  )
 }
 
 canvas.addEventListener('pointermove', (event) => {
   updateHover(event.clientX, event.clientY)
 })
 canvas.addEventListener('pointerleave', () => {
-  novaRenderer.showPlacementIndicator(null, false)
+  clearPreview()
+  roadDragStart = null
+  roadDragCells = []
+  roadDragValid = false
 })
 canvas.addEventListener('pointerdown', (event) => {
   isPointerDownOnCanvas = true
+  if (selectedTool.kind === 'road') {
+    roadDragStart = novaRenderer.pickCell(event.clientX, event.clientY)
+    roadDragCells = []
+    roadDragValid = false
+  }
   updateHover(event.clientX, event.clientY)
 })
 canvas.addEventListener('pointerup', (event) => {
@@ -475,12 +612,14 @@ canvas.addEventListener('pointerup', (event) => {
   isPointerDownOnCanvas = false
   const cell = novaRenderer.pickCell(event.clientX, event.clientY)
   if (cell === null) {
+    roadDragStart = null
     return
   }
   // Clicking an existing building selects it (Step 3 §5): the renderer
   // only returns a cell; the application decides its domain meaning.
   const buildingId = getBuildingIdAtCell(controller.getState(), cell)
   if (buildingId !== null) {
+    roadDragStart = null
     selectedBuildingId = buildingId
     refreshInspection()
     const inspection = getBuildingInspection(controller.getState(), buildingId)
@@ -491,11 +630,12 @@ canvas.addEventListener('pointerup', (event) => {
     )
     return
   }
-  const attempt = validatePlacement(
-    controller.getState(),
-    cell,
-    selectedBuildingType
-  )
+  if (selectedTool.kind === 'road') {
+    commitRoadPlacement()
+    return
+  }
+  const buildingType = selectedTool.type
+  const attempt = validatePlacement(controller.getState(), cell, buildingType)
   // Step 08G §5: the construction transaction executes mid-tick, after this
   // tick's STORED production is authoritative and before upkeep drains it.
   // A click at 24 with +1 stored this tick therefore succeeds: the domain
@@ -508,15 +648,14 @@ canvas.addEventListener('pointerup', (event) => {
     (attempt.reason === 'insufficientResources' &&
       getResourceStock(controller.getState()).construction +
         getMaterialStoredProductionPerTick(controller.getState()) >=
-        getBuildingDefinition(selectedBuildingType).constructionCost)
+        getBuildingDefinition(buildingType).constructionCost)
   if (!coveredSameTick) {
     if (attempt.reason === 'insufficientResources') {
       // Explainable failure (Step 4 §13): explicit reason and real values.
-      const required =
-        getBuildingDefinition(selectedBuildingType).constructionCost
+      const required = getBuildingDefinition(buildingType).constructionCost
       const available = getResourceStock(controller.getState()).construction
       setStatus(
-        `Cannot build ${BUILDING_LABELS[selectedBuildingType] ?? selectedBuildingType} — insufficient material (${available}/${required})`
+        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — insufficient material (${available}/${required})`
       )
     } else {
       setStatus(`placement rejected at ${cell.x},${cell.y}`)
@@ -528,10 +667,9 @@ canvas.addEventListener('pointerup', (event) => {
     type: 'placeBuilding',
     x: cell.x,
     y: cell.y,
-    buildingType: selectedBuildingType,
+    buildingType,
   })
-  const placedLabel =
-    BUILDING_LABELS[selectedBuildingType] ?? selectedBuildingType
+  const placedLabel = BUILDING_LABELS[buildingType] ?? buildingType
   setStatus(`${placedLabel} placed at ${cell.x},${cell.y} — under construction`)
 })
 
@@ -563,7 +701,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -673,6 +811,13 @@ window.__nova = {
             building.status === 'operational' &&
             countWorkersAt(state, building.id) > 0 &&
             !getBuildingRoadAccess(state, building.id).hasRoadAccess
+        ).length
+      ),
+      // Step 09H: road infrastructure visible to the player (09C lifecycle).
+      roads: String(Object.keys(state.roads).length),
+      operationalRoads: String(
+        Object.values(state.roads).filter(
+          (road) => road.status === 'operational'
         ).length
       ),
       // Step 09G: derived residence -> network -> workplace relationship.

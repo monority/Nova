@@ -14,7 +14,11 @@ import {
   MeshStandardMaterial,
   SphereGeometry,
 } from 'three'
-import type { RenderBuilding, RenderColonist } from '../../application/queries/renderSnapshot.js'
+import type {
+  RenderBuilding,
+  RenderColonist,
+  RenderRoad,
+} from '../../application/queries/renderSnapshot.js'
 import type { GridDimensions } from './coordinates.js'
 import { simulationCellToWorldPosition } from './coordinates.js'
 import type { ReconciliationOps } from './reconcile.js'
@@ -41,6 +45,29 @@ const workshopGeometry = new CylinderGeometry(0.34, 0.34, 1, 16)
 workshopGeometry.translate(0, 0.5, 0) // pivot at ground level
 
 const colonistGeometry = new SphereGeometry(0.12, 12, 12)
+
+/**
+ * Road presentation (Step 09H).
+ *
+ * One flat slab per authoritative road cell plus a lighter marking whose
+ * dimensions derive ONLY from the snapshot's `connections` (never from a
+ * renderer-side road graph, never persisted). Slab color distinguishes the
+ * 09C lifecycle: gray while under construction, dark slate once operational
+ * (operational roads are the only ones that carry a marking).
+ */
+const ROAD_CONSTRUCTION_COLOR = CONSTRUCTION_COLOR
+const ROAD_OPERATIONAL_COLOR = 0x39404f
+const ROAD_MARKING_COLOR = 0x8f9aad
+const ROAD_THICKNESS = 0.06
+const ROAD_MARKING_HEIGHT = 0.09
+/** Marking span along a connected axis, and pad width otherwise. */
+const ROAD_SPAN = 0.9
+const ROAD_PAD = 0.34
+
+const roadGeometry = new BoxGeometry(0.92, 1, 0.92)
+roadGeometry.translate(0, 0.5, 0) // pivot at ground level
+const roadMarkingGeometry = new BoxGeometry(1, 1, 1)
+roadMarkingGeometry.translate(0, 0.5, 0)
 
 /** Presentation only: derived from RenderSnapshot type, never domain state. */
 const operationalColorOf = (data: RenderBuilding): number => {
@@ -145,6 +172,73 @@ export const colonistOps = (
       },
       update: apply,
       remove: (view) => {
+        view.mesh.removeFromParent()
+        view.material.dispose()
+      },
+    },
+  }
+}
+
+export interface RoadView {
+  readonly mesh: Mesh
+  readonly material: MeshStandardMaterial
+  readonly marking: Mesh
+  readonly markingMaterial: MeshStandardMaterial
+}
+
+export const roadOps = (
+  grid: GridDimensions
+): {
+  readonly views: Map<string, RoadView>
+  readonly ops: ReconciliationOps<RoadView, RenderRoad>
+} => {
+  const views = new Map<string, RoadView>()
+  const apply = (view: RoadView, data: RenderRoad): void => {
+    const operational = data.status === 'operational'
+    view.material.color.setHex(
+      operational ? ROAD_OPERATIONAL_COLOR : ROAD_CONSTRUCTION_COLOR
+    )
+    view.mesh.scale.y = ROAD_THICKNESS
+    // Marking derives from snapshot connections only: a segment along each
+    // connected axis (straight / endpoint), or a pad when isolated or when
+    // two axes meet (corner / crossing).
+    const axisX = data.connections.east || data.connections.west
+    const axisZ = data.connections.north || data.connections.south
+    view.marking.scale.set(
+      axisX ? ROAD_SPAN : ROAD_PAD,
+      ROAD_MARKING_HEIGHT,
+      axisZ ? ROAD_SPAN : ROAD_PAD
+    )
+    // Under construction: slab only, no marking (status is authoritative).
+    view.marking.visible = operational
+  }
+  return {
+    views,
+    ops: {
+      create: (data) => {
+        const material = new MeshStandardMaterial({
+          color: ROAD_CONSTRUCTION_COLOR,
+        })
+        const mesh = new Mesh(roadGeometry, material)
+        const position = simulationCellToWorldPosition(data, grid)
+        mesh.position.set(position.x, 0.01, position.z)
+        mesh.userData['entityId'] = data.id
+        const markingMaterial = new MeshStandardMaterial({
+          color: ROAD_MARKING_COLOR,
+        })
+        const marking = new Mesh(roadMarkingGeometry, markingMaterial)
+        marking.visible = false
+        mesh.add(marking)
+        const view = { mesh, material, marking, markingMaterial }
+        // Same contract as buildings/colonists: reflect snapshot data now,
+        // because reconcile() calls create() without a follow-up update().
+        apply(view, data)
+        return view
+      },
+      update: apply,
+      remove: (view) => {
+        view.marking.removeFromParent()
+        view.markingMaterial.dispose()
         view.mesh.removeFromParent()
         view.material.dispose()
       },

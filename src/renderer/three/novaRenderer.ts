@@ -22,7 +22,7 @@ import {
 import type { RenderSnapshot } from '../../application/queries/renderSnapshot.js'
 import type { GridDimensions } from './coordinates.js'
 import { isInGrid, simulationCellToWorldPosition, worldPositionToSimulationCell } from './coordinates.js'
-import { buildingOps, colonistOps } from './entityViews.js'
+import { buildingOps, colonistOps, roadOps } from './entityViews.js'
 import type { NovaScene } from './scene.js'
 import { reconcile } from './reconcile.js'
 
@@ -40,6 +40,15 @@ export interface NovaRenderer {
     cell: { readonly x: number; readonly y: number } | null,
     valid: boolean
   ) => void
+  /**
+   * Show a multi-cell road preview (Step 09H): one indicator per cell of the
+   * candidate road set, all sharing the caller's authoritative validity.
+   * An empty list hides the preview. Purely presentational.
+   */
+  showRoadPreview: (
+    cells: readonly { readonly x: number; readonly y: number }[],
+    valid: boolean
+  ) => void
   resize: (width: number, height: number) => void
   dispose: () => void
 }
@@ -51,11 +60,14 @@ export const createNovaRenderer = (
   const { scene, camera, renderer, ground } = novaScene
 
   const buildingGroup = new Group()
+  const roadGroup = new Group()
   const colonistGroup = new Group()
   scene.add(buildingGroup)
+  scene.add(roadGroup)
   scene.add(colonistGroup)
 
   const buildings = buildingOps(grid)
+  const roads = roadOps(grid)
   const colonists = colonistOps(grid)
 
   const indicatorMaterial = new MeshStandardMaterial({
@@ -68,6 +80,14 @@ export const createNovaRenderer = (
   indicator.visible = false
   scene.add(indicator)
 
+  // Road preview pool (Step 09H): grown on demand, hidden when unused. One
+  // shared material so a single call colors the whole candidate set.
+  const roadPreviewMaterial = new MeshStandardMaterial({
+    transparent: true,
+    opacity: 0.45,
+  })
+  const roadPreviewPool: Mesh[] = []
+
   const render = (snapshot: RenderSnapshot): void => {
     // Keyed reconciliation: stable identity per entity id, no scene rebuild.
     reconcile(buildings.views, snapshot.buildings, (b) => b.id, {
@@ -78,6 +98,15 @@ export const createNovaRenderer = (
       },
       update: buildings.ops.update,
       remove: buildings.ops.remove,
+    })
+    reconcile(roads.views, snapshot.roads, (r) => r.id, {
+      create: (data) => {
+        const view = roads.ops.create(data)
+        roadGroup.add(view.mesh)
+        return view
+      },
+      update: roads.ops.update,
+      remove: roads.ops.remove,
     })
     reconcile(colonists.views, snapshot.colonists, (c) => c.id, {
       create: (data) => {
@@ -143,15 +172,48 @@ export const createNovaRenderer = (
     indicator.visible = true
   }
 
+  const showRoadPreview = (
+    cells: readonly { readonly x: number; readonly y: number }[],
+    valid: boolean
+  ): void => {
+    for (let index = 0; index < cells.length; index += 1) {
+      const cell = cells[index]
+      if (cell === undefined) {
+        continue
+      }
+      let mesh = roadPreviewPool[index]
+      if (mesh === undefined) {
+        mesh = new Mesh(indicatorGeometry, roadPreviewMaterial)
+        mesh.visible = false
+        roadPreviewPool[index] = mesh
+        scene.add(mesh)
+      }
+      const position = simulationCellToWorldPosition(cell, grid)
+      mesh.position.set(position.x, 0.02, position.z)
+      mesh.visible = true
+    }
+    for (let index = cells.length; index < roadPreviewPool.length; index += 1) {
+      const mesh = roadPreviewPool[index]
+      if (mesh !== undefined) {
+        mesh.visible = false
+      }
+    }
+    roadPreviewMaterial.color.setHex(
+      valid ? PLACEMENT_VALID_COLOR : PLACEMENT_INVALID_COLOR
+    )
+  }
+
   return {
     render,
     pickCell,
     cellToScreen,
     showPlacementIndicator,
+    showRoadPreview,
     resize: novaScene.resize,
     dispose: () => {
       indicatorMaterial.dispose()
       indicatorGeometry.dispose()
+      roadPreviewMaterial.dispose()
       novaScene.dispose()
     },
   }
