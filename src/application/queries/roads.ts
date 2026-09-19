@@ -1,12 +1,19 @@
 /**
- * Road queries (Step 09C Phase I). Pure derivations over canonical state.
+ * Road queries (Step 09C Phase I + Step 09D). Pure derivations over
+ * canonical state.
  *
- * Only what the application/UI/tests need: counts, lookup, occupancy.
- * No derived transport-network semantics here — no reachable roads, no
- * routes, no accessibility, no traffic. Those belong to later steps.
+ * Counts, lookup, occupancy, and derived road network connectivity.
+ * Network state is derived only, never persisted. See Step 09D.
  */
 
-import { getRoadIdAtCell, isOperationalRoad, iterateRoads } from '../../domain/road/road.js'
+import {
+  getConnectedRoadIds as domainGetConnectedRoadIds,
+  getRoadIdAtCell,
+  getRoadNetworkCount as domainGetRoadNetworkCount,
+  getRoadNetworks as domainGetRoadNetworks,
+  isOperationalRoad,
+  iterateRoads,
+} from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 /** Total roads in canonical state, any status. */
@@ -39,3 +46,32 @@ export const isRoadAt = (
   state: SimulationState,
   cell: { readonly x: number; readonly y: number }
 ): boolean => getRoadIdAtCell(state, cell) !== null
+
+/**
+ * Road network queries (Step 09D). Pure derivations over canonical state.
+ * Network state is derived only — never persisted, never hashed.
+ */
+
+/**
+ * Number of disconnected road networks in canonical state.
+ * Operational roads only; under-construction roads excluded.
+ */
+export const getRoadNetworkCount = (state: SimulationState): number =>
+  domainGetRoadNetworkCount(state)
+
+/**
+ * All road networks as an array of arrays of road IDs in ascending-id order.
+ * Networks ordered by their lowest road ID. Empty when no operational roads.
+ */
+export const getRoadNetworks = (
+  state: SimulationState
+): readonly (readonly string[])[] => domainGetRoadNetworks(state)
+
+/**
+ * Road IDs in the same connected component as roadId, in ascending-id order.
+ * Empty when roadId is unknown or under-construction.
+ */
+export const getConnectedRoadIds = (
+  state: SimulationState,
+  roadId: string
+): readonly string[] => domainGetConnectedRoadIds(state, roadId)

@@ -82,6 +82,15 @@ export const getRoadIdAtCell = (
 }
 
 /**
+ * Orthogonal grid adjacency for two road cells (Step 09D).
+ * Manhattan distance exactly 1. Diagonal adjacency is NOT connected.
+ */
+export const areRoadsAdjacent = (
+  a: { readonly x: number; readonly y: number },
+  b: { readonly x: number; readonly y: number }
+): boolean => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1
+
+/**
  * Normalize a requested cell list into deterministic order: deduplicate by
  * cellKey, then sort by (x, y). Road IDs are allocated in this order, so the
  * authoritative result never depends on drag direction or input order.
@@ -139,3 +148,87 @@ export const expandRoadDrag = (
   }
   return null
 }
+
+/**
+ * Road network connectivity (Step 09D). A road network is a connected
+ * component of operational road cells using orthogonal adjacency only.
+ * Under-construction roads are excluded from the network.
+ */
+
+/**
+ * Returns all road IDs in the same connected component as roadId, in
+ * deterministic ascending-id order. Returns an empty array if roadId is
+ * unknown or under-construction.
+ */
+export const getConnectedRoadIds = (
+  state: SimulationState,
+  roadId: string
+): readonly string[] => {
+  const road = state.roads[roadId]
+  if (road === undefined || !isOperationalRoad(road)) {
+    return []
+  }
+
+  // Multi-source BFS over operational roads only. Neighbors are discovered
+  // in ascending road-id order, so results never depend on record insertion.
+  const visited = new Set<string>([roadId])
+  const queue = [roadId]
+  const operational = [...iterateRoads(state)].filter(isOperationalRoad)
+  const byId = new Map<string, RoadState>(
+    operational.map((roadState) => [roadState.id, roadState])
+  )
+
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const currentId = queue[cursor]!
+    const current = byId.get(currentId)
+    if (current === undefined) {
+      continue
+    }
+    for (const candidate of operational) {
+      if (!visited.has(candidate.id) && areRoadsAdjacent(current, candidate)) {
+        visited.add(candidate.id)
+        queue.push(candidate.id)
+      }
+    }
+  }
+
+  return [...visited].sort()
+}
+
+/**
+ * Returns all road networks as an array of networks, where each network is an
+ * array of road IDs in ascending-id order. Networks are ordered by their
+ * lowest road ID. Returns an empty array when no operational roads exist.
+ */
+export const getRoadNetworks = (
+  state: SimulationState
+): readonly (readonly string[])[] => {
+  const allOperational = [...iterateRoads(state)].filter(isOperationalRoad)
+  const remaining = new Set(allOperational.map((road) => road.id))
+  const networks: string[][] = []
+
+  for (const road of allOperational) {
+    if (!remaining.has(road.id)) {
+      continue
+    }
+    const connected = getConnectedRoadIds(state, road.id)
+    for (const id of connected) {
+      remaining.delete(id)
+    }
+    networks.push([...connected])
+  }
+
+  return networks.sort((a: string[], b: string[]) => {
+    if (a[0] === undefined || b[0] === undefined) {
+      return 0
+    }
+    return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0
+  })
+}
+
+/**
+ * Number of disconnected road networks in canonical state.
+ */
+export const getRoadNetworkCount = (state: SimulationState): number =>
+  getRoadNetworks(state).length
+
