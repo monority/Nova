@@ -7,7 +7,6 @@
 import {
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
-  MATERIAL_PER_WORKER_PER_TICK,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
   type ResourceStock,
 } from '../../domain/resource/resource.js'
@@ -15,6 +14,7 @@ import { countEmployedWorkers } from '../../domain/jobs/jobs.js'
 import {
   countOperationalFarms,
   countStaffedOperationalWorkshops,
+  materialProductionForTick,
   materialStorageCapacityForTick,
   materialStoredProductionForTick,
 } from '../../domain/simulation/phases.js'
@@ -89,13 +89,14 @@ export const getProductiveWorkerCount = (state: SimulationState): number =>
   countEmployedWorkers(state)
 
 /**
- * Deterministic construction-material output per tick (Step 07C §6): every
- * employed colonist produces 2 material directly into the shared stock.
- * Derived, never stored as a `labour` resource.
+ * Deterministic construction-material output per tick (Step 07C §6, gated by
+ * Step 09F): only staffed road-accessible operational Workshops produce —
+ * every other employed colonist's output is blocked. Derived, never stored
+ * as a `labour` resource. Single source of truth: the simulation phase.
  */
 export const getMaterialProductionPerTick = (
   state: SimulationState
-): number => countEmployedWorkers(state) * MATERIAL_PER_WORKER_PER_TICK
+): number => materialProductionForTick(state)
 
 /**
  * Deterministic upkeep due per tick (Step 08C): staffed operational

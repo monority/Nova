@@ -22,7 +22,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withRoadsForWorkshops } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -67,6 +67,7 @@ const singleWorkshop = (): SimulationState => {
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = withRoadsForWorkshops(state) // 09F: road for production
   state = stepSimulation(state) // t4: operational + staffed, stock 49
   return state
 }
@@ -81,8 +82,10 @@ const staffedLadder = (n: number): SimulationState => {
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3
+  state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: employed, stock 49
   state = stepSimulation(state, place('workshop', 1, 5)) // t5
+  state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: cap 50, stock 25
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 6, 6))
@@ -97,6 +100,7 @@ const staffedLadder = (n: number): SimulationState => {
     if (i >= 2) {
       state = untilAffordable(state)
       state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = withRoadsForWorkshops(state) // 09F: road for the new workshop
       state = stepSimulation(state)
     }
   }

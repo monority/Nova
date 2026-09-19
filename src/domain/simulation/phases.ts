@@ -43,9 +43,10 @@ import {
   iterateBuildings,
   iterateColonists,
 } from '../housing/housing.js'
-import { countEmployedWorkers, countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
+import { countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
 import type { ColonistState } from '../population/colonist.js'
 import {
+  getBuildingRoadAccess,
   isOperationalRoad,
   isRoadOccupied,
   normalizeRoadCells,
@@ -607,13 +608,29 @@ export const assignJobs = (state: SimulationState): SimulationState => {
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic material output for this tick: employed colonists × 2.
- * Direct production into the existing construction stock — no stored labour,
- * no recipe, no efficiency, no cap. Workers with zero or non-operational
- * Workshops produce nothing (no hidden autonomous production, §7).
+ * Deterministic material output for this tick (Step 09F): each operational,
+ * staffed Workshop with road access contributes its workers × rate. Workers
+ * with zero or non-operational Workshops produce nothing (no hidden
+ * autonomous production, §7); Workshops without road access are staffed but
+ * unproductive (Step 09F: production eligibility, not existence).
+ *
+ * Road access (Step 09E getBuildingRoadAccess) is the single source of truth;
+ * the rate and storage coefficients are unchanged.
  */
-export const materialProductionForTick = (state: SimulationState): number =>
-  countEmployedWorkers(state) * MATERIAL_PER_WORKER_PER_TICK
+export const materialProductionForTick = (state: SimulationState): number => {
+  let total = 0
+  for (const building of iterateBuildings(state)) {
+    if (!isOperationalWorkshop(building)) {
+      continue
+    }
+    const workers = countWorkersAt(state, building.id)
+    if (workers === 0 || !getBuildingRoadAccess(state, building.id).hasRoadAccess) {
+      continue
+    }
+    total += workers * MATERIAL_PER_WORKER_PER_TICK
+  }
+  return total
+}
 
 /**
  * Operational Workshops, staffed or vacant (Step 08F §7). Storage capacity

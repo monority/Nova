@@ -25,7 +25,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withRoadsForWorkshops } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -70,11 +70,13 @@ const colony = (n: number): SimulationState => {
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3: stock 50
+  state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: colonist-1 employed, stock 49
   if (n === 0) {
     return state
   }
   state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
+  state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: second operational, cap 50, stock 25
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 6, 6))
@@ -89,6 +91,7 @@ const colony = (n: number): SimulationState => {
     if (i >= 2) {
       state = untilAffordable(state)
       state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = withRoadsForWorkshops(state) // 09F: road for the new workshop
       state = stepSimulation(state)
     }
   }
@@ -101,6 +104,7 @@ const workshopOnlyState = (): SimulationState => {
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = withRoadsForWorkshops(state) // 09F: road for production
   state = stepSimulation(state) // t4: operational, employed
   return state
 }
@@ -149,7 +153,7 @@ const matrixFixture = (workers: number, staffed: number): SimulationState => {
       staffed === 0 ? null : `building-${(c % staffed) + 1}`
     colonists[id] = { id, residenceId: 'building-99', workplaceId }
   }
-  return {
+  return withRoadsForWorkshops({
     ...base,
     resources: { ...base.resources, construction: 100, food: 100 },
     buildings,
@@ -159,7 +163,7 @@ const matrixFixture = (workers: number, staffed: number): SimulationState => {
       nextColonistId: workers + 1,
       nextRoadId: 1,
     },
-  }
+  })
 }
 
 describe('economic invariants (Step 08D)', () => {

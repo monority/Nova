@@ -17,7 +17,7 @@ import {
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
   SAVE_VERSION,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withRoadsForWorkshops } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -44,6 +44,7 @@ const workshopState = (): SimulationState => {
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = withRoadsForWorkshops(state) // 09F: road for production
   state = stepSimulation(state) // t4: operational, employed
   return state
 }
@@ -81,8 +82,10 @@ const staffedState = (n: number): SimulationState => {
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3
+  state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: colonist-1 employed, stock 49
   state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
+  state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: second operational, stock 25
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 6, 6))
@@ -98,6 +101,7 @@ const staffedState = (n: number): SimulationState => {
       // Base already provides two Workshops; further pairs need one more.
       state = untilAffordable(state)
       state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = withRoadsForWorkshops(state) // 09F: road for the new workshop
       state = stepSimulation(state)
     }
   }

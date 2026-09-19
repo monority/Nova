@@ -21,7 +21,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withRoadsForWorkshops } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -68,11 +68,13 @@ const capacityState = (residences: number, workshops: number): SimulationState =
   let built = 0
   if (workshops >= 1) {
     state = stepSimulation(state, place('workshop', 0, 5)) // stock 50
+    state = withRoadsForWorkshops(state) // 09F: road for WS1
     state = stepSimulation(state) // colonist-1 employed, stock 49
     built = 1
   }
   if (workshops >= 2) {
     state = stepSimulation(state, place('workshop', 1, 5)) // stock 24
+    state = withRoadsForWorkshops(state) // 09F: road for WS2
     state = stepSimulation(state) // second operational, cap 50, stock 25
     built = 2
   }
@@ -90,6 +92,7 @@ const capacityState = (residences: number, workshops: number): SimulationState =
   for (let k = built; k < workshops; k++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('workshop', k + 2, 5))
+    state = withRoadsForWorkshops(state) // 09F: road for the new workshop
     state = stepSimulation(state)
   }
   return state

@@ -169,21 +169,25 @@ async function main() {
 
     // D. Disconnected Workshop far away -> operational but still inaccessible.
     // Placed third (stock 50 -> 25): the fourth placement needs pre-tick
-    // stock >= 25 for a 'ready' preview, and a staffed Workshop equilibrates
-    // below 25 (Step 08F), so the disconnected building goes before the
-    // connected one.
+    // stock >= 25 for a 'ready' preview. Step 09F nuance: a roadless staffed
+    // Workshop produces NO Material and no road UI exists in the browser, so
+    // the stock is 25 right after this click and drains by 1 upkeep per tick.
+    // The connected Workshop must therefore be placed immediately below,
+    // before the first upkeep tick, instead of after chasing an equilibrium.
     await selectPalette(page, 'build-workshop', 'Workshop selected');
     await placeAt(page, { x: 0, y: 0 });
-    s = await stepUntil(page, (v) => v.operational === '3', 'disconnected operational', 10);
+    s = await stats(page);
     if (s.accessibleBuildings !== '2') {
       fail(`D disconnected must stay inaccessible: ${JSON.stringify(s)}`);
-    } else ok(`D disconnected workshop inaccessible: accessible ${s.accessibleBuildings}, operational ${s.operational}`);
+    } else ok(`D disconnected workshop placed, accessible ${s.accessibleBuildings}`);
 
     // E. Workshop adjacent to the Farm (multi-hop R-F-W) -> accessible 3.
-    // The staffed disconnected Workshop equilibrates the stock at 24 (Step
-    // 08F), so the click goes through the Step 08G same-tick gate: rest 24 +
-    // stored 1 covers the 25 cost mid-tick.
-    await placeThroughShortfall(page, { x: 4, y: 6 });
+    // Placed from the remaining stock 25 (Step 09F: no roadless production).
+    await placeAt(page, { x: 4, y: 6 });
+    s = await stepUntil(page, (v) => v.operational === '4', 'workshops operational', 10);
+    if (s.accessibleBuildings !== '3') {
+      fail(`D disconnected must stay inaccessible after E: ${JSON.stringify(s)}`);
+    } else ok(`D disconnected workshop inaccessible (accessible ${s.accessibleBuildings} of 4 operational)`);
     s = await stepUntil(page, (v) => v.accessibleBuildings === '3', 'workshop accessible', 10);
     s = await stats(page);
     if (s.operational !== '4' || s.accessibleBuildings !== '3') {

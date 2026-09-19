@@ -33,7 +33,7 @@ import {
   toRenderSnapshot,
   WORKSHOP_JOB_CAPACITY,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withRoadsForWorkshops } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -89,6 +89,7 @@ const workshopState = (): SimulationState => {
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: residence operational, colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = withRoadsForWorkshops(state) // 09F: road for production
   state = stepSimulation(state) // t4: workshop operational, employed, net +1
   return state
 }
@@ -107,8 +108,10 @@ const twoColonistState = (): SimulationState => {
 const twoWorkshopState = (): SimulationState => {
   let state = colonistState() // t2
   state = stepSimulation(state, place('workshop', 6, 6)) // t3: building-2
+  state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: building-2 operational, colonist-1 employed
   state = stepSimulation(state, place('workshop', 7, 7)) // t5: building-3
+  state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: building-3 operational
   return state
 }
@@ -373,7 +376,9 @@ describe('construction material production (Step 07C §6-§8)', () => {
   it('a newly admitted colonist is employed and produces the same tick', () => {
     let state = colonistState() // t2: colonist-1
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = withRoadsForWorkshops(state) // 09F: road for production
     state = stepSimulation(state, place('workshop', 6, 6)) // t4: W2 op, net +1
+    state = withRoadsForWorkshops(state) // 09F: road for W2
     state = stepSimulation(state) // t5: W3 op, net +1
     state = stepSimulation(state, place('residence', 7, 7)) // t6
     const beforeAdmission = getResourceStock(state).construction
