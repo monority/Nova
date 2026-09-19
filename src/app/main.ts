@@ -33,6 +33,7 @@ import {
   getProductiveWorkerCount,
   getNetMaterialPerTick,
   getBuildingRoadAccess,
+  getColonistWorkMobility,
   getRoadNetworkCount,
   getResourceStock,
   INITIAL_CONSTRUCTION_MATERIAL,
@@ -562,7 +563,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -672,6 +673,14 @@ window.__nova = {
             building.status === 'operational' &&
             countWorkersAt(state, building.id) > 0 &&
             !getBuildingRoadAccess(state, building.id).hasRoadAccess
+        ).length
+      ),
+      // Step 09G: derived residence -> network -> workplace relationship.
+      // Diagnostic only — no gameplay consequence, never persisted.
+      mobilityConnectedColonists: String(
+        Object.values(state.colonists).filter(
+          (colonist) =>
+            getColonistWorkMobility(state, colonist.id).mobilityConnected
         ).length
       ),
       status: ui.status?.textContent ?? '',
