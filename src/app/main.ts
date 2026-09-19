@@ -32,6 +32,7 @@ import {
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getNetMaterialPerTick,
+  getBuildingRoadAccess,
   getRoadNetworkCount,
   getResourceStock,
   INITIAL_CONSTRUCTION_MATERIAL,
@@ -561,7 +562,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -657,6 +658,13 @@ window.__nova = {
       storedProduction: String(getMaterialStoredProductionPerTick(state)),
       accessibleBuildings: String(getAccessibleBuildingCount(state)),
       roadNetworks: String(getRoadNetworkCount(state)),
+      buildingsWithRoadAccess: String(
+        Object.values(state.buildings).filter(
+          (building) =>
+            building.status === 'operational' &&
+            getBuildingRoadAccess(state, building.id).hasRoadAccess
+        ).length
+      ),
       status: ui.status?.textContent ?? '',
     }
   },

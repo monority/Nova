@@ -7,12 +7,14 @@
  */
 
 import {
+  getBuildingRoadAccess as domainGetBuildingRoadAccess,
   getConnectedRoadIds as domainGetConnectedRoadIds,
   getRoadIdAtCell,
   getRoadNetworkCount as domainGetRoadNetworkCount,
   getRoadNetworks as domainGetRoadNetworks,
   isOperationalRoad,
   iterateRoads,
+  type BuildingRoadAccess,
 } from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
@@ -75,3 +77,12 @@ export const getConnectedRoadIds = (
   state: SimulationState,
   roadId: string
 ): readonly string[] => domainGetConnectedRoadIds(state, roadId)
+
+/**
+ * Building road access (Step 09E). Pure derivation over canonical state:
+ * adjacent operational roads + 09D network membership. Never persisted.
+ */
+export const getBuildingRoadAccess = (
+  state: SimulationState,
+  buildingId: string
+): BuildingRoadAccess => domainGetBuildingRoadAccess(state, buildingId)

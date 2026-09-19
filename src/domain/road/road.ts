@@ -232,3 +232,74 @@ export const getRoadNetworks = (
 export const getRoadNetworkCount = (state: SimulationState): number =>
   getRoadNetworks(state).length
 
+/**
+ * Building road access (Step 09E). A building has road access when at least
+ * one orthogonally adjacent cell contains an OPERATIONAL road, and the
+ * building itself is operational. Access is a local spatial relation; the
+ * reachable road networks are then derived from 09D connectivity (the
+ * building never bridges two networks — it is not a road).
+ *
+ * Derived state only: nothing here is persisted or hashed.
+ */
+
+export interface BuildingRoadAccess {
+  readonly buildingId: string
+  /** Operational adjacent roads giving access, ascending id order. */
+  readonly roadIds: readonly string[]
+  /**
+   * Road networks reachable through those roads (09D), identified by their
+   * lowest road id (the getRoadNetworks component ordering convention),
+   * deduplicated and sorted ascending. One network may be reached via
+   * several roads; two distinct networks are never merged.
+   */
+  readonly networkIds: readonly string[]
+  readonly hasRoadAccess: boolean
+}
+
+/**
+ * Road access of one building. Pure and deterministic: same state, same
+ * result, independent of record insertion order (iterateRoads and
+ * getRoadNetworks are both ascending-id deterministic).
+ *
+ * Unknown building, under-construction building, or building with no
+ * adjacent operational road: hasRoadAccess false, empty road/network lists.
+ */
+export const getBuildingRoadAccess = (
+  state: SimulationState,
+  buildingId: string
+): BuildingRoadAccess => {
+  const building = state.buildings[buildingId]
+  if (building === undefined || building.status !== 'operational') {
+    return { buildingId, roadIds: [], networkIds: [], hasRoadAccess: false }
+  }
+  const cell = { x: building.x, y: building.y }
+  // iterateRoads yields ascending id order, so access roads are sorted by
+  // construction; no secondary sort needed.
+  const roadIds = [...iterateRoads(state)]
+    .filter((road) => isOperationalRoad(road) && areRoadsAdjacent(cell, road))
+    .map((road) => road.id)
+  if (roadIds.length === 0) {
+    return { buildingId, roadIds: [], networkIds: [], hasRoadAccess: false }
+  }
+  // Reuse 09D connectivity (no second graph): map each access road to its
+  // network, identified by the network's lowest road id.
+  const networkIdByRoad = new Map<string, string>()
+  for (const network of getRoadNetworks(state)) {
+    const networkId = network[0]
+    if (networkId === undefined) {
+      continue
+    }
+    for (const roadId of network) {
+      networkIdByRoad.set(roadId, networkId)
+    }
+  }
+  const networkIds = [
+    ...new Set(
+      roadIds
+        .map((roadId) => networkIdByRoad.get(roadId))
+        .filter((networkId): networkId is string => networkId !== undefined)
+    ),
+  ].sort()
+  return { buildingId, roadIds, networkIds, hasRoadAccess: true }
+}
+
