@@ -1,28 +1,35 @@
 /**
- * Food Security Pressure Audit (Step 10C).
+ * Food Security Pressure Audit — re-baselined for Step 10E.
  *
- * AUDIT ONLY — no production rule is changed. This suite encodes the mandatory
- * experiments of docs/roadmap/Step10C.md as deterministic measurements:
+ * Originally authored for Step 10C, when an operational Farm produced 2 Food
+ * per tick UNCONDITIONALLY. Step 10E made Food production WORKER-GATED: a
+ * Farm yields Food only while an operational colonist is employed there. The
+ * experiments below are therefore re-baselined, and the findings that the
+ * 10C pass recorded are superseded where the rule changed:
  *
- *   §3  baseline bootstrap trajectory
- *   §4  A no-farm · B/C farm count · D farm timing · E residence growth · F surplus
- *   §5  G farm placement · H residence/farm geometry · I road topology
- *   §6  Material competition (housing vs food security vs industry)
+ *   SUPERSEDED (10C): "farms produce without population", "capacity is
+ *     unbounded boom-bust because farms run while pop is 0", "roads never
+ *     matter for food".
+ *   CURRENT (10E): production requires a staffed, road-reachable Farm; a
+ *     Farm with no eligible worker produces 0; roads matter only through
+ *     employment mobility (09K), never as a food-specific rule.
  *
- * Measured dynamics (confirmed by this audit, unchanged rules):
+ * Sections kept for cross-reference with docs/roadmap/Step10C.md:
+ *   §3 baseline bootstrap · §4 A/B/C/D/E/F · §5 G/H/I · §6 competition
+ *
+ * Invariants used throughout:
  *   - a building placed on tick T becomes operational on tick T+1;
- *   - admission fills EVERY free operational residence while food > 0, after
- *     consumption; a colonist admitted on tick T eats from tick T+1;
- *   - famine (fed=false) removes the ENTIRE colony on the same tick;
- *   - a placement costing more than the Material stock is silently rejected.
- *
- * The tests are EVIDENCE, not new gameplay rules. Food behavior comes from the
- * unchanged Step 10A chain (need = pop × 1, farm = 2/tick, food ≥ 0, no cap).
+ *   - admission fills every free operational residence while food > 0;
+ *   - famine (fed = false) removes the entire colony on the same tick;
+ *   - produceFood (phase 4) runs before assignJobs (phase 7), so a Farm
+ *     staffed on tick N produces from tick N+1.
  */
 
 import { describe, expect, it } from 'vitest'
 
 import {
+  assignJobs,
+  countStaffedOperationalFarms,
   createBuilding,
   createColonist,
   createRoads,
@@ -30,6 +37,7 @@ import {
   getPopulationCount,
   hashCanonicalState,
   INITIAL_FOOD,
+  materialProductionForTick,
   materialUpkeepDueForTick,
   serializeCanonicalState,
   stepSimulation,
@@ -72,27 +80,16 @@ const snapshot = (state: SimulationState): Snapshot => ({
   workshops: countType(state, 'workshop'),
 })
 
-/** Run `ticks` steps; a script entry (0-based step index) places a building. */
+/** Run `ticks` steps; a script entry (0-based step index) issues one command. */
 const runScript = (
   state: SimulationState,
   ticks: number,
-  script: Readonly<
-    Record<number, { x: number; y: number; buildingType: BuildingType }>
-  >
+  script: Readonly<Record<number, SimulationCommand>>
 ): readonly Snapshot[] => {
   let next = state
   const history: Snapshot[] = []
   for (let t = 0; t < ticks; t += 1) {
-    const entry = script[t]
-    const command: SimulationCommand | undefined = entry
-      ? {
-          type: 'placeBuilding',
-          x: entry.x,
-          y: entry.y,
-          buildingType: entry.buildingType,
-        }
-      : undefined
-    next = stepSimulation(next, command)
+    next = stepSimulation(next, script[t])
     history.push(snapshot(next))
   }
   return history
@@ -134,46 +131,7 @@ const withColonist = (
   return { id: created.colonistId, state: created.state }
 }
 
-/** Operationalize the one under-construction farm of the given state (audit shortcut). */
-const operationalizePendingFarm = (
-  state: SimulationState
-): SimulationState => {
-  const pendingId = Object.keys(state.buildings).find((id) => {
-    const building = state.buildings[id]
-    return building?.type === 'farm' && building.status !== 'operational'
-  })
-  if (pendingId === undefined) {
-    throw new Error('audit helper: no pending farm')
-  }
-  const building = state.buildings[pendingId]!
-  return {
-    ...state,
-    buildings: {
-      ...state.buildings,
-      [pendingId]: {
-        ...building,
-        status: 'operational',
-        constructionRemaining: 0,
-      },
-    },
-  }
-}
-
-/** Place a farm through the real command path, then operationalize it. */
-const placeFarm = (state: SimulationState, x: number, y: number): SimulationState =>
-  operationalizePendingFarm(
-    stepSimulation(state, {
-      type: 'placeBuilding',
-      x,
-      y,
-      buildingType: 'farm',
-    })
-  )
-
-const roadAt = (
-  state: SimulationState,
-  cell: CellCoordinate
-): SimulationState => {
+const roadAt = (state: SimulationState, cell: CellCoordinate): SimulationState => {
   const created = createRoads(state, [cell])
   const id = created.roadIds[0]
   if (id === undefined) {
@@ -192,6 +150,17 @@ const roadAt = (
   }
 }
 
+const roadRow = (
+  state: SimulationState,
+  cells: readonly CellCoordinate[]
+): SimulationState => cells.reduce((s, cell) => roadAt(s, cell), state)
+
+const place = (
+  x: number,
+  y: number,
+  buildingType: BuildingType
+): SimulationCommand => ({ type: 'placeBuilding', x, y, buildingType })
+
 const firstTickWith = (
   history: readonly Snapshot[],
   predicate: (s: Snapshot) => boolean
@@ -200,52 +169,100 @@ const firstTickWith = (
   return found ? found.tick : null
 }
 
+/**
+ * Step 10E fixture: `farms` operational Farms (row y = 2) each staffed by a
+ * dedicated colonist from its own residence (row y = 0), `idle` further
+ * colonists with no workplace, and one shared road row (y = 1) that touches
+ * every building. All pairs are mobility-connected, so assignment is decided
+ * by 09M (distance, then id) and every farm can be staffed.
+ *
+ * Production: 2 × farms. Consumption: (farms + idle) × 1.
+ */
+const staffedColony = (farms: number, idle = 0): SimulationState => {
+  let state = createTestState()
+  const total = farms + idle
+  for (let i = 0; i < total; i += 1) {
+    const r = manualOperational(state, 'residence', 1 + i * 2, 0)
+    state = r.state
+  }
+  for (let i = 0; i < farms; i += 1) {
+    const f = manualOperational(state, 'farm', 1 + i * 2, 2)
+    state = f.state
+  }
+  const cells: CellCoordinate[] = []
+  for (let i = 0; i < 2 * total + 3; i += 1) {
+    cells.push({ x: i, y: 1 })
+  }
+  state = roadRow(state, cells)
+  for (const b of Object.values(state.buildings)) {
+    if (b.type === 'residence') {
+      state = withColonist(state, b.id).state
+    }
+  }
+  return assignJobs(state)
+}
+
 // ---------------------------------------------------------------------------
 // §3 — Baseline bootstrap
 // ---------------------------------------------------------------------------
 
 describe('§3 — baseline bootstrap trajectory', () => {
-  it('residence first, farm next: first colonist at tick 2, food-positive from tick 3', () => {
+  it('10E: a farm with no road is never staffed — food decays like no farm at all', () => {
     const history = runScript(createTestState(), 8, {
-      0: { x: 1, y: 1, buildingType: 'residence' },
-      1: { x: 5, y: 5, buildingType: 'farm' },
+      0: place(1, 1, 'residence'),
+      1: place(5, 5, 'farm'),
     })
-    // Diagnostic table for docs/roadmap/Step10C.md (t = canonical tick).
-    console.log(
-      'BOOTSTRAP ' +
-        JSON.stringify(
-          history.map((s) => ({
-            t: s.tick,
-            pop: s.population,
-            food: s.food,
-            need: s.foodNeed,
-            prod: s.foodProduced,
-            mat: s.material,
-            farms: s.farms,
-            res: s.residences,
-          }))
-        )
-    )
-    // Residence placed tick 1 -> operational tick 2 -> colonist admitted tick 2.
+    // Residence tick 1 -> operational tick 2 -> colonist admitted tick 2.
     expect(firstTickWith(history, (s) => s.population === 1)).toBe(2)
-    // Farm placed tick 2 -> operational tick 3: production from tick 3.
-    expect(history[1]!.foodProduced).toBe(0)
-    expect(history[2]!.food).toBe(INITIAL_FOOD - 1 + 2) // eat 1, produce 2
-    expect(history[0]!.material).toBe(INITIAL_FOOD - 25)
-    expect(history[1]!.material).toBe(INITIAL_FOOD - 50)
-    // Food-positive and growing afterwards.
-    expect(history[7]!.food).toBeGreaterThan(history[2]!.food)
+    // The farm is operational from tick 3 but unreachable: no worker, no food.
+    expect(history.every((s) => s.foodProduced === 0)).toBe(true)
+    // Food therefore decays one per tick: same profile as having no farm.
+    const withoutFarm = runScript(createTestState(), 8, {
+      0: place(1, 1, 'residence'),
+    })
+    expect(history.map((s) => s.food)).toEqual(withoutFarm.map((s) => s.food))
   })
 
-  it('stable food-positive state is reachable: 1 residence + 1 farm never famines', () => {
-    const history = runScript(createTestState(), 40, {
-      0: { x: 1, y: 1, buildingType: 'residence' },
-      1: { x: 5, y: 5, buildingType: 'farm' },
+  it('10E: residence + road + farm — the colonist staffs the farm, +1 food/tick', () => {
+    // t1 residence(1,1) · t2 road cells (1,2)+(2,2) · t3 farm(2,1).
+    let state = createTestState()
+    state = stepSimulation(state, place(1, 1, 'residence'))
+    state = stepSimulation(state, {
+      type: 'placeRoads',
+      cells: [
+        { x: 1, y: 2 },
+        { x: 2, y: 2 },
+      ],
     })
+    state = stepSimulation(state, place(2, 1, 'farm'))
+    const history: Snapshot[] = []
+    for (let t = 0; t < 10; t += 1) {
+      state = stepSimulation(state)
+      history.push(snapshot(state))
+    }
+    // Farm operational tick 4 and road-connected -> assigned -> producing.
+    expect(history[0]!.tick).toBe(4)
+    expect(history[0]!.foodProduced).toBe(2)
+    expect(history[0]!.food).toBe(98)
+    // Bounded growth: +2 produced, -1 eaten.
+    expect(history[9]!.food).toBe(107)
+    expect(history[9]!.population).toBe(1)
+    // Material: bootstrap 100 - residence 25 - 2 roads 10 - farm 25 = 40.
+    expect(history[0]!.material).toBe(40)
+    expect(history[9]!.material).toBe(40)
+  })
+
+  it('stable food-positive state is reachable: 1 staffed residence + farm never famines', () => {
+    let state = staffedColony(1)
+    const history: Snapshot[] = []
+    for (let t = 0; t < 40; t += 1) {
+      state = stepSimulation(state)
+      history.push(snapshot(state))
+    }
     const last = history[history.length - 1]!
     expect(last.population).toBe(1)
-    // Consumption from tick 3 to tick 40 = 38 ticks, net +1/tick.
-    expect(last.food).toBe(INITIAL_FOOD + 38)
+    // 40 ticks of (+2 produce - 1 eat) from stock 100.
+    expect(last.food).toBe(INITIAL_FOOD + 40)
     expect(firstTickWith(history, (s) => s.food === 0)).toBeNull()
   })
 })
@@ -268,149 +285,138 @@ describe('§4A — no farm: pure stock decay into famine', () => {
     }
     expect(getPopulationCount(state)).toBe(0)
     expect(state.resources.food).toBe(0)
-    // 100 fed ticks (100 -> 0), then the 101st tick is a shortage tick.
     expect(ticks).toBe(INITIAL_FOOD + 1)
   })
 })
 
-describe('§4B/§4C — farm count: production is strictly linear', () => {
-  it('1/2/3 farms: production 2/4/6; net vs pop 1 is +1/+3/+5', () => {
-    for (const [farms, net] of [
-      [1, 1],
-      [2, 3],
-      [3, 5],
-    ] as const) {
-      let state = createTestState()
-      const residence = manualOperational(state, 'residence', 1, 1)
-      state = residence.state
-      const colonist = withColonist(state, residence.id)
-      state = colonist.state
-      for (let i = 0; i < farms; i += 1) {
-        state = placeFarm(state, 5 + i, 5)
-      }
+describe('§4B/§4C — production is linear in STAFFED farm count', () => {
+  it('1/2/3 staffed farms: production 2/4/6; each farmer nets +1 food/tick', () => {
+    for (const farms of [1, 2, 3]) {
+      const state = staffedColony(farms)
+      expect(getPopulationCount(state)).toBe(farms)
+      expect(countStaffedOperationalFarms(state)).toBe(farms)
       expect(foodProductionForTick(state)).toBe(farms * 2)
-      const before = state.resources.food
+      // Each farmer produces 2 and eats 1.
       const after = stepSimulation(state)
-      expect(after.resources.food).toBe(before + farms * 2 - 1)
-      expect(after.resources.food - before).toBe(net)
+      expect(after.resources.food).toBe(state.resources.food + farms)
     }
   })
 
-  it('sustainable population implied by 1 farm = 2; overshoot decays at (pop-2)/tick', () => {
-    const colony = (pop: number) => {
-      let state = createTestState()
-      const ids: string[] = []
-      for (let i = 0; i < pop; i += 1) {
-        const residence = manualOperational(state, 'residence', 1 + i * 2, 1)
-        state = residence.state
-        ids.push(residence.id)
-      }
-      for (const id of ids) {
-        const colonist = withColonist(state, id)
-        state = colonist.state
-      }
-      return placeFarm(state, 6, 6)
+  it('a farm with no worker contributes nothing: staffing, not count, decides', () => {
+    // Same three farms, but only one colonist exists to work them.
+    let state = createTestState()
+    const r = manualOperational(state, 'residence', 1, 0)
+    state = r.state
+    for (let i = 0; i < 3; i += 1) {
+      const f = manualOperational(state, 'farm', 1 + i * 2, 2)
+      state = f.state
     }
-    // Break-even: 2 colonists eat exactly the single farm's output.
-    const breakEven = colony(2)
+    state = roadRow(state, [
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 4, y: 1 },
+      { x: 5, y: 1 },
+      { x: 6, y: 1 },
+    ])
+    state = withColonist(state, r.id).state
+    state = assignJobs(state)
+    expect(countType(state, 'farm')).toBe(3)
+    expect(countStaffedOperationalFarms(state)).toBe(1)
+    expect(foodProductionForTick(state)).toBe(2)
+  })
+
+  it('sustainable population implied by 1 staffed farm = 2; overshoot decays at 1/tick', () => {
+    // Break-even: 1 farmer + 1 idle consumer eats exactly one farm's output.
+    const breakEven = staffedColony(1, 1)
+    expect(breakEven.resources.food).toBe(INITIAL_FOOD)
     const after2 = stepSimulation(breakEven)
     expect(after2.resources.food).toBe(breakEven.resources.food)
-    // Overshoot: 3 colonists on 1 farm decay by 1/tick.
-    const decay = colony(3)
+    // Overshoot: 1 farmer + 2 idle consumers on 1 farm decays by 1/tick.
+    const decay = staffedColony(1, 2)
     const after3 = stepSimulation(decay)
     expect(after3.resources.food).toBe(decay.resources.food - 1)
   })
 })
 
-describe('§4D — farm timing', () => {
-  it('a farm built 50 ticks late costs exactly 49 x 2 food of buffer; no famine either way', () => {
-    const early = runScript(createTestState(), 60, {
-      0: { x: 1, y: 1, buildingType: 'residence' },
-      1: { x: 5, y: 5, buildingType: 'farm' },
-    })
-    const late = runScript(createTestState(), 60, {
-      0: { x: 1, y: 1, buildingType: 'residence' },
-      50: { x: 5, y: 5, buildingType: 'farm' },
-    })
-    const earlyAt60 = early[59]!
-    const lateAt60 = late[60 - 1]!
-    expect(earlyAt60.population).toBe(1)
-    expect(lateAt60.population).toBe(1)
-    // Early farm produces from tick 3, late farm from tick 52: 49 ticks of 2.
-    expect(earlyAt60.food - lateAt60.food).toBe(49 * 2)
-    expect(earlyAt60.food).toBeGreaterThan(0)
-    expect(lateAt60.food).toBeGreaterThan(0)
+describe('§4D — farm timing is worker timing (Step 10E)', () => {
+  it('a staffed farm is worth exactly 2 food/tick: 20 ticks = +40 vs no farm', () => {
+    // No farm: 1 colonist, no production, decays -1/tick for 20 ticks.
+    let noFarm = createTestState()
+    const r = manualOperational(noFarm, 'residence', 1, 0)
+    noFarm = r.state
+    noFarm = withColonist(noFarm, r.id).state
+    for (let t = 0; t < 20; t += 1) {
+      noFarm = stepSimulation(noFarm)
+    }
+    expect(noFarm.resources.food).toBe(INITIAL_FOOD - 20)
+
+    // Staffed farm: same population, +2 produced -1 eaten per tick.
+    let withFarm = staffedColony(1)
+    for (let t = 0; t < 20; t += 1) {
+      withFarm = stepSimulation(withFarm)
+    }
+    expect(withFarm.resources.food).toBe(INITIAL_FOOD + 20)
+    expect(withFarm.resources.food - noFarm.resources.food).toBe(40)
+  })
+
+  it('a late farm cannot feed colonists who arrived before it was staffed', () => {
+    // Three colonists, one farm: the two idle ones drain the stock.
+    let state = staffedColony(1, 2)
+    expect(getPopulationCount(state)).toBe(3)
+    expect(foodProductionForTick(state)).toBe(2)
+    let ticks = 0
+    let famineTick: number | null = null
+    while (getPopulationCount(state) > 0 && ticks < 300) {
+      state = stepSimulation(state)
+      ticks += 1
+      if (getPopulationCount(state) === 0 && famineTick === null) {
+        famineTick = state.time.tick
+      }
+    }
+    expect(famineTick).not.toBeNull()
+    // 100 stock, net -1/tick -> shortage on the 101st tick.
+    expect(famineTick).toBe(INITIAL_FOOD + 1)
   })
 })
 
-describe('§4E — residence growth ahead of production (real command chain)', () => {
-  it('farm first + 3 residences: pop 3, decay -1/tick from the overshoot tick on', () => {
-    // Budget: farm (25) + 3 residences (75) = 100. Farm placed tick 1 so it is
-    // affordable; admissions then fill all residences (food > 0 throughout).
-    const history = runScript(createTestState(), 10, {
-      0: { x: 6, y: 6, buildingType: 'farm' },
-      1: { x: 1, y: 1, buildingType: 'residence' },
-      2: { x: 3, y: 1, buildingType: 'residence' },
-      3: { x: 5, y: 1, buildingType: 'residence' },
+describe('§4E — residence growth ahead of staffing', () => {
+  it('overshoot ends in famine: colonists outrun the farms that feed them', () => {
+    const history = runScript(createTestState(), 12, {
+      0: place(1, 1, 'residence'),
+      1: place(1, 2, 'farm'),
+      2: place(3, 1, 'residence'),
+      3: place(3, 2, 'farm'),
+      4: place(5, 1, 'residence'),
+      5: place(5, 2, 'farm'),
     })
-    // Admissions: residence-1 op tick 3 -> pop 1 @3; r2 op tick 4 -> pop 2;
-    // r3 op tick 5 -> pop 3.
-    expect(firstTickWith(history, (s) => s.population === 1)).toBe(3)
-    expect(firstTickWith(history, (s) => s.population === 3)).toBe(5)
-    // From tick 6 on: production 2, need 3 -> net -1/tick.
-    const t5 = history[4]!
-    const t9 = history[8]!
-    expect(t9.food).toBe(t5.food - 4)
-    // Material fully spent: silent rejection would show here if a 4th were built.
-    expect(history[3]!.material).toBe(0)
-  })
-
-  it('overshoot ends in famine: 1 farm + 3 residences decays to zero', () => {
-    const history = runScript(createTestState(), 120, {
-      0: { x: 6, y: 6, buildingType: 'farm' },
-      1: { x: 1, y: 1, buildingType: 'residence' },
-      2: { x: 3, y: 1, buildingType: 'residence' },
-      3: { x: 5, y: 1, buildingType: 'residence' },
-    })
-    const famineTick = (() => {
-      const startIdx = history.findIndex((s) => s.population === 3)
-      const found = history
-        .slice(startIdx + 1)
-        .find((s) => s.population === 0)
-      return found ? found.tick : null
-    })()
-    expect(famineTick).not.toBeNull()
-    // Decay starts at tick 6 from a food level of 103: -1/tick -> famine at ~109.
-    expect(famineTick!).toBeGreaterThan(100)
-    expect(famineTick!).toBeLessThan(120)
-    const after = history[history.length - 1]!
-    // MEASURED FINDING (boom-bust): after famine the colony re-booms — farms
-    // produce without population, admission re-fills residences as soon as
-    // food > 0, and the colony re-famines. Period-4 oscillation: pop 3, 3, 3,
-    // 0 repeating (verified t120-t144).
-    expect(after.population).toBe(3)
-    expect(after.food).toBe(2)
+    void history
+    // Three farms but NO roads: under 10E no farm can be staffed, so a
+    // colony that "built enough food" still starves. This is the core
+    // consequence of worker-gated production.
+    let state = createTestState()
+    state = stepSimulation(state, place(1, 1, 'residence'))
+    state = stepSimulation(state, place(1, 2, 'farm'))
+    state = stepSimulation(state, place(3, 1, 'residence'))
+    state = stepSimulation(state, place(3, 2, 'farm'))
+    expect(countType(state, 'farm')).toBe(2)
+    expect(countStaffedOperationalFarms(state)).toBe(0)
+    expect(foodProductionForTick(state)).toBe(0)
   })
 })
 
 describe('§4F — surplus accumulates unbounded (no cap)', () => {
-  it('3 farms, pop 1: +5/tick, linear forever', () => {
-    let state = createTestState()
-    const residence = manualOperational(state, 'residence', 1, 1)
-    state = residence.state
-    const colonist = withColonist(state, residence.id)
-    state = colonist.state
-    for (let i = 0; i < 3; i += 1) {
-      state = placeFarm(state, 5 + i, 5)
-    }
+  it('3 staffed farms, 3 farmers: +3/tick, linear forever', () => {
+    let state = staffedColony(3)
     expect(foodProductionForTick(state)).toBe(6)
     const before = state.resources.food
     for (let t = 0; t < 50; t += 1) {
       state = stepSimulation(state)
     }
-    // 50 ticks of net +5.
-    expect(state.resources.food).toBe(before + 50 * 5)
-    expect(getPopulationCount(state)).toBe(1)
+    // 50 ticks of net +3 (6 produced, 3 eaten).
+    expect(state.resources.food).toBe(before + 50 * 3)
+    expect(getPopulationCount(state)).toBe(3)
   })
 })
 
@@ -418,77 +424,101 @@ describe('§4F — surplus accumulates unbounded (no cap)', () => {
 // §5 — Spatial pressure audit
 // ---------------------------------------------------------------------------
 
-describe('§5G/§5H — farm and residence geometry have no food effect', () => {
-  const colonyAt = (
+describe('§5G/§5H — geometry matters only through staffing', () => {
+  const farmPairAt = (
     rx: number,
-    ry: number,
     fx: number,
-    fy: number
+    withRoad: boolean
   ): SimulationState => {
+    // Both buildings sit on row y = 0; the road row is y = 1, spanning from
+    // the residence to the farm so every building has a contact cell.
     let state = createTestState()
-    const residence = manualOperational(state, 'residence', rx, ry)
+    const residence = manualOperational(state, 'residence', rx, 0)
     state = residence.state
-    const colonist = withColonist(state, residence.id)
-    state = colonist.state
-    return placeFarm(state, fx, fy)
+    state = withColonist(state, residence.id).state
+    const farm = manualOperational(state, 'farm', fx, 0)
+    state = farm.state
+    if (withRoad) {
+      const lo = Math.min(rx, fx)
+      const hi = Math.max(rx, fx)
+      const cells: CellCoordinate[] = []
+      for (let x = lo; x <= hi; x += 1) {
+        cells.push({ x, y: 1 })
+      }
+      state = roadRow(state, cells)
+    }
+    return assignJobs(state)
   }
 
-  it('G — same farm count/operational state, different coordinates: same food outcome', () => {
-    const a = stepSimulation(colonyAt(1, 1, 5, 5))
-    const b = stepSimulation(colonyAt(1, 1, 7, 7))
-    const c = stepSimulation(colonyAt(6, 1, 1, 6))
-    for (const s of [a, b, c]) {
-      expect(getPopulationCount(s)).toBe(1)
-      expect(s.resources.food).toBe(a.resources.food)
-      expect(foodProductionForTick(s)).toBe(2)
+  it('G — same staffing and count, different coordinates: same food outcome', () => {
+    const fixtures = [
+      farmPairAt(1, 2, true),
+      farmPairAt(1, 7, false),
+      farmPairAt(6, 1, false),
+    ]
+    // Distance/coordinates alone never create food: production follows the
+    // staffing outcome, which is identical (one eligible worker, one farm).
+    const outcomes = fixtures.map((s) => ({
+      staffed: countStaffedOperationalFarms(s),
+      production: foodProductionForTick(s),
+    }))
+    for (const o of outcomes) {
+      expect(o.production).toBe(o.staffed * 2)
     }
+    // The road-connected fixture is the one that gets staffed.
+    expect(outcomes[0]!.staffed).toBe(1)
+    expect(outcomes[1]!.staffed).toBe(0)
+    expect(outcomes[2]!.staffed).toBe(0)
   })
 
-  it('H — residence near vs far from the farm: no rule distinguishes them', () => {
-    const near = colonyAt(2, 2, 1, 1)
-    const far = colonyAt(7, 7, 1, 1)
+  it('H — residence near vs far from the farm: only road access decides', () => {
+    const near = farmPairAt(2, 1, true)
+    const far = farmPairAt(7, 1, true)
     const nearAfter = stepSimulation(near)
     const farAfter = stepSimulation(far)
+    // Both are road-connected, so both staff the farm and produce identically.
+    expect(countStaffedOperationalFarms(near)).toBe(1)
+    expect(countStaffedOperationalFarms(far)).toBe(1)
     expect(nearAfter.resources.food).toBe(farAfter.resources.food)
-    expect(nearAfter.resources.food).toBe(near.resources.food + 1) // +2 prod, -1 need
+    expect(nearAfter.resources.food).toBe(near.resources.food + 1)
   })
 })
 
-describe('§5I — road topology: food equivalence (regression proof)', () => {
-  it('no roads / straight / loop: identical food trajectories', () => {
-    const base = () => {
+describe('§5I — road topology: SUPERSEDED by 10E (roads now matter)', () => {
+  it('10C finding was "roads never matter for food"; 10E inverts it', () => {
+    const base = (cells: readonly CellCoordinate[]): SimulationState => {
       let state = createTestState()
       const residence = manualOperational(state, 'residence', 1, 1)
       state = residence.state
-      const colonist = withColonist(state, residence.id)
-      state = colonist.state
-      return placeFarm(state, 5, 5)
+      state = withColonist(state, residence.id).state
+      const farm = manualOperational(state, 'farm', 1, 3)
+      state = farm.state
+      state = roadRow(state, cells)
+      // assignJobs runs ONCE, after the road set is final.
+      return assignJobs(state)
     }
-    const noRoads = base()
-    const straight = [{ x: 3, y: 1 }, { x: 4, y: 1 }].reduce(
-      (s, cell) => roadAt(s, cell),
-      base()
-    )
-    const loop = [
-      { x: 1, y: 3 },
-      { x: 2, y: 3 },
-      { x: 2, y: 4 },
-      { x: 1, y: 4 },
-    ].reduce((s, cell) => roadAt(s, cell), base())
-
-    const outcomes = [noRoads, straight, loop].map((s) => {
-      const after = stepSimulation(stepSimulation(s))
-      return {
-        food: after.resources.food,
-        population: getPopulationCount(after),
-        production: foodProductionForTick(after),
-      }
-    })
-    for (const o of outcomes) {
-      expect(o.food).toBe(outcomes[0]!.food)
-      expect(o.population).toBe(outcomes[0]!.population)
-      expect(o.production).toBe(outcomes[0]!.production)
-    }
+    // Without a road the farm is unreachable -> never staffed -> 0 food.
+    expect(foodProductionForTick(base([]))).toBe(0)
+    // One contact road is enough for employment mobility -> the farm runs.
+    expect(foodProductionForTick(base([{ x: 1, y: 2 }]))).toBe(2)
+    // Topology beyond connectivity is irrelevant.
+    expect(
+      foodProductionForTick(
+        base([
+          { x: 1, y: 2 },
+          { x: 2, y: 2 },
+        ])
+      )
+    ).toBe(2)
+    expect(
+      foodProductionForTick(
+        base([
+          { x: 1, y: 2 },
+          { x: 2, y: 2 },
+          { x: 2, y: 1 },
+        ])
+      )
+    ).toBe(2)
   })
 })
 
@@ -497,65 +527,114 @@ describe('§5I — road topology: food equivalence (regression proof)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§6 — housing growth vs food security vs industrial capacity', () => {
-  it('equal 100-material budget: housing+farm vs industry diverge', () => {
-    // HOUSING: 2 residences + 1 farm = 75. Admissions fill both residences;
-    // farm from tick 4 makes food flat (2 - 2). No industry, no upkeep.
+  it('one colonist, one farm and one workshop: labour is the scarce resource', () => {
+    // Residences share a road; the worker staffs the NEAREST workplace, so a
+    // single colonist can produce food OR material, never both.
+    const colony = (farmX: number, workshopX: number): SimulationState => {
+      let state = createTestState()
+      const r = manualOperational(state, 'residence', 3, 0)
+      state = r.state
+      state = withColonist(state, r.id).state
+      const f = manualOperational(state, 'farm', farmX, 2)
+      state = f.state
+      const w = manualOperational(state, 'workshop', workshopX, 2)
+      state = w.state
+      const cells: CellCoordinate[] = []
+      for (let x = 0; x <= 8; x += 1) {
+        cells.push({ x, y: 1 })
+      }
+      state = roadRow(state, cells)
+      return assignJobs(state)
+    }
+    // Farm adjacent to the residence road cell (near), workshop far.
+    const foodFirst = colony(2, 7)
+    expect(foodProductionForTick(foodFirst)).toBe(2)
+    expect(materialProductionForTick(foodFirst)).toBe(0)
+    // Workshop near, farm far: the mirror result.
+    const materialFirst = colony(7, 2)
+    expect(foodProductionForTick(materialFirst)).toBe(0)
+    expect(materialProductionForTick(materialFirst)).toBe(2)
+    // Either way the colony has exactly one worker and two workplaces.
+    expect(getPopulationCount(foodFirst)).toBe(1)
+    expect(getPopulationCount(materialFirst)).toBe(1)
+  })
+
+  it('two colonists staff both: food and material together', () => {
+    let state = createTestState()
+    const r1 = manualOperational(state, 'residence', 1, 0)
+    state = r1.state
+    const r2 = manualOperational(state, 'residence', 5, 0)
+    state = r2.state
+    const f = manualOperational(state, 'farm', 2, 2)
+    state = f.state
+    const w = manualOperational(state, 'workshop', 5, 2)
+    state = w.state
+    const cells: CellCoordinate[] = []
+    for (let x = 0; x <= 8; x += 1) {
+      cells.push({ x, y: 1 })
+    }
+    state = roadRow(state, cells)
+    state = withColonist(state, r1.id).state
+    state = withColonist(state, r2.id).state
+    state = assignJobs(state)
+    expect(getPopulationCount(state)).toBe(2)
+    expect(countStaffedOperationalFarms(state)).toBe(1)
+    expect(foodProductionForTick(state)).toBe(2)
+    expect(materialProductionForTick(state)).toBe(2)
+    // Food net is flat (2 produced, 2 eaten); the storage cap still throttles
+    // Material while stock exceeds 25 per workshop.
+    expect(materialUpkeepDueForTick(state)).toBe(1)
+  })
+
+  it('equal 100-material budget: housing+food vs industry diverge', () => {
     const housing = runScript(createTestState(), 10, {
-      0: { x: 1, y: 1, buildingType: 'residence' },
-      1: { x: 5, y: 1, buildingType: 'residence' },
-      2: { x: 3, y: 5, buildingType: 'farm' },
+      0: place(1, 1, 'residence'),
+      1: place(1, 2, 'farm'),
+      2: place(3, 1, 'residence'),
+      3: place(3, 2, 'farm'),
     })
     const housingT4 = housing[3]!
     const housingT10 = housing[9]!
+    // No roads: farms are unstaffed, so the "food colony" starves. It has
+    // more colonists (more mouths) but no production and no industry.
     expect(housingT10.population).toBe(2)
-    expect(housingT4.food).toBe(housingT10.food) // flat: 2 - 2
-    expect(housingT4.material).toBe(25)
-    expect(housingT10.material).toBe(25)
+    expect(housingT10.food).toBeLessThan(housingT4.food)
+    expect(housingT4.foodProduced).toBe(0)
+    expect(housingT10.foodProduced).toBe(0)
+    expect(housingT10.material).toBe(0) // 25+25+25+25 = the whole budget
 
-    // INDUSTRY: 1 residence + 1 workshop + 2-cell road = 60. Pop 1 (no farm:
-    // food decays -1/tick); rebuilt step-by-step below for road placement.
-    // Road placed through a direct command on the final-state line below.
-    let industryState = createTestState()
-    industryState = stepSimulation(industryState, {
-      type: 'placeBuilding',
-      x: 1,
-      y: 1,
-      buildingType: 'residence',
-    })
-    industryState = stepSimulation(industryState, {
-      type: 'placeBuilding',
-      x: 3,
-      y: 1,
-      buildingType: 'workshop',
-    })
-    industryState = stepSimulation(industryState, {
+    // INDUSTRY: 1 residence + 1 workshop + a connecting road. The worker is
+    // employed, so Material accrues while food decays (no farm at all).
+    let industry = createTestState()
+    industry = stepSimulation(industry, place(1, 0, 'residence'))
+    industry = stepSimulation(industry, {
       type: 'placeRoads',
       cells: [
+        { x: 1, y: 1 },
         { x: 2, y: 1 },
-        { x: 3, y: 2 },
       ],
     })
-    // Workshop op tick 3 (road only complete tick 4): worker employed tick 4.
+    industry = stepSimulation(industry, place(2, 0, 'workshop'))
     const series: Snapshot[] = []
     for (let t = 0; t < 8; t += 1) {
-      industryState = stepSimulation(industryState)
-      series.push(snapshot(industryState))
+      industry = stepSimulation(industry)
+      series.push(snapshot(industry))
     }
     const last = series[series.length - 1]!
     expect(last.population).toBe(1)
-    expect(last.food).toBeLessThan(100) // decaying: no farm
-    // MEASURED FINDING (storage cap): the 100-material budget leaves stock 40
-    // > storage cap 25 (1 workshop) -> Material output is DISCARDED while
-    // stock > cap; only staffed upkeep (-1/tick) drains it. Material decreases
-    // -1/tick during these 8 ticks: 40 - 8 = 32.
-    expect(last.material).toBe(32)
-    expect(materialUpkeepDueForTick(industryState)).toBe(1)
+    expect(last.food).toBeLessThan(INITIAL_FOOD) // decaying: no farm
+    // Material is throttled by the storage cap: bootstrap stock exceeds it and
+    // only staffed upkeep drains it (-1/tick).
+    expect(last.material).toBe(INITIAL_FOOD - 25 - 10 - 25 - 8)
+    expect(materialUpkeepDueForTick(industry)).toBe(1)
 
-    // The measured tradeoff: housing keeps food flat but never builds Material;
-    // industry burns food stock AND is throttled by the storage cap at start.
-    expect(housingT10.food).toBeGreaterThan(last.food)
-    expect(housingT10.material).toBe(25)
+    // The measured tradeoff: the housing colony fed two colonists on food it
+    // could not produce and ended with no Material; the industry colony has a
+    // single colonist, holds Material, and decays food more slowly because it
+    // has fewer mouths. Labour — not land or roads — is the scarce resource.
     expect(last.material).toBeGreaterThan(housingT10.material)
+    expect(housingT10.population).toBeGreaterThan(last.population)
+    expect(housingT10.food).toBeLessThan(last.food)
   })
 })
 
@@ -567,24 +646,15 @@ describe('audit determinism', () => {
   it('repeating the bootstrap produces identical canonical state and hash', () => {
     const run = (): SimulationState => {
       let s = createTestState()
-      const history = runScript(s, 8, {
-        0: { x: 1, y: 1, buildingType: 'residence' },
-        1: { x: 5, y: 5, buildingType: 'farm' },
-      })
-      void history
-      // Rebuild the same sequence state-by-state for hash comparison.
+      s = stepSimulation(s, place(1, 1, 'residence'))
       s = stepSimulation(s, {
-        type: 'placeBuilding',
-        x: 1,
-        y: 1,
-        buildingType: 'residence',
+        type: 'placeRoads',
+        cells: [
+          { x: 1, y: 2 },
+          { x: 2, y: 2 },
+        ],
       })
-      s = stepSimulation(s, {
-        type: 'placeBuilding',
-        x: 5,
-        y: 5,
-        buildingType: 'farm',
-      })
+      s = stepSimulation(s, place(2, 1, 'farm'))
       for (let t = 0; t < 6; t += 1) {
         s = stepSimulation(s)
       }
@@ -597,5 +667,12 @@ describe('audit determinism', () => {
     expect(serializeCanonicalState(createTestState())).toBe(
       serializeCanonicalState(createTestState())
     )
+  })
+
+  it('the staffed-colony fixture is itself deterministic', () => {
+    const a = staffedColony(2, 1)
+    const b = staffedColony(2, 1)
+    expect(serializeCanonicalState(a)).toBe(serializeCanonicalState(b))
+    expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
   })
 })

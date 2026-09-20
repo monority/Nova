@@ -17,7 +17,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withRoadsForWorkshops } from './helpers.js'
 
 const placeResidence = (x: number, y: number): PlaceBuildingCommand => ({
   type: 'placeBuilding',
@@ -43,6 +43,19 @@ const colonistState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, placeResidence(2, 2))
   state = stepSimulation(state)
+  return state
+}
+
+/**
+ * Step 10E: residence + colonist + farm connected by roads. Farm placed tick 3,
+ * operational + staffed tick 4 (produceFood still 0 that tick — next-tick
+ * timing contract); first +2 lands tick 5.
+ */
+const staffedFarmState = (): SimulationState => {
+  let state = colonistState() // t2, pop 1, food 100
+  state = stepSimulation(state, placeFarm(0, 0)) // t3: farm underConstruction
+  state = withRoadsForWorkshops(state) // Step 10E: staffing needs roads
+  state = stepSimulation(state) // t4: farm operational, colonist assigned
   return state
 }
 
@@ -90,42 +103,59 @@ describe('produceFood phase (Step 06B)', () => {
     expect(produceFood(state)).toBe(state)
   })
 
-  it('an operational farm produces exactly FOOD_PER_FARM_PER_TICK', () => {
+  it('an operational farm produces nothing without a worker (Step 10E)', () => {
     let state = stepSimulation(createTestState(), placeFarm(1, 1))
     state = stepSimulation(state)
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(countOperationalFarms(state)).toBe(1)
-    expect(getFoodProductionPerTick(state)).toBe(2)
-    // Production starts the very tick the farm becomes operational (tick 2).
-    expect(getResourceStock(state).food).toBe(102)
-    // Zero colonists: stockpile, no consumption.
-    expect(getResourceStock(stepSimulation(state)).food).toBe(104)
+    // Vacant farm: 0 production even though operational.
+    expect(getFoodProductionPerTick(state)).toBe(0)
+    expect(getResourceStock(state).food).toBe(100)
+    expect(getResourceStock(stepSimulation(state)).food).toBe(100)
   })
 
-  it('multiple producers sum deterministically', () => {
-    let state = createTestState()
-    state = stepSimulation(state, placeFarm(1, 1))
-    state = stepSimulation(state, placeFarm(2, 2))
-    state = stepSimulation(state)
+  it('a staffed operational farm produces exactly FOOD_PER_FARM_PER_TICK', () => {
+    // t4: farm operational + assigned; first +2 lands t5 (next-tick contract).
+    const state = staffedFarmState()
+    expect(state.buildings['building-2']?.status).toBe('operational')
+    expect(countOperationalFarms(state)).toBe(1)
+    expect(getFoodProductionPerTick(state)).toBe(2)
+    // t3+t4 eaten, no production yet: 100 - 2 = 98.
+    expect(getResourceStock(state).food).toBe(98)
+    // t5: +2 produced, 1 eaten.
+    expect(getResourceStock(stepSimulation(state)).food).toBe(99)
+  })
+
+  it('multiple producers sum deterministically (staffed farms only)', () => {
+    // Two residences + two colonists + two farms, all road-connected.
+    let state = colonistState() // t2, pop 1
+    state = stepSimulation(state, placeResidence(5, 5)) // t3
+    state = stepSimulation(state, placeFarm(0, 0)) // t4: farm-1 UC
+    state = stepSimulation(state, placeFarm(7, 7)) // t5: farm-1 op, farm-2 UC
+    state = withRoadsForWorkshops(state)
+    state = stepSimulation(state) // t6: both operational, both staffed
     expect(countOperationalFarms(state)).toBe(2)
     expect(getFoodProductionPerTick(state)).toBe(4)
     const foodBefore = getResourceStock(state).food
     const after = stepSimulation(state)
-    expect(getResourceStock(after).food).toBe(foodBefore + 4)
+    // t7: +4 produced, 2 eaten.
+    expect(getResourceStock(after).food).toBe(foodBefore + 4 - 2)
   })
 
-  it('same-tick save: a farm operational this tick feeds consumption this tick', () => {
-    // Farm completes construction on the very tick the colony would starve:
-    // production (phase 4) precedes consumption (phase 5), so +2 covers the
-    // 1 colonist and the colony survives with food 1.
+  it('next-tick staffing: a farm operational this tick does NOT feed this tick', () => {
+    // Step 10E timing contract: produceFood (phase 4) reads the assignment
+    // written by the PREVIOUS tick's assignJobs (phase 7). A farm completing
+    // construction now is staffed now but produces next tick.
     let state = colonistState()
     state = stepSimulation(state, placeFarm(0, 0))
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
+    state = withRoadsForWorkshops(state)
     state = withFood(state, 0)
     const after = stepSimulation(state)
     expect(after.buildings['building-2']?.status).toBe('operational')
-    expect(Object.keys(after.colonists)).toHaveLength(1)
-    expect(getResourceStock(after).food).toBe(1)
+    // No production this tick (unstaffed at produceFood time) -> starves.
+    expect(Object.keys(after.colonists)).toHaveLength(0)
+    expect(getResourceStock(after).food).toBe(0)
   })
 
   it('insufficient production preserves the documented shortage behavior', () => {
@@ -144,10 +174,11 @@ describe('produceFood phase (Step 06B)', () => {
   })
 
   it('sufficient production sustains the colony indefinitely', () => {
-    // 2 colonists consume 2/tick; 1 farm produces 2/tick: net zero.
+    // 2 colonists consume 2/tick; 1 staffed farm produces 2/tick: net zero.
     let state = colonistState()
     state = stepSimulation(state, placeFarm(0, 0))
     state = stepSimulation(state, placeResidence(5, 5))
+    state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
     state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(2)
     const foodBefore = getResourceStock(state).food
@@ -159,12 +190,12 @@ describe('produceFood phase (Step 06B)', () => {
   })
 
   it('food may exceed the initial stock: no cap, invariant food >= 0', () => {
-    let state = stepSimulation(createTestState(), placeFarm(1, 1))
-    // Tick 2: farm operational, first +2. Tick 3: second +2.
-    state = stepSimulation(state)
-    state = stepSimulation(state)
-    expect(getResourceStock(state).food).toBe(104)
-    expect(getResourceStock(state).food).toBeGreaterThanOrEqual(0)
+    // Step 10E: a staffed farm nets +1/tick (need 1, prod 2).
+    const state = staffedFarmState() // t4, food 98
+    // Tick 5..6: two more +1 net ticks.
+    const after = stepSimulation(stepSimulation(state))
+    expect(getResourceStock(after).food).toBe(100)
+    expect(getResourceStock(after).food).toBeGreaterThanOrEqual(0)
   })
 
   it('production is deterministic and non-mutating', () => {

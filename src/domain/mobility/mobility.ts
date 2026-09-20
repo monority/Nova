@@ -100,6 +100,37 @@ export const areBuildingsMobilityConnected = (
 }
 
 /**
+ * Pair connectivity over PRECOMPUTED 09E access records (Step 10D perf:
+ * identical result to `areBuildingsMobilityConnected`, no re-derivation).
+ * Pure and deterministic.
+ */
+export const areAccessesConnected = (
+  accessA: BuildingRoadAccess,
+  accessB: BuildingRoadAccess
+): boolean => {
+  if (!accessA.hasRoadAccess || !accessB.hasRoadAccess) {
+    return false
+  }
+  return haveSharedNetwork(accessA.networkIds, accessB.networkIds)
+}
+
+/**
+ * Shortest operational-road distance over PRECOMPUTED 09E access records
+ * (Step 10D perf: identical result to `getRoadDistanceBetweenBuildings`,
+ * no re-derivation). Pure, deterministic, derived only.
+ */
+export const getDistanceBetweenAccesses = (
+  state: SimulationState,
+  accessA: BuildingRoadAccess,
+  accessB: BuildingRoadAccess
+): number | null => {
+  if (!accessA.hasRoadAccess || !accessB.hasRoadAccess) {
+    return null
+  }
+  return getRoadDistance(state, accessA.roadIds, accessB.roadIds)
+}
+
+/**
  * Shortest operational-road distance between two buildings (Step 09M).
  *
  * Contract: buildings are not road cells, so each side contributes its

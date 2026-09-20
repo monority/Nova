@@ -56,13 +56,18 @@ const untilAffordable = (state: SimulationState): SimulationState => {
 }
 
 /**
- * R residences + W workshops, food sustained (1 farm up to 2 pop, 2 beyond).
+ * R residences + W workshops. Step 10E: food is pre-stocked (farms now need
+ * a worker, which would compete with these workshops and skew the labor
+ * counts this fixture asserts).
  * Step 08F: one staffed Workshop equilibrates at 24, so workshops precede
- * farms — the second Workshop is funded from bootstrap, income under the
- * growing capacity funds the rest. The w=0 case fits bootstrap exactly.
+ * construction — the second Workshop is funded from bootstrap, income under
+ * the growing capacity funds the rest. The w=0 case fits bootstrap exactly.
  */
 const capacityState = (residences: number, workshops: number): SimulationState => {
-  let state = createTestState()
+  // Step 10E: this fixture measures the labor constraint, so food is
+  // pre-stocked instead of produced by (now worker-requiring) farms. This
+  // keeps population and employment counts exactly as asserted.
+  let state = withFood(createTestState(), 100000)
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   let built = 0
@@ -77,12 +82,6 @@ const capacityState = (residences: number, workshops: number): SimulationState =
     state = withRoadsForWorkshops(state) // 09F: road for WS2
     state = stepSimulation(state) // second operational, cap 50, stock 25
     built = 2
-  }
-  const farms = residences <= 2 ? 1 : 2
-  for (let f = 0; f < farms; f++) {
-    state = untilAffordable(state)
-    state = stepSimulation(state, place('farm', 6 + f, 6))
-    state = stepSimulation(state)
   }
   for (let i = 1; i < residences; i++) {
     state = untilAffordable(state)

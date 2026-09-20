@@ -25,7 +25,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, withRoadsForWorkshops } from './helpers.js'
+import { createTestState, withRoadsForWorkshops, withStaffedFarms } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -73,7 +73,7 @@ const colony = (n: number): SimulationState => {
   state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: colonist-1 employed, stock 49
   if (n === 0) {
-    return state
+    return withStaffedFarms(state)
   }
   state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
   state = withRoadsForWorkshops(state) // 09F: road for WS2
@@ -81,9 +81,11 @@ const colony = (n: number): SimulationState => {
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 6, 6))
   state = stepSimulation(state)
+  state = withStaffedFarms(state) // Step 10E: farms produce only when staffed
   state = untilAffordable(state)
   state = stepSimulation(state, place('farm', 7, 7))
   state = stepSimulation(state)
+  state = withStaffedFarms(state) // Step 10E: second farmer
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
@@ -96,7 +98,7 @@ const colony = (n: number): SimulationState => {
       state = stepSimulation(state)
     }
   }
-  return state
+  return withStaffedFarms(state)
 }
 
 /** Residence + Workshop, no farm: food 0 starves on the next tick. */
@@ -119,7 +121,7 @@ const noWorkshopTwin = (): SimulationState => {
   state = stepSimulation(state) // t4: farm operational
   state = stepSimulation(state, place('farm', 7, 7)) // t5
   state = stepSimulation(state) // t6: second farm operational
-  return state
+  return withStaffedFarms(state) // Step 10E: two staffed farms, food sustained
 }
 
 /**
@@ -230,15 +232,16 @@ describe('economic invariants (Step 08D)', () => {
     state = stepSimulation(state, place('residence', 0, 0)) // t1
     state = stepSimulation(state) // t2: colonist, residence operational
     state = stepSimulation(state, place('farm', 6, 6)) // t3
-    state = stepSimulation(state) // t4: farm operational
-    state = stepSimulation(state) // t5
+    state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
+    state = stepSimulation(state) // t4: farm operational, farmer assigned
+    state = stepSimulation(state) // t5: first staffed production tick
     expect(
       Object.values(state.buildings).some((b) => b.type === 'workshop')
     ).toBe(false)
     expect(countStaffedOperationalWorkshops(state)).toBe(0)
     expect(materialUpkeepDueForTick(state)).toBe(0)
     expect(getMaterialUpkeepPerTick(state)).toBe(0)
-    // Food still flows: upkeep absence is not production absence.
+    // Food still flows: a staffed Farm produces without any upkeep.
     expect(getFoodProductionPerTick(state)).toBe(2)
   })
 
@@ -424,12 +427,16 @@ describe('economic invariants (Step 08D)', () => {
     let state = withConstruction(colony(2), 0)
     const foodBefore = getResourceStock(state).food
     expect(foodBefore).toBeGreaterThan(0)
+    const populationBefore = Object.keys(state.colonists).length
     state = stepSimulation(state)
     // Workers kept producing through the empty stock: net +2 recovered.
     expect(getResourceStock(state).construction).toBe(2)
-    expect(Object.keys(state.colonists).length).toBe(2)
-    // Food followed its own rules (production 4 - consumption 2 = +2).
-    expect(getResourceStock(state).food).toBe(foodBefore + 2)
+    expect(Object.keys(state.colonists).length).toBe(populationBefore)
+    // Step 10E: 2 Workshop workers + 2 Farm workers = 4 colonists; two
+    // staffed farms produce 4 while 4 colonists consume 4 -> net 0.
+    expect(getFoodProductionPerTick(state)).toBe(4)
+    expect(getFoodConsumptionPerTick(state)).toBe(4)
+    expect(getResourceStock(state).food).toBe(foodBefore)
   })
 
   it('queries (§7) — upkeep/net match simulation arithmetic, stay derived', () => {

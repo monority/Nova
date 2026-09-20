@@ -1,23 +1,26 @@
 /**
- * Jobs / employment domain model (Step 07C, design contract Step 07B).
+ * Jobs / employment domain model (Step 07C, design contract Step 07B,
+ * Farm workplaces Step 10E).
  *
  * The whole Jobs layer is deliberately concrete and minimal:
  *
- *   Residence -> Colonist -> Workshop -> Employment -> Construction Material
+ *   Residence -> Colonist -> Farm/Workshop -> Employment -> Food/Material
  *
- * - one concrete workplace exists: the Workshop (job capacity 1);
+ * - two concrete workplaces exist: the Farm and the Workshop (capacity 1 each);
  * - a colonist holds at most one job (`ColonistState.workplaceId`);
- * - a Workshop employs at most one colonist;
+ * - a Farm or Workshop employs at most one colonist;
  * - employment is canonical state, every aggregate below is derived.
  *
  * Deliberately absent (Step 07C §21, mobility gate Step 09K, spatial
- * preference Step 09M): Job/Worker entities, EmploymentSystem, generic
- * workplace or workforce frameworks, a stored `labour` resource, skills,
- * efficiency, priorities, morale, travel time, commute cost, player-side
- * employment control, recipes and production chains. Employment eligibility
- * requires residence–workplace mobility connectivity (09K), and the CHOICE
- * among eligible Workshops follows the shortest operational road distance
- * (09M); everything about *how* a colonist travels remains unmodeled.
+ * preference Step 09M, Farm workplaces Step 10E): Job/Worker entities,
+ * EmploymentSystem, generic workplace or workforce frameworks, a stored
+ * `labour` resource, skills, efficiency, priorities, morale, travel time,
+ * commute cost, player-side employment control, recipes and production
+ * chains. Employment eligibility requires residence–workplace mobility
+ * connectivity (09K), and the CHOICE among eligible workplaces follows the
+ * shortest operational road distance (09M); everything about *how* a
+ * colonist travels remains unmodeled. Step 10E adds NO type priority:
+ * Farms and Workshops compete in one pool, distance-then-id decides.
  */
 
 import type { BuildingStatus, BuildingType } from '../building/building.js'
@@ -37,15 +40,26 @@ export interface WorkplaceLike {
   readonly status: BuildingStatus
 }
 
+/** Jobs offered by one operational Farm (Step 10E: capacity = 1, like Workshops). */
+export const FARM_JOB_CAPACITY = 1
+
+/** An operational Farm offers jobs (Step 10E). Same lifecycle rule as Workshops. */
+export const isOperationalFarm = (building: WorkplaceLike): boolean =>
+  building.type === 'farm' && building.status === 'operational'
+
+/** A building offers jobs once operational: Farm or Workshop (Step 10E). */
+export const isOperationalWorkplace = (building: WorkplaceLike): boolean =>
+  isOperationalWorkshop(building) || isOperationalFarm(building)
+
 /** A workplace only offers jobs once operational (docs/06 lifecycle). */
 export const isOperationalWorkshop = (building: WorkplaceLike): boolean =>
   building.type === 'workshop' && building.status === 'operational'
 
-/** Jobs offered by one building: 1 for an operational Workshop, otherwise 0. */
+/** Jobs offered by one building: 1 for an operational Farm or Workshop, else 0. */
 export const jobCapacityOf = (building: WorkplaceLike): number =>
-  isOperationalWorkshop(building) ? WORKSHOP_JOB_CAPACITY : 0
+  isOperationalWorkplace(building) ? WORKSHOP_JOB_CAPACITY : 0
 
-/** Total job capacity of the colony: operational Workshops × capacity. */
+/** Total job capacity of the colony: operational Farms + Workshops × capacity. */
 export const getJobCapacity = (state: SimulationState): number => {
   let capacity = 0
   for (const building of iterateBuildings(state)) {
@@ -55,10 +69,9 @@ export const getJobCapacity = (state: SimulationState): number => {
 }
 
 /**
- * A colonist is employed iff `workplaceId` resolves to an operational
- * Workshop. Resolving the reference (rather than only testing for null) keeps
- * the invariant "non-operational Workshop => zero valid workers" true even
- * between `assignJobs` and `produceMaterial`.
+ * A colonist is employed iff `workplaceId` resolves to an operational Farm
+ * or Workshop (Step 10E: Farms joined the workplace pool). Resolving the
+ * reference keeps "non-operational workplace => zero valid workers" true.
  */
 export const isEmployed = (
   state: SimulationState,
@@ -69,7 +82,7 @@ export const isEmployed = (
     return false
   }
   const workplace = state.buildings[workplaceId]
-  return workplace !== undefined && isOperationalWorkshop(workplace)
+  return workplace !== undefined && isOperationalWorkplace(workplace)
 }
 
 /** Employed colonists — the deterministic labor supply of this tick. */

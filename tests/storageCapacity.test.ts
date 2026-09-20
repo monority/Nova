@@ -38,6 +38,17 @@ const withConstruction = (
   resources: { ...state.resources, construction },
 })
 
+/**
+ * Step 10E: material fixtures isolate the variable they measure. Farms now
+ * require a worker, so instead of free farm food these fixtures pre-stock a
+ * food buffer large enough to outlive the fixture (food is uncapped). This
+ * keeps population, staffing and every material number untouched.
+ */
+const withFoodBuffer = (state: SimulationState): SimulationState => ({
+  ...state,
+  resources: { ...state.resources, food: 100000 },
+})
+
 /** Step until the stock covers a 25 build cost (all catalog costs are 25). */
 const untilAffordable = (state: SimulationState): SimulationState => {
   let ticks = 0
@@ -73,12 +84,13 @@ const singleWorkshop = (): SimulationState => {
 }
 
 /**
- * N staffed operational Workshops with N colonists, food sustained.
- * Workshops precede farms: one staffed Workshop equilibrates at 24, so the
- * second comes from bootstrap funds and income funds the rest.
+ * N staffed operational Workshops with N colonists. Step 08F: a single
+ * staffed Workshop equilibrates at 24, so the second comes from bootstrap
+ * funds and income funds the rest. Step 10E: food is pre-stocked (farms now
+ * require a worker; this fixture measures material, so food is isolated).
  */
 const staffedLadder = (n: number): SimulationState => {
-  let state = createTestState()
+  let state = withFoodBuffer(createTestState())
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3
@@ -87,12 +99,6 @@ const staffedLadder = (n: number): SimulationState => {
   state = stepSimulation(state, place('workshop', 1, 5)) // t5
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: cap 50, stock 25
-  state = untilAffordable(state)
-  state = stepSimulation(state, place('farm', 6, 6))
-  state = stepSimulation(state)
-  state = untilAffordable(state)
-  state = stepSimulation(state, place('farm', 7, 7))
-  state = stepSimulation(state)
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))

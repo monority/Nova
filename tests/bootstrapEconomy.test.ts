@@ -281,7 +281,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     return stepSimulation(state) // t5
   }
 
-  it('E1 — Farm bought from transient stock recovers to the same equilibrium', () => {
+  it('E1 — Farm bought from transient stock recovers the material equilibrium', () => {
     let state = scenarioCEnd()
     // t6: Farm affordable (34 ≥ 25): 34 − 25 − 1 upkeep = 8. Under 09K the
     // road path costs 15 (not 5), so the transient stock is lower.
@@ -290,19 +290,21 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
       tick: 6, material: 8, food: 96, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
-    // t7: Farm operational: food +2 −1; Material stock 8 → stored 2.
+    // t7: Farm operational but VACANT — under Step 10E a Farm produces only
+    // when staffed, and the lone colonist already works the Workshop, so food
+    // declines by the 1/tick consumption instead of rising.
     state = stepSimulation(state)
     expect(slim(state)).toEqual({
-      tick: 7, material: 9, food: 97, population: 1,
+      tick: 7, material: 9, food: 95, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
-    // Recovery continues +1 Material and +1 Food per tick until Material
-    // fixes at 24 again while Food (uncapped) keeps accumulating.
+    // Material recovery continues +1/tick until it fixes at 24 again; food
+    // (uncapped) keeps declining by the unstaffed farm's missing output.
     for (let i = 0; i < 16; i += 1) {
       state = stepSimulation(state) // t8..t23
     }
     expect(slim(state)).toEqual({
-      tick: 23, material: 24, food: 113, population: 1,
+      tick: 23, material: 24, food: 79, population: 1,
       employed: 1, gross: 2, stored: 1, upkeep: 1,
     })
   })

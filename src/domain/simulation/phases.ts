@@ -43,18 +43,26 @@ import {
   iterateBuildings,
   iterateColonists,
 } from '../housing/housing.js'
-import { countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
 import {
-  areBuildingsMobilityConnected,
-  getRoadDistanceBetweenBuildings,
+  countWorkersAt,
+  isOperationalFarm,
+  isOperationalWorkplace,
+  isOperationalWorkshop,
+} from '../jobs/jobs.js'
+import {
+  areAccessesConnected,
+  getDistanceBetweenAccesses,
 } from '../mobility/mobility.js'
 import type { ColonistState } from '../population/colonist.js'
 import {
   getBuildingRoadAccess,
+  getBuildingRoadAccessWithNetworks,
+  getRoadNetworks,
   isOperationalRoad,
   isRoadOccupied,
   normalizeRoadCells,
   ROAD_CONSTRUCTION_COST,
+  type BuildingRoadAccess,
   type RoadState,
 } from '../road/road.js'
 import { iterateRoads } from '../road/road.js'
@@ -453,10 +461,31 @@ export const consumeFood = (
 // ---------------------------------------------------------------------------
 
 /**
- * Operational farms feeding the shared stock (Step 06B §9-10).
- * Deterministic ascending-id iteration; outputs simply sum — no priority,
- * no efficiency, no workers. Addition commutes, so multi-farm output is
- * order-independent by construction.
+ * Staffed operational Farms: operational AND at least one worker assigned
+ * (Step 10E). Mirror of countStaffedOperationalWorkshops. Residences,
+ * under-construction and vacant Farms produce exactly 0. Deterministic:
+ * iterateBuildings sorts by id.
+ */
+export const countStaffedOperationalFarms = (
+  state: SimulationState
+): number => {
+  let count = 0
+  for (const building of iterateBuildings(state)) {
+    if (
+      isOperationalFarm(building) &&
+      countWorkersAt(state, building.id) > 0
+    ) {
+      count += 1
+    }
+  }
+  return count
+}
+
+/**
+ * Operational farms feeding the shared stock (Step 06B §9-10, staffed-only
+ * since Step 10E §7). Deterministic ascending-id iteration; outputs simply
+ * sum — no priority, no efficiency. Addition commutes, so multi-farm output
+ * is order-independent by construction.
  */
 export const countOperationalFarms = (state: SimulationState): number => {
   let count = 0
@@ -468,17 +497,23 @@ export const countOperationalFarms = (state: SimulationState): number => {
   return count
 }
 
-/** Deterministic farm output for this tick (Step 06B §12). */
+/**
+ * Deterministic farm output for this tick (Step 06B §12, Step 10E §7):
+ * staffed operational Farms × FOOD_PER_FARM_PER_TICK. A vacant Farm
+ * produces 0 — the 10E asymmetry removal.
+ */
 export const foodProductionForTick = (state: SimulationState): number =>
-  countOperationalFarms(state) * FOOD_PER_FARM_PER_TICK
+  countStaffedOperationalFarms(state) * FOOD_PER_FARM_PER_TICK
 
 /**
  * Add this tick's farm output to the shared stock. Pure: returns the input
  * state reference when nothing produces. Runs after construction (a farm
- * operational as of this tick produces this tick) and before consumption,
- * so same-tick production can prevent starvation. Produces with zero
- * colonists (stockpiling); food may exceed the initial 100 — the Step 06B
- * invariant is food >= 0, with no stock cap.
+ * operational as of this tick is staffable from the NEXT assignJobs) and
+ * before consumption. TIMING CONTRACT (Step 10E §11-12): produceFood reads
+ * the workplace assignments written by the PREVIOUS tick's assignJobs, so a
+ * newly assigned Farm worker becomes productive on the NEXT tick. Phase order
+ * is deliberately preserved (no reorder for same-tick convenience); Workshop
+ * Material timing is unchanged (assignJobs -> produceMaterial same tick).
  */
 export const produceFood = (state: SimulationState): SimulationState => {
   const output = foodProductionForTick(state)
@@ -532,35 +567,61 @@ export const updatePopulation = (
 
 /**
  * Deterministic job assignment (Step 07C §4, mobility gate Step 09K,
- * spatial preference Step 09M). One greedy pass over colonists in ascending
- * id, each colonist taking at most one Workshop:
+ * spatial preference Step 09M, Farm workplaces Step 10E). One greedy pass
+ * over colonists in ascending id, each colonist taking at most one
+ * workplace (Farm or Workshop):
  *
- *   1. eligible Workshops are operational, still free, and mobility-
+ *   1. eligible workplaces are operational, still free, and mobility-
  *      connected to the colonist's residence (09K gate, unchanged);
- *   2. among those, the preferred Workshop is the one at the SMALLEST
- *      operational road distance from the residence (09M), tie-broken by the
- *      smallest Workshop id;
+ *   2. among those, the preferred workplace is the one at the SMALLEST
+ *      operational road distance from the residence (09M), tie-broken by
+ *      the smallest workplace id — NO building-type priority: Farms and
+ *      Workshops compete in one merged pool (Step 10E §5);
  *   3. an existing assignment is preserved when it is still eligible AND
  *      still among the nearest — no unnecessary churn — and is otherwise
  *      re-evaluated against the CURRENT road network;
  *   4. no distance, eligibility or network fact is cached or persisted, so
  *      connectivity and preference changes are reflected on the next tick.
  *
- * Capacity stays 1 per Workshop: the ascending colonist-id scan plus the
- * taken-set can never place two colonists in one Workshop. Colonists without
- * a residence stay unemployed. Pure: returns the input state reference when
- * nothing changes.
+ * Capacity stays 1 per workplace: the ascending colonist-id scan plus the
+ * taken-set can never place two colonists in one workplace. Colonists
+ * without a residence stay unemployed. Pure: returns the input state
+ * reference when nothing changes.
  */
 export const assignJobs = (state: SimulationState): SimulationState => {
   const colonists = [...iterateColonists(state)]
   if (colonists.length === 0) {
     return state
   }
-  // Ascending building-id order (iterateBuildings sorts by id).
-  const availableWorkshopIds = [...iterateBuildings(state)]
-    .filter(isOperationalWorkshop)
+  // Ascending building-id order (iterateBuildings sorts by id). Step 10E:
+  // operational Farms AND Workshops form ONE merged candidate pool — the
+  // explicit distance-then-id selection below is the only ordering, so no
+  // building-type priority can emerge.
+  const availableWorkplaceIds = [...iterateBuildings(state)]
+    .filter(isOperationalWorkplace)
     .map((building) => building.id)
   const takenWorkplaceIds = new Set<string>()
+
+  // Step 10D perf: the 09D networks are derived ONCE per assignJobs call and
+  // every residence/workshop 09E access is derived ONCE per building. The
+  // per-pair predicates below then read these precomputed records instead of
+  // re-deriving networks per (colonist, workshop) pair. Same inputs, same
+  // pure functions, byte-identical results — only the recomputation is gone.
+  const networks = getRoadNetworks(state)
+  const accessByBuildingId = new Map<string, BuildingRoadAccess>()
+  const accessOf = (buildingId: string): BuildingRoadAccess => {
+    const cached = accessByBuildingId.get(buildingId)
+    if (cached !== undefined) {
+      return cached
+    }
+    const access = getBuildingRoadAccessWithNetworks(
+      state,
+      buildingId,
+      networks
+    )
+    accessByBuildingId.set(buildingId, access)
+    return access
+  }
 
   const nextColonists: Record<string, ColonistState> = {}
   let changed = false
@@ -571,23 +632,26 @@ export const assignJobs = (state: SimulationState): SimulationState => {
 
     if (residenceId !== null) {
       // 09K eligibility gate: operational, free, mobility-connected.
+      // Step 10E: the gate is type-blind (Farm or Workshop).
       const eligible: { readonly id: string; readonly distance: number }[] = []
-      for (const workshopId of availableWorkshopIds) {
-        if (takenWorkplaceIds.has(workshopId)) {
+      const residenceAccess = accessOf(residenceId)
+      for (const workplaceId of availableWorkplaceIds) {
+        if (takenWorkplaceIds.has(workplaceId)) {
           continue
         }
-        if (!areBuildingsMobilityConnected(state, residenceId, workshopId)) {
+        const workplaceAccess = accessOf(workplaceId)
+        if (!areAccessesConnected(residenceAccess, workplaceAccess)) {
           continue
         }
-        const distance = getRoadDistanceBetweenBuildings(
+        const distance = getDistanceBetweenAccesses(
           state,
-          residenceId,
-          workshopId
+          residenceAccess,
+          workplaceAccess
         )
         if (distance === null) {
           continue
         }
-        eligible.push({ id: workshopId, distance })
+        eligible.push({ id: workplaceId, distance })
       }
 
       if (eligible.length > 0) {

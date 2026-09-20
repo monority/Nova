@@ -127,10 +127,11 @@ describe('workshop building (Step 07C §3)', () => {
     expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
   })
 
-  it('exposes job capacity only for an operational workshop', () => {
+  it('exposes job capacity for operational Farms and Workshops (Step 10E)', () => {
     expect(jobCapacityOf({ type: 'workshop', status: 'operational' })).toBe(1)
     expect(jobCapacityOf({ type: 'workshop', status: 'underConstruction' })).toBe(0)
-    expect(jobCapacityOf({ type: 'farm', status: 'operational' })).toBe(0)
+    expect(jobCapacityOf({ type: 'farm', status: 'operational' })).toBe(1)
+    expect(jobCapacityOf({ type: 'farm', status: 'underConstruction' })).toBe(0)
     expect(jobCapacityOf({ type: 'residence', status: 'operational' })).toBe(0)
     expect(isOperationalWorkshop({ type: 'workshop', status: 'underConstruction' })).toBe(false)
   })
@@ -624,8 +625,9 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
   it('reports sustainable when production equals consumption', () => {
     let state = twoColonistState()
     state = stepSimulation(state, place('farm', 6, 6))
+    state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
     state = stepSimulation(state)
-    expect(getJobCapacity(state)).toBe(0)
+    expect(getJobCapacity(state)).toBe(1)
     expect(getFoodConsumptionPerTick(state)).toBe(2)
     expect(state.resources.food).toBeGreaterThan(0)
     expect(getFoodTicksRemaining(state)).toBeNull()
@@ -635,15 +637,20 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
   it('reports sustainable when production exceeds consumption', () => {
     let state = colonistState()
     state = stepSimulation(state, place('farm', 6, 6))
+    state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
     state = stepSimulation(state)
     expect(getFoodTicksRemaining(state)).toBeNull()
     expect(isFoodSupplySustainable(state)).toBe(true)
   })
 
   it('never claims a finite starvation time on a non-negative net flow', () => {
-    let state = withFood(colonistState(), 0)
-    state = stepSimulation(state, place('farm', 6, 6))
-    state = stepSimulation(state)
+    // Step 10E timing: the completing farm is staffed tick 4 but produces
+    // from tick 5, so the colony needs a 2-food buffer to survive the gap.
+    let state = withFood(colonistState(), 2)
+    state = stepSimulation(state, place('farm', 6, 6)) // t3: eat 1 -> 1
+    state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
+    state = stepSimulation(state) // t4: farm op + assigned; eat 1 -> 0
+    state = stepSimulation(state) // t5: +2 produced, 1 eaten -> 1
     expect(state.resources.food).toBeGreaterThanOrEqual(0)
     expect(getFoodTicksRemaining(state)).toBeNull()
     expect(isFoodSupplySustainable(state)).toBe(true)

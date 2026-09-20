@@ -26,7 +26,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  assignJobs,
   consumeFood,
+  countWorkersAt,
   createBuilding,
   createColonist,
   createRoads,
@@ -176,24 +178,51 @@ describe('contract — food need', () => {
   })
 })
 
+/** Residence + colonist + farm sharing one road contact, worker assigned. */
+const staffedFarmFixture = (): {
+  state: SimulationState
+  residenceId: string
+  farmId: string
+  colonistId: string
+} => {
+  let state = createTestState()
+  const residence = operationalBuilding(state, 'residence', 1, 1)
+  state = residence.state
+  const colonist = withColonist(state, residence.id)
+  state = colonist.state
+  const farm = operationalBuilding(state, 'farm', 1, 3)
+  state = farm.state
+  state = roads(state, [{ x: 1, y: 2 }]) // shared contact: distance 0
+  state = assignJobs(state)
+  return {
+    state,
+    residenceId: residence.id,
+    farmId: farm.id,
+    colonistId: colonist.id,
+  }
+}
+
 describe('contract — food production', () => {
-  it('3 — production = operational farms x 2', () => {
+  it('3 — production = staffed farms x 2; vacant farms produce 0 (Step 10E)', () => {
     let state = createTestState()
     expect(foodProductionForTick(state)).toBe(0)
     const f1 = operationalBuilding(state, 'farm', 2, 2)
     state = f1.state
-    expect(foodProductionForTick(state)).toBe(FOOD_PER_FARM_PER_TICK)
-    const f2 = operationalBuilding(state, 'farm', 6, 6)
-    state = f2.state
-    expect(foodProductionForTick(state)).toBe(2 * FOOD_PER_FARM_PER_TICK)
+    // Vacant farm: operational but 0 production.
+    expect(foodProductionForTick(state)).toBe(0)
+    // Staffed farm: 2 per tick.
+    const staffed = staffedFarmFixture()
+    expect(foodProductionForTick(staffed.state)).toBe(FOOD_PER_FARM_PER_TICK)
+    expect(countWorkersAt(staffed.state, staffed.farmId)).toBe(1)
     // Under-construction farms produce nothing.
     const pending = createBuilding(state, 'farm', 1, 6, 2)
     state = pending.state
-    expect(foodProductionForTick(state)).toBe(2 * FOOD_PER_FARM_PER_TICK)
+    expect(foodProductionForTick(state)).toBe(0)
   })
 
-  it('4 — production is computed from operational farms only (no road input)', () => {
-    // Same farm, roadless vs roaded: identical production.
+  it('4 — farm road access alone never produces; only staffing does (Step 10E)', () => {
+    // Same farm, roadless vs roaded, both vacant: identical 0 production.
+    // (Step 10E: the farm gate is worker eligibility, never road access.)
     const roadless = operationalBuilding(
       createTestState(),
       'farm',
@@ -204,7 +233,8 @@ describe('contract — food production', () => {
       operationalBuilding(createTestState(), 'farm', 2, 2).state,
       [{ x: 3, y: 2 }]
     )
-    expect(foodProductionForTick(roadless)).toBe(foodProductionForTick(roaded))
+    expect(foodProductionForTick(roadless)).toBe(0)
+    expect(foodProductionForTick(roaded)).toBe(0)
     expect(produceFood(roadless).resources.food).toBe(
       produceFood(roaded).resources.food
     )
@@ -285,9 +315,8 @@ describe('contract — population consequence', () => {
   })
 
   it('12 — food-derived observations never alter canonical state', () => {
-    let state = housedColonist().state
-    const farm = operationalBuilding(state, 'farm', 3, 3)
-    state = farm.state
+    const staffed = staffedFarmFixture()
+    const state = staffed.state
     const before = serializeCanonicalState(state)
     expect(updateNeeds(state)).toBe(1)
     expect(foodProductionForTick(state)).toBe(2)
@@ -314,6 +343,7 @@ describe('transport anti-coupling', () => {
         { x: 2, y: 1 },
         { x: 3, y: 1 },
         { x: 4, y: 1 },
+        { x: 5, y: 1 },
       ])
     } else if (variant === 'loop') {
       state = roads(state, [
@@ -326,16 +356,23 @@ describe('transport anti-coupling', () => {
     return state
   }
 
-  it('13 — A: farm without road produces and feeds normally', () => {
+  it('13 — A: farm without road cannot be staffed (production 0, need persists)', () => {
+    // Step 10E: the farm gate is worker eligibility (mobility), never road
+    // access. Without roads the colonist cannot reach the farm: vacant.
     const state = colony('no-road')
-    expect(foodProductionForTick(state)).toBe(2)
+    expect(foodProductionForTick(state)).toBe(0)
     const after = runFullChain(state)
+    // The colonist still has a need and eats from stock: need persists.
     expect(getPopulationCount(after)).toBe(1)
-    expect(after.resources.food).toBe(INITIAL_FOOD + 2 - 1)
+    expect(after.resources.food).toBe(INITIAL_FOOD - 1)
   })
 
-  it('14 — B: the same farm with a road behaves identically', () => {
-    const after = runFullChain(colony('straight'))
+  it('14 — B: the same farm with a road is staffed (production 2)', () => {
+    // Straight roads connect residence (1,1) to farm (6,1): the colonist is
+    // assigned during the tick and the staffed farm produces next phase.
+    const connected = assignJobs(colony('straight'))
+    expect(foodProductionForTick(connected)).toBe(2)
+    const after = runFullChain(connected)
     expect(getPopulationCount(after)).toBe(1)
     expect(after.resources.food).toBe(INITIAL_FOOD + 2 - 1)
   })
@@ -373,23 +410,42 @@ describe('transport anti-coupling', () => {
     }
   })
 
-  it('farm output is identical in roadless vs fully networked colonies', () => {
-    const roadless = operationalBuilding(createTestState(), 'farm', 2, 2).state
-    const networked = roads(
-      operationalBuilding(createTestState(), 'farm', 2, 2).state,
-      [
-        { x: 1, y: 2 },
-        { x: 2, y: 1 },
-        { x: 3, y: 2 },
-        { x: 2, y: 3 },
-      ]
+  it('farm output is identical across staffed colonies (roads enable, never gate)', () => {
+    // Two colonies, different road layouts, both staffing their farm:
+    // identical +2 output. Roads enable staffing; they never gate the farm.
+    const colonyA = (() => {
+      let state = createTestState()
+      const residence = operationalBuilding(state, 'residence', 1, 1)
+      state = residence.state
+      const colonist = withColonist(state, residence.id)
+      state = colonist.state
+      const farm = operationalBuilding(state, 'farm', 1, 3)
+      state = farm.state
+      return assignJobs(roads(state, [{ x: 1, y: 2 }]))
+    })()
+    const colonyB = (() => {
+      let state = createTestState()
+      const residence = operationalBuilding(state, 'residence', 3, 3)
+      state = residence.state
+      const colonist = withColonist(state, residence.id)
+      state = colonist.state
+      const farm = operationalBuilding(state, 'farm', 5, 3)
+      state = farm.state
+      return assignJobs(
+        roads(state, [
+          { x: 4, y: 3 },
+          { x: 3, y: 2 },
+        ])
+      )
+    })()
+    expect(foodProductionForTick(colonyA)).toBe(2)
+    expect(foodProductionForTick(colonyB)).toBe(2)
+    expect(produceFood(colonyA).resources.food).toBe(
+      produceFood(colonyB).resources.food
     )
-    expect(foodProductionForTick(roadless)).toBe(foodProductionForTick(networked))
-    const afterRoadless = produceFood(roadless)
-    const afterNetworked = produceFood(networked)
-    // Identical food result (the states themselves legitimately differ by roads).
-    expect(afterRoadless.resources.food).toBe(afterNetworked.resources.food)
-    expect(afterRoadless.resources.food).toBe(INITIAL_FOOD + FOOD_PER_FARM_PER_TICK)
+    expect(produceFood(colonyA).resources.food).toBe(
+      INITIAL_FOOD + FOOD_PER_FARM_PER_TICK
+    )
   })
 })
 
@@ -398,16 +454,19 @@ describe('transport anti-coupling', () => {
 // ---------------------------------------------------------------------------
 
 describe('tick ordering', () => {
-  it('production happens before consumption: a farm operational this tick prevents starvation', () => {
-    // Colonist alive, food 0, farm completes THIS tick: same-tick output feeds.
+  it('staffed production happens before consumption: a staffed farm feeds this tick', () => {
+    // Step 10E: the farm must already be staffed when produceFood runs
+    // (assignment from a previous tick). Staffed farm: +2 then -1.
     let state = createTestState()
     state = { ...state, resources: { ...state.resources, food: 0 } }
     const residence = operationalBuilding(state, 'residence', 1, 1)
     state = residence.state
     const colonist = withColonist(state, residence.id)
     state = colonist.state
-    const farm = operationalBuilding(state, 'farm', 5, 5)
+    const farm = operationalBuilding(state, 'farm', 1, 3)
     state = farm.state
+    state = roads(state, [{ x: 1, y: 2 }])
+    state = assignJobs(state) // staffed now
     const after = runFullChain(state)
     // produceFood ran before consumeFood: +2 then -1.
     expect(after.resources.food).toBe(1)

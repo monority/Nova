@@ -13,6 +13,7 @@ import {
 import { countEmployedWorkers } from '../../domain/jobs/jobs.js'
 import {
   countOperationalFarms,
+  countStaffedOperationalFarms,
   countStaffedOperationalWorkshops,
   materialProductionForTick,
   materialStorageCapacityForTick,
@@ -24,11 +25,34 @@ export const getResourceStock = (state: SimulationState): ResourceStock =>
   state.resources
 
 /**
- * Deterministic farm output per tick (Step 06B Part B). Pure derivation over
- * canonical state: operational farms × fixed output. Never stored.
+ * Deterministic farm output per tick (Step 06B Part B, staffed-only since
+ * Step 10E §7). Pure derivation over canonical state: staffed operational
+ * farms × fixed output. Never stored. Single source of truth: the
+ * simulation phase (`foodProductionForTick`).
  */
 export const getFoodProductionPerTick = (state: SimulationState): number =>
-  countOperationalFarms(state) * FOOD_PER_FARM_PER_TICK
+  countStaffedOperationalFarms(state) * FOOD_PER_FARM_PER_TICK
+
+/**
+ * Productive Farm workers this tick (Step 10E §10): colonists assigned to
+ * operational Farm capacity — the ONLY labor that produces Food. Thin
+ * derived counting over the canonical employment relation, mirroring
+ * getProductiveWorkerCount (which stays Workshop/Material-scoped so the UI
+ * message "X workers produced Y material" keeps its contract). Derived,
+ * never stored, never persisted, never hashed.
+ */
+export const getProductiveFarmWorkerCount = (
+  state: SimulationState
+): number => countStaffedOperationalFarms(state)
+
+/**
+ * Vacant operational Farms this tick (Step 10E §10): operational with no
+ * worker — they produce 0 Food. Derived, never stored/persisted/hashed.
+ */
+export const getVacantOperationalFarmCount = (
+  state: SimulationState
+): number =>
+  countOperationalFarms(state) - countStaffedOperationalFarms(state)
 
 /** Deterministic colony food demand per tick: population × 1 (Step 05B). */
 export const getFoodConsumptionPerTick = (state: SimulationState): number =>

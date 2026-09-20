@@ -14,7 +14,7 @@
 
 import type { BuildingInspection, BuildingType, SimulationConfig, SimulationState } from '../index.js'
 import {
-  countOperationalFarms,
+  countStaffedOperationalWorkshops,
   countWorkersAt,
   createInitialState,
   FOOD_PER_FARM_PER_TICK,
@@ -23,14 +23,15 @@ import {
   getBuildingInspection,
   getAccessibleBuildingCount,
   getEmploymentSummary,
-  getFoodProductionPerTick,
   getFoodTicksRemaining,
+  getProductiveFarmWorkerCount,
   getHousingSummary,
   getMaterialProductionPerTick,
   getMaterialStorageCapacity,
   getMaterialStoredProductionPerTick,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
+  getVacantOperationalFarmCount,
   getNetMaterialPerTick,
   getBuildingRoadAccess,
   getColonistWorkMobility,
@@ -144,10 +145,14 @@ const refreshInspection = (): void => {
     if (building === null) {
       ui.insHousing.textContent = ''
     } else if (building.type === 'farm') {
+      // Step 10E §7: a Farm produces only when staffed. Vacant shows 0.
+      const farmWorkers = countWorkersAt(controller.getState(), building.id)
       ui.insHousing.textContent =
-        building.status === 'operational'
-          ? `Food production — producing +${FOOD_PER_FARM_PER_TICK}/tick`
-          : 'Food production — not operational yet'
+        building.status === 'operational' && farmWorkers > 0
+          ? `Food production — producing +${FOOD_PER_FARM_PER_TICK}/tick (staffed)`
+          : building.status === 'operational'
+            ? 'Food production — vacant, producing +0/tick'
+            : 'Food production — not operational yet'
     } else if (building.type === 'workshop') {
       // Step 07C §12: job capacity is a Workshop property (1 once
       // operational); workers are derived from colonist assignments.
@@ -335,14 +340,30 @@ const refreshUi = (): void => {
   } else if (prevColonists > 0) {
     // Causal readout from observable state only (Step 07C §12 composes the
     // existing food messages with the new employment/material causes).
-    // Consumption: what left the stock besides this tick's farm output.
-    // (Starvation ticks are handled above; here the colony was fed.)
-    const produced = getFoodProductionPerTick(s)
-    const consumed = prevFood + produced - food
+    // (Starvation ticks are handled above; here the colony was fed and its
+    // population is unchanged, so consumption is exactly the food need.)
+    //
+    // Step 10E timing: produceFood runs BEFORE assignJobs, so this tick's
+    // food inflow came from the PREVIOUS tick's assignment — reading the
+    // current assignment would credit production one tick early and inflate
+    // "consumed". Derive the inflow from the measured delta instead:
+    //   delta = produced_applied - consumed_applied
+    const consumed = prevColonists
+    const produced = food - prevFood + consumed
     const material = getMaterialProductionPerTick(s)
     const parts: string[] = []
     if (employment.employed > prevEmployed) {
-      parts.push('Colonist assigned to Workshop')
+      // Step 10E: Farms joined the workplace pool, so report the type(s) that
+      // actually hold workers instead of always claiming "Workshop".
+      const staffedFarms = getProductiveFarmWorkerCount(s)
+      const staffedWorkshops = countStaffedOperationalWorkshops(s)
+      parts.push(
+        staffedFarms > 0 && staffedWorkshops > 0
+          ? 'Colonists assigned to Farm and Workshop'
+          : staffedFarms > 0
+            ? 'Colonist assigned to Farm'
+            : 'Colonist assigned to Workshop'
+      )
     }
     if (consumed > 0) {
       parts.push(
@@ -350,7 +371,7 @@ const refreshUi = (): void => {
       )
     }
     if (produced > 0) {
-      const farms = countOperationalFarms(s)
+      const farms = produced / FOOD_PER_FARM_PER_TICK
       parts.push(`${pluralize(farms, 'farm')} produced ${produced} food`)
     }
     if (material > 0) {
@@ -701,7 +722,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -800,6 +821,20 @@ window.__nova = {
         .map((b) => b.id)
         .sort()
         .join(','),
+      // Step 10E: Farm workplaces joined the employment pool, so the same
+      // minimal observable identity is exposed for Farms (diagnostic only,
+      // never persisted, never hashed).
+      farmIds: Object.values(state.buildings)
+        .filter((b) => b.type === 'farm')
+        .map((b) => b.id)
+        .sort()
+        .join(','),
+      staffedFarmIds: Object.values(state.buildings)
+        .filter((b) => b.type === 'farm' && countWorkersAt(state, b.id) > 0)
+        .map((b) => b.id)
+        .sort()
+        .join(','),
+      vacantOperationalFarms: String(getVacantOperationalFarmCount(state)),
       colonists: ui.colonists?.textContent ?? '',
       jobs: ui.jobs?.textContent ?? '',
       employed: String(employment.employed),

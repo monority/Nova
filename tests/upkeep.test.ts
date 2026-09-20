@@ -75,10 +75,13 @@ const untilAffordable = (state: SimulationState): SimulationState => {
  * staffed Workshop equilibrates at stock 24 (below the 25 build cost), so
  * the second Workshop is built from bootstrap funds first; worker income
  * (+1/tick under the 50 capacity, growing with staffing) funds the rest.
- * Food sustained with two farms.
+ * Step 10E: food is pre-stocked (farms now require a worker).
  */
 const staffedState = (n: number): SimulationState => {
-  let state = createTestState()
+  // Step 10E: material fixtures isolate the variable they measure. Farms now
+  // require a worker, so food is pre-stocked instead of produced by free
+  // farms — population, staffing and every material number stay untouched.
+  let state = withFood(createTestState(), 100000)
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3
@@ -87,12 +90,6 @@ const staffedState = (n: number): SimulationState => {
   state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: second operational, stock 25
-  state = untilAffordable(state)
-  state = stepSimulation(state, place('farm', 6, 6))
-  state = stepSimulation(state)
-  state = untilAffordable(state)
-  state = stepSimulation(state, place('farm', 7, 7))
-  state = stepSimulation(state)
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))

@@ -332,6 +332,19 @@ export interface BuildingRoadAccess {
 export const getBuildingRoadAccess = (
   state: SimulationState,
   buildingId: string
+): BuildingRoadAccess =>
+  getBuildingRoadAccessWithNetworks(state, buildingId, getRoadNetworks(state))
+
+/**
+ * Road access of one building against PRECOMPUTED 09D networks (Step 10D
+ * perf: identical result to `getBuildingRoadAccess`, but the caller supplies
+ * the networks once instead of recomputing them per building. Pure and
+ * deterministic like the single-building variant.
+ */
+export const getBuildingRoadAccessWithNetworks = (
+  state: SimulationState,
+  buildingId: string,
+  networks: readonly (readonly string[])[],
 ): BuildingRoadAccess => {
   const building = state.buildings[buildingId]
   if (building === undefined || building.status !== 'operational') {
@@ -349,7 +362,7 @@ export const getBuildingRoadAccess = (
   // Reuse 09D connectivity (no second graph): map each access road to its
   // network, identified by the network's lowest road id.
   const networkIdByRoad = new Map<string, string>()
-  for (const network of getRoadNetworks(state)) {
+  for (const network of networks) {
     const networkId = network[0]
     if (networkId === undefined) {
       continue

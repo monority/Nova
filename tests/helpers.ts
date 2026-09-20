@@ -1,4 +1,8 @@
 import {
+  assignJobs,
+  countWorkersAt,
+  createBuilding,
+  createColonist,
   createInitialState,
   createRoads,
   getBuildingRoadAccess,
@@ -168,6 +172,78 @@ const connectBuildingToNearest = (
   return state
 }
 
+/**
+ * Ensure every operational Farm has a worker (Step 10E: a Farm produces only
+ * when staffed). For each vacant operational farm, inject a farmer residence
+ * adjacent to the farm plus one colonist, with a shared operational road cell
+ * so the farmer's nearest workplace is that farm (distance 0). Injection is a
+ * direct domain operation — no cost, no tick, no resource change — the same
+ * convention as `withRoadsForWorkshops`, so material/upkeep/storage numbers in
+ * existing fixtures stay untouched. Returns the state with `assignJobs`
+ * applied so the injected farmers are actually staffed.
+ *
+ * Fixtures that assert exact population/employment counts must NOT use this
+ * helper: it adds one colonist per staffed farm. Prefer a pre-stocked food
+ * buffer there instead (material fixtures isolate the variable they measure).
+ */
+export const withStaffedFarms = (state: SimulationState): SimulationState => {
+  let next = state
+  const farms = [...iterateBuildings(next)].filter(
+    (building) => building.type === 'farm' && building.status === 'operational'
+  )
+  for (const farm of farms) {
+    if (countWorkersAt(next, farm.id) > 0) {
+      continue
+    }
+    // Shared contact road: first free orthogonal neighbour of the farm.
+    const roadCell = NEIGHBOR_DELTAS.map(([dx, dy]) => ({
+      x: farm.x + dx,
+      y: farm.y + dy,
+    })).find((cell) => isCellFree(next, cell))
+    if (roadCell === undefined) {
+      continue
+    }
+    next = placeOperationalRoad(next, roadCell)
+    // Farmer residence: first free orthogonal neighbour of the road (not the
+    // farm itself), so the farm is at road distance 0 from the residence.
+    const residenceCell = NEIGHBOR_DELTAS.map(([dx, dy]) => ({
+      x: roadCell.x + dx,
+      y: roadCell.y + dy,
+    })).find(
+      (cell) =>
+        isCellFree(next, cell) && !(cell.x === farm.x && cell.y === farm.y)
+    )
+    if (residenceCell === undefined) {
+      continue
+    }
+    const created = createBuilding(
+      next,
+      'residence',
+      residenceCell.x,
+      residenceCell.y,
+      0
+    )
+    next = created.state
+    const building = next.buildings[created.buildingId]
+    if (building === undefined) {
+      continue
+    }
+    next = {
+      ...next,
+      buildings: {
+        ...next.buildings,
+        [created.buildingId]: {
+          ...building,
+          status: 'operational',
+          constructionRemaining: 0,
+        },
+      },
+    }
+    next = createColonist(next, created.buildingId).state
+  }
+  return assignJobs(next)
+}
+
 /** Road cells currently present in canonical state. */
 const roadCells = (state: SimulationState): CellCoordinate[] =>
   Object.values(state.roads).map((road) => ({ x: road.x, y: road.y }))
@@ -193,10 +269,14 @@ export const withRoadsForWorkshops = (state: SimulationState): SimulationState =
   const buildings = [...iterateBuildings(state)]
   const residences = buildings.filter((b) => b.type === 'residence')
   const workshops = buildings.filter((b) => b.type === 'workshop')
+  // Step 10E: Farms are workplaces too — they need road access for staffing.
+  const farms = buildings.filter((b) => b.type === 'farm')
+  const production = [...workshops, ...farms]
 
-  // Connect each workshop to an existing road (or, first time, a residence).
-  for (const workshop of workshops) {
-    if (getBuildingRoadAccess(next, workshop.id).hasRoadAccess) {
+  // Connect each production building to an existing road (or, first time,
+  // a residence).
+  for (const workplace of production) {
+    if (getBuildingRoadAccess(next, workplace.id).hasRoadAccess) {
       continue
     }
     const roads = roadCells(next)
@@ -208,7 +288,7 @@ export const withRoadsForWorkshops = (state: SimulationState): SimulationState =
       // Synthetic fixtures (no residence): legacy 09F behavior — place one
       // adjacent operational road so production eligibility can be tested.
       for (const [dx, dy] of NEIGHBOR_DELTAS) {
-        const cell = { x: workshop.x + dx, y: workshop.y + dy }
+        const cell = { x: workplace.x + dx, y: workplace.y + dy }
         if (!isCellFree(next, cell)) {
           continue
         }
@@ -217,10 +297,10 @@ export const withRoadsForWorkshops = (state: SimulationState): SimulationState =
       }
       continue
     }
-    next = connectBuildingToNearest(next, workshop, targets)
+    next = connectBuildingToNearest(next, workplace, targets)
   }
 
-  // Connect each residence to an existing road (or a workshop).
+  // Connect each residence to an existing road (or a production building).
   for (const residence of residences) {
     if (getBuildingRoadAccess(next, residence.id).hasRoadAccess) {
       continue
@@ -229,7 +309,7 @@ export const withRoadsForWorkshops = (state: SimulationState): SimulationState =
     const targets: CellCoordinate[] =
       roads.length > 0
         ? roads
-        : workshops.map((w) => ({ x: w.x, y: w.y }))
+        : production.map((w) => ({ x: w.x, y: w.y }))
     next = connectBuildingToNearest(next, residence, targets)
   }
 
