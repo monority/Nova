@@ -44,7 +44,10 @@ import {
   iterateColonists,
 } from '../housing/housing.js'
 import { countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
-import { areBuildingsMobilityConnected } from '../mobility/mobility.js'
+import {
+  areBuildingsMobilityConnected,
+  getRoadDistanceBetweenBuildings,
+} from '../mobility/mobility.js'
 import type { ColonistState } from '../population/colonist.js'
 import {
   getBuildingRoadAccess,
@@ -528,26 +531,25 @@ export const updatePopulation = (
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic job assignment (Step 07C §4, mobility gate Step 09K). Exactly:
+ * Deterministic job assignment (Step 07C §4, mobility gate Step 09K,
+ * spatial preference Step 09M). One greedy pass over colonists in ascending
+ * id, each colonist taking at most one Workshop:
  *
- *   1. any colonist whose `workplaceId` refers to a missing, non-operational
- *      or non-workshop building becomes unemployed (`workplaceId = null`);
- *   2. existing valid assignments are preserved untouched — employment never
- *      churns from one tick to the next;
- *   3. unemployed colonists (ascending colonist id) fill available operational
- *      Workshops (ascending building id), one colonist per Workshop;
- *   4. surplus colonists stay unemployed and surplus Workshops stay vacant.
+ *   1. eligible Workshops are operational, still free, and mobility-
+ *      connected to the colonist's residence (09K gate, unchanged);
+ *   2. among those, the preferred Workshop is the one at the SMALLEST
+ *      operational road distance from the residence (09M), tie-broken by the
+ *      smallest Workshop id;
+ *   3. an existing assignment is preserved when it is still eligible AND
+ *      still among the nearest — no unnecessary churn — and is otherwise
+ *      re-evaluated against the CURRENT road network;
+ *   4. no distance, eligibility or network fact is cached or persisted, so
+ *      connectivity and preference changes are reflected on the next tick.
  *
- * Step 09K adds one eligibility predicate to steps 1 and 3 without changing
- * the ordering: a colonist keeps or receives a workplace only while their
- * residence and that Workshop share an operational road network
- * (`areBuildingsMobilityConnected`). A lost connection clears the stored
- * `workplaceId` — the existing unemployed representation, no second flag —
- * and a regained connection makes the pair eligible again next tick.
- *
- * No randomness, no distance, no proximity, no skill, no priority, no player
- * assignment command. Pure: returns the input state reference when nothing
- * changes.
+ * Capacity stays 1 per Workshop: the ascending colonist-id scan plus the
+ * taken-set can never place two colonists in one Workshop. Colonists without
+ * a residence stay unemployed. Pure: returns the input state reference when
+ * nothing changes.
  */
 export const assignJobs = (state: SimulationState): SimulationState => {
   const colonists = [...iterateColonists(state)]
@@ -558,64 +560,68 @@ export const assignJobs = (state: SimulationState): SimulationState => {
   const availableWorkshopIds = [...iterateBuildings(state)]
     .filter(isOperationalWorkshop)
     .map((building) => building.id)
-  const operationalWorkshopIds = new Set(availableWorkshopIds)
   const takenWorkplaceIds = new Set<string>()
 
   const nextColonists: Record<string, ColonistState> = {}
   let changed = false
 
-  // Steps 1-2: drop invalid references, never allow two workers in one
-  // Workshop, and keep every still-valid assignment as it is. Step 09K:
-  // "still valid" additionally requires residence–workplace mobility — a
-  // disconnected worker is cleared to `null` here, never left stale.
   for (const colonist of colonists) {
-    const workplaceId = colonist.workplaceId
     const residenceId = colonist.residenceId
-    let resolvedWorkplaceId: string | null = null
-    if (
-      workplaceId !== null &&
-      residenceId !== null &&
-      operationalWorkshopIds.has(workplaceId) &&
-      !takenWorkplaceIds.has(workplaceId) &&
-      areBuildingsMobilityConnected(state, residenceId, workplaceId)
-    ) {
-      resolvedWorkplaceId = workplaceId
-      takenWorkplaceIds.add(workplaceId)
+    let selected: string | null = null
+
+    if (residenceId !== null) {
+      // 09K eligibility gate: operational, free, mobility-connected.
+      const eligible: { readonly id: string; readonly distance: number }[] = []
+      for (const workshopId of availableWorkshopIds) {
+        if (takenWorkplaceIds.has(workshopId)) {
+          continue
+        }
+        if (!areBuildingsMobilityConnected(state, residenceId, workshopId)) {
+          continue
+        }
+        const distance = getRoadDistanceBetweenBuildings(
+          state,
+          residenceId,
+          workshopId
+        )
+        if (distance === null) {
+          continue
+        }
+        eligible.push({ id: workshopId, distance })
+      }
+
+      if (eligible.length > 0) {
+        // 09M preference: nearest operational road distance, then lowest id.
+        let best = eligible[0]!
+        for (const candidate of eligible) {
+          const nearer = candidate.distance < best.distance
+          const tiedAndLowerId =
+            candidate.distance === best.distance && candidate.id < best.id
+          if (nearer || tiedAndLowerId) {
+            best = candidate
+          }
+        }
+        // Preserve the current assignment when it is still optimal (tied at
+        // the minimum distance included), so a stable network never churns.
+        const current = colonist.workplaceId
+        const currentIsOptimal =
+          current !== null &&
+          eligible.some(
+            (candidate) =>
+              candidate.id === current && candidate.distance === best.distance
+          )
+        const chosen = currentIsOptimal && current !== null ? current : best.id
+        selected = chosen
+        takenWorkplaceIds.add(chosen)
+      }
     }
-    if (resolvedWorkplaceId === workplaceId) {
+
+    if (selected === colonist.workplaceId) {
       nextColonists[colonist.id] = colonist
     } else {
-      nextColonists[colonist.id] = { ...colonist, workplaceId: resolvedWorkplaceId }
+      nextColonists[colonist.id] = { ...colonist, workplaceId: selected }
       changed = true
     }
-  }
-
-  // Steps 3-4: fill vacancies. Colonists are iterated in ascending id order
-  // and vacancies are consumed in ascending Workshop id order — Step 09K:
-  // each unemployed colonist takes the first vacancy their residence is
-  // mobility-connected to, skipping workshops on other networks. Colonists
-  // without a residence are never eligible.
-  const vacancies = availableWorkshopIds.filter(
-    (workshopId) => !takenWorkplaceIds.has(workshopId)
-  )
-  for (const colonist of colonists) {
-    const current = nextColonists[colonist.id]
-    if (current === undefined || current.workplaceId !== null) {
-      continue
-    }
-    const residenceId = current.residenceId
-    if (residenceId === null) {
-      continue
-    }
-    const eligible = vacancies.find((workshopId) =>
-      areBuildingsMobilityConnected(state, residenceId, workshopId)
-    )
-    if (eligible === undefined) {
-      continue
-    }
-    vacancies.splice(vacancies.indexOf(eligible), 1)
-    nextColonists[colonist.id] = { ...current, workplaceId: eligible }
-    changed = true
   }
 
   if (!changed) {

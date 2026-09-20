@@ -1,32 +1,41 @@
 /**
- * Residential-to-work mobility contract (Step 09G, employment gate Step 09K).
+ * Residential-to-work mobility contract (Step 09G, employment gate Step 09K,
+ * road-distance preference Step 09M).
  *
- * Answers one question only: does the road network currently offer a
- * continuity between a colonist's residence and that colonist's workplace?
+ * Answers two questions over the same derived road data:
+ *
+ *   1. does the road network currently offer a continuity between a
+ *      colonist's residence and that colonist's workplace? (09G/09K)
+ *   2. how far apart are two buildings along the operational road network?
+ *      (09M)
  *
  *   Colonist -> residenceId  -> Residence  -> 09E road access -> networkIds
  *   Colonist -> workplaceId  -> Workplace  -> 09E road access -> networkIds
  *   connected iff the two networkId sets intersect
+ *   distance  = shortest operational road path between any pair of contacts
  *
  * This is a spatial fact, not a movement model:
  *
  *   mobilityConnected  !=  "the colonist physically travels"
  *   mobilityConnected  ==  "the road network links both buildings right now"
+ *   roadDistance       ==  "how many road steps separate them right now"
  *
- * Deliberately absent (Step 09G §5/§11/§12/§14): distance, travel time,
- * pathfinding, vehicles, transit, congestion, commute penalties,
- * population/housing/production/food/upkeep effects. Step 09K adds exactly
- * one gameplay consequence on top of 09F: employment eligibility requires
- * mobility connectivity (enforced in `assignJobs`, never stored here).
+ * Deliberately absent (Step 09G §5/§11/§12/§14, Step 09M §23): travel time,
+ * speed, movement, pathfinding frameworks, vehicles, transit, congestion,
+ * commute penalties, population/housing/production/food/upkeep effects.
+ * Step 09K gates EMPLOYMENT on connectivity; Step 09M only orders the CHOICE
+ * among already-eligible workplaces by road distance (enforced in
+ * `assignJobs`, never stored here).
  *
  * Derived state only: nothing here is persisted, hashed, or stored, and no
  * cache is introduced. The single source of truth stays 09E
- * `getBuildingRoadAccess` — this module intersects its results, it never
- * re-derives adjacency or connectivity.
+ * `getBuildingRoadAccess` for contacts and 09D connectivity for reachability —
+ * this module intersects/measures its results, it never re-derives adjacency.
  */
 
 import {
   getBuildingRoadAccess,
+  getRoadDistance,
   type BuildingRoadAccess,
 } from '../road/road.js'
 import type { SimulationState } from '../simulation/state.js'
@@ -88,6 +97,43 @@ export const areBuildingsMobilityConnected = (
     return false
   }
   return haveSharedNetwork(accessA.networkIds, accessB.networkIds)
+}
+
+/**
+ * Shortest operational-road distance between two buildings (Step 09M).
+ *
+ * Contract: buildings are not road cells, so each side contributes its
+ * 09E contact roads (all orthogonally adjacent OPERATIONAL roads) and the
+ * distance is the minimum over every contact pair of the 09M road distance
+ * (`getRoadDistance`, BFS edges over operational roads only).
+ *
+ * Consequences, all deliberate:
+ * - two buildings sharing a contact road are at distance 0;
+ * - a residence adjacent to several roads is not penalised by the first
+ *   contact found: the minimum over all its contacts wins;
+ * - a Workshop adjacent to several roads is measured through its best
+ *   contact;
+ * - under-construction roads never contribute (09E excludes them);
+ * - `null` means "no operational road path" — the same condition as
+ *   `areBuildingsMobilityConnected` returning false.
+ *
+ * Pure, deterministic and derived only: it reads canonical state, is never
+ * persisted, never hashed, and never cached.
+ */
+export const getRoadDistanceBetweenBuildings = (
+  state: SimulationState,
+  buildingAId: string,
+  buildingBId: string
+): number | null => {
+  const accessA = getBuildingRoadAccess(state, buildingAId)
+  if (!accessA.hasRoadAccess) {
+    return null
+  }
+  const accessB = getBuildingRoadAccess(state, buildingBId)
+  if (!accessB.hasRoadAccess) {
+    return null
+  }
+  return getRoadDistance(state, accessA.roadIds, accessB.roadIds)
 }
 
 /** Absent/unresolvable endpoint: an explicit "no mobility relationship". */

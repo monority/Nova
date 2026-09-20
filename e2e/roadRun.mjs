@@ -254,6 +254,79 @@ async function main() {
     );
     await shot('04-roads-operational-production.png');
 
+    // ---------------------------------------------------------------------
+    // H. Step 09M: nearest-Workshop preference through the real UI.
+    //    Fresh city (3 buildings + 4 roads = 95 of 100 Material, leaving room
+    //    for upkeep). The FARTHER Workshop is placed first (lower id) and the
+    //    NEARER one second (higher id), so a lowest-id rule would pick the
+    //    wrong one. Both are made reachable, then the worker must move when a
+    //    shortcut makes the farther Workshop nearest.
+    // ---------------------------------------------------------------------
+    await page.goto(URL, { waitUntil: 'load' });
+    await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
+
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await placeBuilding(page, { x: 3, y: 3 });
+    await stepUntil(page, (v) => v.colonists === '1', 'H first colonist');
+
+    // FARTHER Workshop first -> lower id. Contact (5,4): 2 road steps away.
+    await selectPalette(page, 'build-workshop', 'Workshop selected');
+    await placeBuilding(page, { x: 5, y: 3 });
+    await stepUntil(
+      page,
+      (v) => v.workshops === '1' && v.operational === '2',
+      'H far Workshop operational'
+    );
+    // NEARER Workshop second -> higher id. Contact (3,5): 1 road step away.
+    await placeBuilding(page, { x: 3, y: 6 });
+    await stepUntil(
+      page,
+      (v) => v.workshops === '2' && v.operational === '3',
+      'H near Workshop operational'
+    );
+
+    // Roads: R(3,3)->(3,4)->(3,5) reaches the NEAR Workshop;
+    //        R(3,3)->(3,4)->(4,4)->(5,4) reaches the FAR one.
+    await selectPalette(page, 'build-road', 'Road selected');
+    await dragRoads(page, { x: 3, y: 4 }, { x: 3, y: 5 });
+    await dragRoads(page, { x: 4, y: 4 }, { x: 5, y: 4 });
+    await step(page);
+    s = await stats(page);
+    if (s.operationalRoads !== '4') fail(`H roads not operational: ${JSON.stringify(s)}`);
+
+    const workshopIds = s.workshopIds.split(',');
+    const farId = workshopIds[0];
+    const nearId = workshopIds[1];
+    if (farId === undefined || nearId === undefined) {
+      fail(`H could not identify Workshop ids: ${s.workshopIds}`);
+    } else if (s.employed !== '1') {
+      fail(`H expected exactly one worker: ${JSON.stringify(s)}`);
+    } else if (s.staffedWorkshopIds !== nearId) {
+      fail(
+        `H nearest Workshop must win over the lower id: staffed=${s.staffedWorkshopIds} near=${nearId} far=${farId}`
+      );
+    } else {
+      ok(
+        `H nearest Workshop staffed: ${nearId} (nearer, higher id) beats ${farId} (farther, lower id)`
+      );
+    }
+    await shot('05-nearest-workshop-selected.png');
+
+    // I. Reassignment: the shortcut (4,3) is a shared contact of the
+    //    residence AND the far Workshop, so its distance drops to 0 and the
+    //    worker must move there on the next tick.
+    await dragRoads(page, { x: 4, y: 3 }, { x: 4, y: 3 });
+    await step(page);
+    s = await stats(page);
+    if (s.staffedWorkshopIds !== farId) {
+      fail(
+        `I shortcut must reassign the worker to the far Workshop: staffed=${s.staffedWorkshopIds} far=${farId}`
+      );
+    } else {
+      ok(`I shortcut reassigned the worker to ${farId} (now at distance 0)`);
+    }
+    await shot('06-preference-reassigned.png');
+
     const realErrors = errors.filter((e) => !e.includes('favicon'));
     if (realErrors.length > 0) fail(`browser errors: ${realErrors.join(' | ')}`);
     else ok('zero console/page errors');

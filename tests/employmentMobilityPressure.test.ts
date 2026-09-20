@@ -372,9 +372,11 @@ describe('experiment B — two Residences / two Workshops', () => {
     expect(countWorkersAt(state, workshopB.id)).toBe(0)
   })
 
-  it('B3 — both Workshops reachable: creation order decides, not geometry', () => {
-    // R(1,1) + two Workshops on one shared road chain (1,2)..(5,2). Both are
-    // equally "reachable"; the FIRST-CREATED one always wins, wherever it is.
+  it('B3 — both Workshops reachable: the NEAREST wins, not the creation order (09M)', () => {
+    // R(1,1) + two Workshops on one shared road chain (1,2)..(5,2).
+    // Road distance: (3,1) is 2 steps away, (5,1) is 4 steps away, so the
+    // nearer Workshop wins in EITHER creation order. 09L recorded the
+    // pre-09M id-order tie-break; 09M replaces it with road distance.
     const bothReachable = (first: Cell, second: Cell) => {
       let state = createTestState()
       const residence = operationalBuilding(state, 'residence', 1, 1)
@@ -392,24 +394,27 @@ describe('experiment B — two Residences / two Workshops', () => {
       ])
       const colonist = withColonist(state, residence.id)
       state = colonist.state
+      const nearIsLeft = first.x === 3
       return {
         state,
         colonistId: colonist.id,
         firstId: firstBuilt.id,
         secondId: secondBuilt.id,
+        nearestId: nearIsLeft ? firstBuilt.id : secondBuilt.id,
       }
     }
 
-    // Left Workshop created first -> left wins.
-    const leftFirst = bothReachable({ x: 3, y: 1 }, { x: 5, y: 1 })
-    expect(settled(leftFirst.state).workplaceByColonist[leftFirst.colonistId]).toBe(
-      leftFirst.firstId
-    )
-    // Right Workshop created first -> right wins, same geometry.
-    const rightFirst = bothReachable({ x: 5, y: 1 }, { x: 3, y: 1 })
+    // Near Workshop created first -> near wins.
+    const nearFirst = bothReachable({ x: 3, y: 1 }, { x: 5, y: 1 })
     expect(
-      settled(rightFirst.state).workplaceByColonist[rightFirst.colonistId]
-    ).toBe(rightFirst.firstId)
+      settled(nearFirst.state).workplaceByColonist[nearFirst.colonistId]
+    ).toBe(nearFirst.nearestId)
+    // Far Workshop created first -> the NEAR one still wins.
+    const farFirst = bothReachable({ x: 5, y: 1 }, { x: 3, y: 1 })
+    expect(settled(farFirst.state).workplaceByColonist[farFirst.colonistId]).toBe(
+      farFirst.nearestId
+    )
+    expect(farFirst.nearestId).toBe(farFirst.secondId)
   })
 })
 
@@ -581,7 +586,7 @@ describe('experiment D — competing Workshops, one worker', () => {
     }
   }
 
-  it('D1 — the first-created reachable Workshop is staffed', () => {
+  it('D1 — the NEAREST reachable Workshop is staffed (09M)', () => {
     const fixture = competing({ x: 3, y: 1 }, { x: 5, y: 1 }, false)
     const f = settled(fixture.state)
     expect(f.employed).toBe(1)
@@ -593,14 +598,16 @@ describe('experiment D — competing Workshops, one worker', () => {
     expect(f.stored).toBe(0)
   })
 
-  it('D2 — reversing creation order moves the worker to the other Workshop', () => {
+  it('D2 — creation order is irrelevant: the nearest Workshop still wins (09M)', () => {
+    // Created far-first: 09L's id-order rule would pick the far Workshop;
+    // 09M picks the near one regardless of which was built first.
     const fixture = competing({ x: 5, y: 1 }, { x: 3, y: 1 }, false)
     const f = settled(fixture.state)
-    expect(f.workplaceByColonist[fixture.colonistId]).toBe(fixture.firstId)
-    expect(f.workerByWorkshop[fixture.secondId]).toBe(0)
+    expect(f.workplaceByColonist[fixture.colonistId]).toBe(fixture.secondId)
+    expect(f.workerByWorkshop[fixture.firstId]).toBe(0)
   })
 
-  it('D3 — road geometry does not affect which Workshop is chosen', () => {
+  it('D3 — a redundant spur does not change which Workshop is chosen', () => {
     const plain = settled(competing({ x: 3, y: 1 }, { x: 5, y: 1 }, false).state)
     const spurned = settled(competing({ x: 3, y: 1 }, { x: 5, y: 1 }, true).state)
     expect(spurned.networks).toBe(plain.networks)
@@ -1294,7 +1301,7 @@ describe('audit persistence and determinism', () => {
 // ---------------------------------------------------------------------------
 
 describe('audit classification summary', () => {
-  it('S1 — headline invariants: stranded labour, id-ordered choice, cost-only length', () => {
+  it('S1 — headline invariants: stranded labour, distance-ordered choice, cost-only length', () => {
     // (1) Road topology CAN strand an employable colonist (Experiment I2).
     let stranded = createTestState()
     const r1 = operationalBuilding(stranded, 'residence', 1, 1)
@@ -1315,8 +1322,9 @@ describe('audit classification summary', () => {
     expect(strandedFacts.unemployed).toBe(1)
     expect(strandedFacts.jobCapacity).toBe(2)
 
-    // (2) When two Workshops are reachable, the FIRST-CREATED one wins — the
-    //     selection is id-ordered, never geometry-ordered (Experiments B3/D).
+    // (2) When two Workshops are reachable, the NEAREST wins regardless of
+    //     which was created first (09M; 09L recorded the pre-09M id-order
+    //     behaviour, which 09M intentionally replaces).
     const competing = (firstIsLeft: boolean) => {
       let state = createTestState()
       const residence = operationalBuilding(state, 'residence', 1, 1)
@@ -1341,22 +1349,26 @@ describe('audit classification summary', () => {
       ])
       const colonist = withColonist(state, residence.id)
       state = colonist.state
+      // (3,1) is 2 road steps away; (5,1) is 4: the near one always wins.
+      const nearId = firstIsLeft ? firstBuilt.id : secondBuilt.id
+      const farId = firstIsLeft ? secondBuilt.id : firstBuilt.id
       return {
-        expected: firstBuilt.id,
-        secondId: secondBuilt.id,
+        expected: nearId,
+        farId,
         facts: settled(state),
         colonistId: colonist.id,
       }
     }
-    const leftFirst = competing(true)
-    expect(leftFirst.facts.workplaceByColonist[leftFirst.colonistId]).toBe(
-      leftFirst.expected
+    const nearFirst = competing(true)
+    expect(nearFirst.facts.workplaceByColonist[nearFirst.colonistId]).toBe(
+      nearFirst.expected
     )
-    expect(leftFirst.facts.workerByWorkshop[leftFirst.secondId]).toBe(0)
-    const rightFirst = competing(false)
-    expect(rightFirst.facts.workplaceByColonist[rightFirst.colonistId]).toBe(
-      rightFirst.expected
+    expect(nearFirst.facts.workerByWorkshop[nearFirst.farId]).toBe(0)
+    const farFirst = competing(false)
+    expect(farFirst.facts.workplaceByColonist[farFirst.colonistId]).toBe(
+      farFirst.expected
     )
+    expect(farFirst.facts.workerByWorkshop[farFirst.farId]).toBe(0)
 
     // (3) Length matters only through construction cost (Experiment H1).
     const short = validateRoadsPlacement(createTestState(), [{ x: 1, y: 2 }])

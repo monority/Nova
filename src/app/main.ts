@@ -785,6 +785,21 @@ window.__nova = {
         Object.values(state.buildings).filter((b) => b.type === 'workshop')
           .length
       ),
+      // Step 09M: minimal observable identity of the employment choice, so
+      // the browser E2E can verify WHICH Workshop a colonist works in.
+      // Ascending id order; diagnostic only, never persisted.
+      workshopIds: Object.values(state.buildings)
+        .filter((b) => b.type === 'workshop')
+        .map((b) => b.id)
+        .sort()
+        .join(','),
+      staffedWorkshopIds: Object.values(state.buildings)
+        .filter(
+          (b) => b.type === 'workshop' && countWorkersAt(state, b.id) > 0
+        )
+        .map((b) => b.id)
+        .sort()
+        .join(','),
       colonists: ui.colonists?.textContent ?? '',
       jobs: ui.jobs?.textContent ?? '',
       employed: String(employment.employed),

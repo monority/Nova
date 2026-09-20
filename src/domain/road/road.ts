@@ -233,6 +233,71 @@ export const getRoadNetworkCount = (state: SimulationState): number =>
   getRoadNetworks(state).length
 
 /**
+ * Shortest operational-road distance between two road sets (Step 09M).
+ *
+ * Distance contract: the minimum number of orthogonal road-to-road steps
+ * (edges) needed to travel from ANY source road to ANY target road, over
+ * OPERATIONAL roads only. Sharing a road cell yields 0; one intermediate
+ * road cell between the two ends yields 1; and so on. Under-construction or
+ * unknown roads never participate on either side.
+ *
+ * Multi-source / multi-target breadth-first search: every source starts at
+ * distance 0, sources and targets are deduplicated, and neighbours are
+ * discovered in ascending road-id order (`iterateRoads`), so the result is
+ * deterministic and independent of record insertion order, of which contact
+ * is encountered first, and of road-id allocation order. Returns null when
+ * no operational path links the two sets.
+ *
+ * This is the smallest primitive the 09M employment preference needs — a
+ * local BFS, not a generic pathfinder/graph abstraction.
+ */
+export const getRoadDistance = (
+  state: SimulationState,
+  sourceRoadIds: readonly string[],
+  targetRoadIds: readonly string[]
+): number | null => {
+  if (sourceRoadIds.length === 0 || targetRoadIds.length === 0) {
+    return null
+  }
+  const operational = [...iterateRoads(state)].filter(isOperationalRoad)
+  const byId = new Map<string, RoadState>(
+    operational.map((road) => [road.id, road])
+  )
+  const targets = new Set(targetRoadIds)
+  const distanceById = new Map<string, number>()
+  const queue: string[] = []
+  for (const id of sourceRoadIds) {
+    if (byId.has(id) && !distanceById.has(id)) {
+      distanceById.set(id, 0)
+      queue.push(id)
+    }
+  }
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const currentId = queue[cursor]!
+    const distance = distanceById.get(currentId)!
+    // BFS dequeues in non-decreasing distance order, so the first target
+    // reached carries the minimum distance.
+    if (targets.has(currentId)) {
+      return distance
+    }
+    const current = byId.get(currentId)
+    if (current === undefined) {
+      continue
+    }
+    for (const candidate of operational) {
+      if (
+        !distanceById.has(candidate.id) &&
+        areRoadsAdjacent(current, candidate)
+      ) {
+        distanceById.set(candidate.id, distance + 1)
+        queue.push(candidate.id)
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Building road access (Step 09E). A building has road access when at least
  * one orthogonally adjacent cell contains an OPERATIONAL road, and the
  * building itself is operational. Access is a local spatial relation; the

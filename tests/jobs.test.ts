@@ -232,7 +232,7 @@ describe('deterministic job assignment (Step 07C §4)', () => {
     expect(getEmploymentSummary(state).vacantJobs).toBe(1)
   })
 
-  it('multiple colonists / multiple workshops: deterministic id ordering', () => {
+  it('multiple colonists / multiple workshops: deterministic nearest-Workshop preference (09M)', () => {
     // Step 08F: storage clamp changes material flow, not assignment. Top up
     // the stock so this ordering test funds both placements deterministically.
     let state = withConstruction(twoColonistState(), 100) // t4
@@ -242,9 +242,13 @@ describe('deterministic job assignment (Step 07C §4)', () => {
     state = withConstruction(state, 100)
     state = stepSimulation(state, place('workshop', 0, 0)) // t7: building-4
     state = withRoadsForWorkshops(state) // 09K: mobility connection
-    state = stepSimulation(state) // t8: colonist-2 -> building-4
-    expect(state.colonists['colonist-1']?.workplaceId).toBe('building-3')
-    expect(state.colonists['colonist-2']?.workplaceId).toBe('building-4')
+    state = stepSimulation(state) // t8: nearest-Workshop preference
+    // Step 09M: among eligible Workshops the NEAREST road distance wins.
+    // Residence (2,2) is 4 road steps from building-4 (0,0) and 6 from
+    // building-3 (6,6), so colonist-1 takes building-4; residence (4,4) is
+    // then 2 steps from building-3, so colonist-2 takes it. Deterministic.
+    expect(state.colonists['colonist-1']?.workplaceId).toBe('building-4')
+    expect(state.colonists['colonist-2']?.workplaceId).toBe('building-3')
     expect(getEmploymentSummary(state)).toEqual({
       population: 2,
       employed: 2,
@@ -254,14 +258,20 @@ describe('deterministic job assignment (Step 07C §4)', () => {
     })
   })
 
-  it('preserves existing valid assignments instead of churning them', () => {
-    // A colonist already working in the higher-id workshop must stay there
-    // even though a lower-id workshop is vacant.
-    const state = withWorkplace(twoWorkshopState(), 'colonist-1', 'building-3')
-    const after = assignJobs(state)
-    expect(after).toBe(state)
-    expect(after.colonists['colonist-1']?.workplaceId).toBe('building-3')
-    expect(countWorkersAt(after, 'building-2')).toBe(0)
+  it('preserves an existing assignment while it remains the nearest Workshop (09M)', () => {
+    // The natural state already sits in the nearest Workshop: re-running
+    // assignJobs must be a no-op reference-for-reference (no churn).
+    const natural = twoWorkshopState()
+    expect(natural.colonists['colonist-1']?.workplaceId).toBe('building-2')
+    expect(assignJobs(natural)).toBe(natural)
+
+    // An assignment forced to the farther Workshop does NOT survive: the 09M
+    // spatial preference re-applies against the current network each tick.
+    const forced = withWorkplace(natural, 'colonist-1', 'building-3')
+    const after = assignJobs(forced)
+    expect(after).not.toBe(forced)
+    expect(after.colonists['colonist-1']?.workplaceId).toBe('building-2')
+    expect(countWorkersAt(after, 'building-3')).toBe(0)
   })
 
   it('clears a reference to a missing building', () => {
