@@ -1,5 +1,5 @@
 /**
- * Residential-to-work mobility contract (Step 09G).
+ * Residential-to-work mobility contract (Step 09G, employment gate Step 09K).
  *
  * Answers one question only: does the road network currently offer a
  * continuity between a colonist's residence and that colonist's workplace?
@@ -14,9 +14,10 @@
  *   mobilityConnected  ==  "the road network links both buildings right now"
  *
  * Deliberately absent (Step 09G §5/§11/§12/§14): distance, travel time,
- * pathfinding, vehicles, transit, congestion, commute penalties, job
- * eligibility changes, population/housing/production/food/upkeep effects.
- * Step 09F remains the only gameplay consequence of road access so far.
+ * pathfinding, vehicles, transit, congestion, commute penalties,
+ * population/housing/production/food/upkeep effects. Step 09K adds exactly
+ * one gameplay consequence on top of 09F: employment eligibility requires
+ * mobility connectivity (enforced in `assignJobs`, never stored here).
  *
  * Derived state only: nothing here is persisted, hashed, or stored, and no
  * cache is introduced. The single source of truth stays 09E
@@ -50,6 +51,44 @@ export interface ColonistWorkMobility {
 }
 
 const NO_NETWORKS: readonly string[] = []
+
+/**
+ * Shared-network test over two 09E network lists (Step 09G §7): a true set
+ * intersection, never "first network equals first network". Both lists
+ * arrive ascending-id sorted from 09E, so the result is deterministic.
+ */
+const haveSharedNetwork = (
+  residenceNetworks: readonly string[],
+  workplaceNetworks: readonly string[]
+): boolean => {
+  const workplaceSet = new Set(workplaceNetworks)
+  return residenceNetworks.some((networkId) => workplaceSet.has(networkId))
+}
+
+/**
+ * Pair-level mobility connectivity (Step 09K): are two buildings linked
+ * through at least one common operational road network right now?
+ *
+ * This is the single eligibility predicate behind both the colonist query
+ * below and the employment gate in `assignJobs` — one rule, not two.
+ * Unknown building ids resolve to empty network lists (09E), so they are
+ * simply never connected. Pure, deterministic, derived only.
+ */
+export const areBuildingsMobilityConnected = (
+  state: SimulationState,
+  buildingAId: string,
+  buildingBId: string
+): boolean => {
+  const accessA = getBuildingRoadAccess(state, buildingAId)
+  if (!accessA.hasRoadAccess) {
+    return false
+  }
+  const accessB = getBuildingRoadAccess(state, buildingBId)
+  if (!accessB.hasRoadAccess) {
+    return false
+  }
+  return haveSharedNetwork(accessA.networkIds, accessB.networkIds)
+}
 
 /** Absent/unresolvable endpoint: an explicit "no mobility relationship". */
 const noMobility = (
@@ -104,16 +143,15 @@ export const getColonistWorkMobility = (
     state,
     workplaceId
   )
-  const workplaceNetworks = new Set(workplace.networkIds)
-  const sharedNetworkIds = residence.networkIds.filter((networkId) =>
-    workplaceNetworks.has(networkId)
-  )
   return {
     colonistId,
     residenceId,
     workplaceId,
     residenceNetworkIds: residence.networkIds,
     workplaceNetworkIds: workplace.networkIds,
-    mobilityConnected: sharedNetworkIds.length > 0,
+    mobilityConnected: haveSharedNetwork(
+      residence.networkIds,
+      workplace.networkIds
+    ),
   }
 }

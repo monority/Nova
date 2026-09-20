@@ -17,6 +17,7 @@ import {
   areRoadsAdjacent,
   assignJobs,
   countEmployedWorkers,
+  countWorkersAt,
   createBuilding,
   createColonist,
   createRoads,
@@ -564,44 +565,57 @@ describe('multiple workplaces on one network (Step 09J §9)', () => {
     }
   }
 
-  it('I1 — the worker goes to the first-built Workshop, wherever the road is', () => {
-    // Road ONLY at the second-built Workshop: employment still lands on W_a.
+  it('I1 — worker assigned to first-built mobility-connected Workshop (09K)', () => {
+    // R(1,1) + colonist; W_a(3,3) first, W_b(5,5) second. Path from R to
+    // W_a plus a separate road at W_b — worker lands on W_a (first-built
+    // AND connected; W_b is road-served but disconnected from R → ineligible).
     const base = twoWorkshops()
-    let state = operationalRoad(base.state, 5, 4).state
-    state = assignJobs(state)
-    const colonist = state.colonists[base.colonistId]
-    expect(colonist?.workplaceId).toBe(base.workshopAId)
-    // Consequence: staffed roadless W_a produces 0 (upkeep 1); road-served
-    // W_b sits vacant. Identical road count, opposite outcome vs I2.
-    expect(materialProductionForTick(state)).toBe(0)
-    expect(materialUpkeepDueForTick(state)).toBe(1)
-  })
-
-  it('I2 — road at the first-built Workshop: same road count, production 2', () => {
-    const base = twoWorkshops()
-    let state = operationalRoad(base.state, 3, 2).state
+    let state = operationalRoads(base.state, [
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 3, y: 2 },
+      { x: 5, y: 4 },
+    ])
     state = assignJobs(state)
     expect(state.colonists[base.colonistId]?.workplaceId).toBe(
       base.workshopAId
     )
+    // W_b is road-served but disconnected from R → vacant, no production.
+    expect(countWorkersAt(state, base.workshopBId)).toBe(0)
     expect(materialProductionForTick(state)).toBe(2)
     expect(materialUpkeepDueForTick(state)).toBe(1)
   })
 
-  it('I3 — roads at both: employment unchanged, storage doubles (09I rule)', () => {
+  it('I2 — road at W_a but no residence road: no worker under 09K', () => {
+    // Road at W_a only — but R has no road → no mobility → no worker.
     const base = twoWorkshops()
     let state = operationalRoad(base.state, 3, 2).state
-    state = operationalRoad(state, 5, 4).state
+    state = assignJobs(state)
+    expect(state.colonists[base.colonistId]?.workplaceId).toBeNull()
+    expect(materialProductionForTick(state)).toBe(0)
+    expect(materialUpkeepDueForTick(state)).toBe(0)
+  })
+
+  it('I3 — R connected to W_a only: W_b stays vacant despite its road (09K)', () => {
+    // Path from R to W_a; separate road at W_b (not connected to R).
+    const base = twoWorkshops()
+    let state = operationalRoads(base.state, [
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 3, y: 2 },
+      { x: 5, y: 4 },
+    ])
     state = assignJobs(state)
     expect(countEmployedWorkers(state)).toBe(1)
-    expect(materialProductionForTick(state)).toBe(2)
-    // The vacant Workshop still counts for 08F storage (2 × 25 = 50).
-    expect(materialProductionForTick(state)).toBe(2)
+    expect(state.colonists[base.colonistId]?.workplaceId).toBe(
+      base.workshopAId
+    )
+    // Vacant Workshop still counts for 08F storage capacity (2 x 25 = 50).
     expect(getRoadNetworkCount(state)).toBe(2)
   })
 
-  it('I4 — disconnected networks change nothing about employment', () => {
-    // W_a and W_b on separate networks: assignment is still id-ordered.
+  it('I4 — no residence road → no worker even with Workshop roads (09K)', () => {
+    // Roads at both workshops, but R has no road → no mobility → no worker.
     const base = twoWorkshops()
     let state = operationalRoads(base.state, [
       { x: 3, y: 2 },
@@ -609,9 +623,8 @@ describe('multiple workplaces on one network (Step 09J §9)', () => {
     ])
     expect(getRoadNetworkCount(state)).toBe(2)
     state = assignJobs(state)
-    expect(state.colonists[base.colonistId]?.workplaceId).toBe(
-      base.workshopAId
-    )
+    expect(state.colonists[base.colonistId]?.workplaceId).toBeNull()
+    expect(materialProductionForTick(state)).toBe(0)
   })
 })
 
@@ -670,22 +683,30 @@ describe('multiple residences, one workplace network (Step 09J §10)', () => {
     ).toBe(false)
   })
 
-  it('J2 — disconnecting R2 changes employment and production not at all', () => {
+  it('J2 — mobility-gated employment: disconnecting R1 removes colonist-1 (09K)', () => {
     const linked = twoResidences(true)
     const split = twoResidences(false)
     expect(getRoadNetworkCount(split.state)).toBe(2)
-    // Identical employment, production and upkeep in both versions...
-    expect(split.state.colonists[split.colonist1Id]?.workplaceId).toBe(
+    // Under 09K: linked has R1+R2 both connected → colonist-1 employed
+    // (capacity 1, lower id wins). Split has R1 isolated → colonist-1
+    // DISCONNECTED → colonist-2 (R2 connected) takes the job instead.
+    expect(linked.state.colonists[linked.colonist1Id]?.workplaceId).toBe(
+      linked.workshopId
+    )
+    expect(linked.state.colonists[linked.colonist2Id]?.workplaceId).toBeNull()
+    expect(split.state.colonists[split.colonist1Id]?.workplaceId).toBeNull()
+    expect(split.state.colonists[split.colonist2Id]?.workplaceId).toBe(
       split.workshopId
     )
-    expect(split.state.colonists[split.colonist2Id]?.workplaceId).toBeNull()
+    // Production is the same (1 worker in both) but for different reasons:
+    // linked pays for colonist-1, split pays for colonist-2.
     expect(materialProductionForTick(split.state)).toBe(
       materialProductionForTick(linked.state)
     )
     expect(materialUpkeepDueForTick(split.state)).toBe(
       materialUpkeepDueForTick(linked.state)
     )
-    // ...the ONLY difference is the informational mobility flag.
+    // The mobility flags confirm the connectivity difference.
     expect(
       getColonistWorkMobility(split.state, split.colonist1Id).mobilityConnected
     ).toBe(false)

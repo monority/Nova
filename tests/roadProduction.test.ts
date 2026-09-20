@@ -13,7 +13,6 @@ import {
   getBuildingRoadAccess,
   getMaterialProductionPerTick,
   getMaterialUpkeepPerTick,
-  getRoadIdAtCell,
   hashCanonicalState,
   loadSave,
   materialProductionForTick,
@@ -51,9 +50,10 @@ const staffedWorkshopNoRoad = (): SimulationState => {
   return state
 }
 
-/** Same as staffedWorkshopNoRoad but with an adjacent operational road. */
+/** Same as staffedWorkshopNoRoad but with roads connecting the residence to the
+ * workshop, then one more tick so assignJobs re-runs with the network present. */
 const staffedWorkshopWithRoad = (): SimulationState =>
-  withRoadsForWorkshops(staffedWorkshopNoRoad())
+  stepSimulation(withRoadsForWorkshops(staffedWorkshopNoRoad()))
 
 describe('road access production constraint (Step 09F)', () => {
   it('A — staffed + road access produces normally', () => {
@@ -63,13 +63,17 @@ describe('road access production constraint (Step 09F)', () => {
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(true)
   })
 
-  it('B — staffed + no access: workers kept, production 0, still operational', () => {
+  it('B — no mobility connection: worker not assigned, production 0, no upkeep (09K gate)', () => {
     const state = staffedWorkshopNoRoad()
     const workshop = state.buildings['building-2']!
     expect(workshop.status).toBe('operational')
-    expect(countWorkersAtSafe(state, 'building-2')).toBe(1)
+    // Under 09K, the colonist is never employed without a road network
+    // linking residence to workplace — the OLD 09F "workers kept" behavior
+    // no longer applies.
+    expect(countWorkersAtSafe(state, 'building-2')).toBe(0)
     expect(materialProductionForTick(state)).toBe(0)
     expect(getMaterialProductionPerTick(state)).toBe(0)
+    expect(materialUpkeepDueForTick(state)).toBe(0)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(false)
     // No persisted mutation: the workshop exists exactly as before.
     expect(workshop.constructionRemaining).toBe(0)
@@ -85,15 +89,22 @@ describe('road access production constraint (Step 09F)', () => {
 
   it('D — under-construction road gives no access, production 0', () => {
     let state = staffedWorkshopNoRoad()
-    // Real path: road placed this tick is under construction.
-    state = stepSimulation(state, placeRoads([{ x: 4, y: 3 }]))
-    const roadId = getRoadIdAtCell(state, { x: 4, y: 3 })!
-    expect(state.roads[roadId]!.status).toBe('underConstruction')
+    // Real path: roads placed this tick are under construction.
+    // Path: residence(2,2) → (3,2) → (4,2) → (4,3) → workshop(4,4)
+    state = stepSimulation(
+      state,
+      placeRoads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])
+    )
+    expect(
+      Object.values(state.roads).every((r) => r.status === 'underConstruction')
+    ).toBe(true)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(false)
     expect(materialProductionForTick(state)).toBe(0)
-    // Completing the road unlocks production (no persisted change needed).
+    // Completing the roads unlocks production (no persisted change needed).
     const advanced = stepSimulation(state)
-    expect(advanced.roads[roadId]!.status).toBe('operational')
+    expect(
+      Object.values(advanced.roads).every((r) => r.status === 'operational')
+    ).toBe(true)
     expect(materialProductionForTick(advanced)).toBe(2)
   })
 
@@ -138,23 +149,26 @@ describe('road access production constraint (Step 09F)', () => {
     expect(materialProductionForTick(state)).toBe(2)
   })
 
-  it('H — job assignment unchanged: staffed roadless workshop still employs', () => {
+  it('H — employment respects mobility: roadless residence means no employment (09K)', () => {
     const state = staffedWorkshopNoRoad()
     const summary = getEmploymentSummarySafe(state)
-    expect(summary.employed).toBe(1)
-    expect(countWorkersAtSafe(state, 'building-2')).toBe(1)
+    // Under 09K, without a road network between residence and workshop,
+    // the colonist is not employed — no worker assigned.
+    expect(summary.employed).toBe(0)
+    expect(countWorkersAtSafe(state, 'building-2')).toBe(0)
     expect(materialProductionForTick(state)).toBe(0)
   })
 
-  it('I — upkeep unchanged: staffed roadless workshop still pays 1', () => {
+  it('I — 09K mobility gate: no worker means no upkeep for roadless workshops', () => {
     const state = staffedWorkshopNoRoad()
-    expect(materialUpkeepDueForTick(state)).toBe(1)
-    expect(getMaterialUpkeepPerTick(state)).toBe(1)
+    // Under 09K, no mobility connection means no worker, so upkeep is 0.
+    expect(materialUpkeepDueForTick(state)).toBe(0)
+    expect(getMaterialUpkeepPerTick(state)).toBe(0)
     const before = state.resources.construction
     const after = stepSimulation(state)
-    // Upkeep still deducted; production adds nothing (blocked).
-    expect(after.resources.construction).toBe(before - 1)
-    expect(getMaterialUpkeepPerTick(after)).toBe(1)
+    // No production, no upkeep: stock untouched by material flows.
+    expect(after.resources.construction).toBe(before)
+    expect(getMaterialUpkeepPerTick(after)).toBe(0)
   })
 
   it('J — storage mechanics (08F) unchanged with road access', () => {

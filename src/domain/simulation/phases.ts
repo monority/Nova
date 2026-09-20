@@ -44,6 +44,7 @@ import {
   iterateColonists,
 } from '../housing/housing.js'
 import { countWorkersAt, isOperationalWorkshop } from '../jobs/jobs.js'
+import { areBuildingsMobilityConnected } from '../mobility/mobility.js'
 import type { ColonistState } from '../population/colonist.js'
 import {
   getBuildingRoadAccess,
@@ -527,7 +528,7 @@ export const updatePopulation = (
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic job assignment (Step 07C §4). Exactly:
+ * Deterministic job assignment (Step 07C §4, mobility gate Step 09K). Exactly:
  *
  *   1. any colonist whose `workplaceId` refers to a missing, non-operational
  *      or non-workshop building becomes unemployed (`workplaceId = null`);
@@ -536,6 +537,13 @@ export const updatePopulation = (
  *   3. unemployed colonists (ascending colonist id) fill available operational
  *      Workshops (ascending building id), one colonist per Workshop;
  *   4. surplus colonists stay unemployed and surplus Workshops stay vacant.
+ *
+ * Step 09K adds one eligibility predicate to steps 1 and 3 without changing
+ * the ordering: a colonist keeps or receives a workplace only while their
+ * residence and that Workshop share an operational road network
+ * (`areBuildingsMobilityConnected`). A lost connection clears the stored
+ * `workplaceId` — the existing unemployed representation, no second flag —
+ * and a regained connection makes the pair eligible again next tick.
  *
  * No randomness, no distance, no proximity, no skill, no priority, no player
  * assignment command. Pure: returns the input state reference when nothing
@@ -557,14 +565,19 @@ export const assignJobs = (state: SimulationState): SimulationState => {
   let changed = false
 
   // Steps 1-2: drop invalid references, never allow two workers in one
-  // Workshop, and keep every still-valid assignment as it is.
+  // Workshop, and keep every still-valid assignment as it is. Step 09K:
+  // "still valid" additionally requires residence–workplace mobility — a
+  // disconnected worker is cleared to `null` here, never left stale.
   for (const colonist of colonists) {
     const workplaceId = colonist.workplaceId
+    const residenceId = colonist.residenceId
     let resolvedWorkplaceId: string | null = null
     if (
       workplaceId !== null &&
+      residenceId !== null &&
       operationalWorkshopIds.has(workplaceId) &&
-      !takenWorkplaceIds.has(workplaceId)
+      !takenWorkplaceIds.has(workplaceId) &&
+      areBuildingsMobilityConnected(state, residenceId, workplaceId)
     ) {
       resolvedWorkplaceId = workplaceId
       takenWorkplaceIds.add(workplaceId)
@@ -578,22 +591,30 @@ export const assignJobs = (state: SimulationState): SimulationState => {
   }
 
   // Steps 3-4: fill vacancies. Colonists are iterated in ascending id order
-  // and vacancies are consumed in ascending Workshop id order.
+  // and vacancies are consumed in ascending Workshop id order — Step 09K:
+  // each unemployed colonist takes the first vacancy their residence is
+  // mobility-connected to, skipping workshops on other networks. Colonists
+  // without a residence are never eligible.
   const vacancies = availableWorkshopIds.filter(
     (workshopId) => !takenWorkplaceIds.has(workshopId)
   )
-  let vacancyIndex = 0
   for (const colonist of colonists) {
-    const vacancyId = vacancies[vacancyIndex]
-    if (vacancyId === undefined) {
-      break
-    }
     const current = nextColonists[colonist.id]
     if (current === undefined || current.workplaceId !== null) {
       continue
     }
-    vacancyIndex += 1
-    nextColonists[colonist.id] = { ...current, workplaceId: vacancyId }
+    const residenceId = current.residenceId
+    if (residenceId === null) {
+      continue
+    }
+    const eligible = vacancies.find((workshopId) =>
+      areBuildingsMobilityConnected(state, residenceId, workshopId)
+    )
+    if (eligible === undefined) {
+      continue
+    }
+    vacancies.splice(vacancies.indexOf(eligible), 1)
+    nextColonists[colonist.id] = { ...current, workplaceId: eligible }
     changed = true
   }
 
@@ -608,11 +629,13 @@ export const assignJobs = (state: SimulationState): SimulationState => {
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic material output for this tick (Step 09F): each operational,
- * staffed Workshop with road access contributes its workers × rate. Workers
- * with zero or non-operational Workshops produce nothing (no hidden
- * autonomous production, §7); Workshops without road access are staffed but
- * unproductive (Step 09F: production eligibility, not existence).
+ * Deterministic material output for this tick (Step 09F, employment gate Step
+ * 09K): each operational, staffed Workshop with road access contributes its
+ * workers × rate. Unassigned or non-operational Workshops produce nothing
+ * (no hidden autonomous production, §7); since 09K a Workshop without road
+ * access (or without a mobility-connected worker) is normally vacant rather
+ * than staffed-but-blocked — the rule below is unchanged, it simply sees
+ * fewer staffed roadless Workshops.
  *
  * Road access (Step 09E getBuildingRoadAccess) is the single source of truth;
  * the rate and storage coefficients are unchanged.

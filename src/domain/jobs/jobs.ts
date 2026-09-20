@@ -10,10 +10,13 @@
  * - a Workshop employs at most one colonist;
  * - employment is canonical state, every aggregate below is derived.
  *
- * Deliberately absent (Step 07C §21): Job/Worker entities, EmploymentSystem,
- * generic workplace or workforce frameworks, a stored `labour` resource,
- * skills, efficiency, priorities, morale, commuting, distance, player-side
- * employment control, recipes and production chains.
+ * Deliberately absent (Step 07C §21, mobility gate Step 09K):
+ * Job/Worker entities, EmploymentSystem, generic workplace or workforce
+ * frameworks, a stored `labour` resource, skills, efficiency, priorities,
+ * morale, distance, travel time, player-side employment control, recipes
+ * and production chains. Employment eligibility requires residence–
+ * workplace mobility connectivity (09K); everything about *how* a colonist
+ * travels remains unmodeled.
  */
 
 import type { BuildingStatus, BuildingType } from '../building/building.js'

@@ -167,17 +167,23 @@ async function main() {
     } else ok(`B valid preview: ${s.status}`);
     await shot('01-road-preview.png');
 
-    // C. Production-blocked baseline: Residence -> Colonist -> roadless Workshop.
+    // C. Mobility-blocked baseline: Residence -> Colonist -> roadless Workshop.
+    //   09K: without an operational road network linking the two buildings the
+    //   colonist is not employed at all (no worker -> no production -> no upkeep).
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeBuilding(page, { x: 3, y: 3 });
     await stepUntil(page, (v) => v.colonists === '1', 'first colonist');
     await selectPalette(page, 'build-workshop', 'Workshop selected');
     await placeBuilding(page, { x: 6, y: 6 });
-    s = await stepUntil(page, (v) => v.employed === '1', 'worker employed');
-    if (s.materialProduction !== '0' || s.productionBlockedByRoad !== '1' || s.buildingsWithRoadAccess !== '0') {
-      fail(`C roadless workshop must be blocked: ${JSON.stringify(s)}`);
+    s = await stepUntil(
+      page,
+      (v) => v.workshops === '1' && v.employed === '0' && v.materialProduction === '0',
+      'roadless workshop idle'
+    );
+    if (s.buildingsWithRoadAccess !== '0' || s.materialUpkeep !== '0') {
+      fail(`C roadless workshop must be idle: ${JSON.stringify(s)}`);
     } else {
-      ok(`C roadless staffed Workshop: production ${s.materialProduction}, upkeep ${s.materialUpkeep}, blocked ${s.productionBlockedByRoad}`);
+      ok(`C roadless Workshop (09K): worker ${s.employed}, production ${s.materialProduction}, upkeep ${s.materialUpkeep}`);
     }
     await shot('02-roadless-production-blocked.png');
 
@@ -203,8 +209,9 @@ async function main() {
     if (num(s, 'roads') !== num(beforeInvalid, 'roads')) fail(`D diagonal drag added roads: ${JSON.stringify(s)}`);
     else ok('D diagonal drag rejected by the existing 09C geometry rule');
 
-    // E. Player constructs roads: vertical drag (5,3) -> (5,6) gives the
-    // Workshop access, then a single cell gives the Residence access.
+    // E. Player constructs the Workshop-side road: vertical drag (5,3)->(5,6)
+    //    gives the Workshop access. The Residence is still unconnected, so
+    //    under 09K this ALONE does not produce a worker.
     const drag = await dragRoads(page, { x: 5, y: 3 }, { x: 5, y: 6 });
     const upkeep = num(drag.before, 'materialUpkeep');
     const expected = num(drag.before, 'construction') - 4 * ROAD_COST - upkeep;
@@ -218,20 +225,20 @@ async function main() {
     } else ok(`E construction state visible: ${drag.after.roads} roads, ${drag.after.operationalRoads} operational`);
     await shot('03-roads-under-construction.png');
 
-    // F. Advancing the simulation completes the roads and resumes production.
+    // F. Advancing completes the roads. The Workshop now has road access,
+    //    but the Residence still does not, so 09K keeps the colonist
+    //    unemployed and production stays 0.
     s = await step(page);
     if (s.operationalRoads !== '4') fail(`F roads not operational: ${JSON.stringify(s)}`);
     if (s.buildingsWithRoadAccess !== '1') fail(`F Workshop has no road access: ${JSON.stringify(s)}`);
-    if (s.productionBlockedByRoad !== '0') fail(`F Workshop still blocked: ${JSON.stringify(s)}`);
-    if (s.materialProduction !== '2' || s.netMaterial !== '1') {
-      fail(`F production did not resume: ${JSON.stringify(s)}`);
+    if (s.employed !== '0' || s.materialProduction !== '0') {
+      fail(`F unconnected Residence must not employ: ${JSON.stringify(s)}`);
     } else {
-      ok(`F road operational -> road access true -> production ${s.materialProduction}/tick (net ${s.netMaterial})`);
+      ok(`F roads operational: Workshop access true, Residence unconnected -> worker ${s.employed}, production ${s.materialProduction}`);
     }
-    await shot('04-roads-operational-production.png');
 
-    // G. Single-cell placement for the Residence, then the derived 09G
-    // relation appears (informational only: production already resumed).
+    // G. Single-cell placement closes the network to the Residence:
+    //    Residence(3,3) <- (4,3) <- (5,3) ... -> (5,6) -> Workshop(6,6).
     const single = await dragRoads(page, { x: 4, y: 3 }, { x: 4, y: 3 });
     if (num(single.after, 'roads') !== 5) fail(`G single-cell placement failed: ${JSON.stringify(single.after)}`);
     else ok('G single-cell road placed via the same command path');
@@ -239,9 +246,13 @@ async function main() {
     if (s.operationalRoads !== '5') fail(`G roads not operational: ${JSON.stringify(s)}`);
     if (s.mobilityConnectedColonists !== '1') {
       fail(`G derived mobility relation missing: ${JSON.stringify(s)}`);
-    } else {
-      ok(`G derived mobility: Residence <-> Road Network <-> Workplace connected (${s.mobilityConnectedColonists}), production ${s.materialProduction}`);
     }
+    if (s.employed !== '1') fail(`G worker must be employed once connected: ${JSON.stringify(s)}`);
+    if (s.materialProduction !== '2') fail(`G production must resume once connected: ${JSON.stringify(s)}`);
+    ok(
+      `G mobility connected -> employed ${s.employed}, production ${s.materialProduction}/tick, mobilityConnected ${s.mobilityConnectedColonists}`
+    );
+    await shot('04-roads-operational-production.png');
 
     const realErrors = errors.filter((e) => !e.includes('favicon'));
     if (realErrors.length > 0) fail(`browser errors: ${realErrors.join(' | ')}`);

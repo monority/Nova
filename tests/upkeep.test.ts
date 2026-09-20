@@ -96,6 +96,7 @@ const staffedState = (n: number): SimulationState => {
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
+    state = withRoadsForWorkshops(state) // 09K: connect the new residence
     state = stepSimulation(state)
     if (i >= 2) {
       // Base already provides two Workshops; further pairs need one more.

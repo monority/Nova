@@ -87,6 +87,7 @@ const colony = (n: number): SimulationState => {
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
+    state = withRoadsForWorkshops(state) // 09K: connect the new residence
     state = stepSimulation(state)
     if (i >= 2) {
       state = untilAffordable(state)
@@ -246,8 +247,10 @@ describe('economic invariants (Step 08D)', () => {
     state = stepSimulation(state, place('residence', 0, 0)) // t1
     state = stepSimulation(state) // t2: colonist-1
     state = stepSimulation(state, place('workshop', 0, 5)) // t3
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t4: employed
     state = stepSimulation(state, place('workshop', 1, 5)) // t5
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t6: second operational, still 1 colonist
     const summary = getEmploymentSummary(state)
     expect(summary.population).toBe(1)
@@ -357,6 +360,7 @@ describe('economic invariants (Step 08D)', () => {
     state = stepSimulation(state) // t2: colonist-1 admitted
     const stockBefore = getResourceStock(state).construction
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t4: operational + staffed; bootstrap stock covers capacity, so stored 0, upkeep −1
     expect(getResourceStock(state).construction).toBe(stockBefore - 25 - 1)
   })

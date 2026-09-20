@@ -266,41 +266,53 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     expect(isOperationalRoad(state.roads[id]!)).toBe(true)
   })
 
-  it('N — player-built road unlocks Workshop production (09E + 09F only)', () => {
+  it('N — player-built road unlocks employment + production (09E + 09K)', () => {
     let state = staffedWorkshopNoRoad()
-    // Roadless staffed Workshop: workers assigned, production blocked.
-    expect(countWorkersAt(state, 'building-2')).toBe(1)
+    // Roadless: under 09K no mobility means no worker, no production.
+    expect(countWorkersAt(state, 'building-2')).toBe(0)
     expect(materialProductionForTick(state)).toBe(0)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(false)
 
     const materialBefore = state.resources.construction
     const upkeep = materialUpkeepDueForTick(state)
-    // Player gesture: one road cell adjacent to the Workshop.
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }]))
-    // Authoritative cost + unchanged upkeep; still no production.
+    // Player gesture: a Manhattan path from residence(2,2) to workshop(4,4).
+    const pathCells = [
+      { x: 3, y: 2 },
+      { x: 4, y: 2 },
+      { x: 4, y: 3 },
+    ]
+    state = stepSimulation(state, roads(pathCells))
+    // Authoritative cost (3 cells) + upkeep (0 — no worker yet).
     expect(state.resources.construction).toBe(
-      materialBefore - ROAD_CONSTRUCTION_COST - upkeep
+      materialBefore - pathCells.length * ROAD_CONSTRUCTION_COST - upkeep
     )
     expect(materialProductionForTick(state)).toBe(0)
-    expect(state.roads['road-1']?.status).toBe('underConstruction')
+    expect(
+      Object.values(state.roads).every((r) => r.status === 'underConstruction')
+    ).toBe(true)
 
-    // Next tick the road completes: access activates and production resumes.
+    // Next tick the roads complete: mobility activates, worker employed,
+    // production resumes.
     state = stepSimulation(state)
-    expect(state.roads['road-1']?.status).toBe('operational')
+    expect(
+      Object.values(state.roads).every((r) => r.status === 'operational')
+    ).toBe(true)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(true)
     expect(materialProductionForTick(state)).toBe(2)
-    // 09G stays informational: the relation is derived, never required for
-    // production (no residence road exists here).
+    // 09K: the mobility relationship is now derived and TRUE.
     expect(getColonistWorkMobility(state, 'colonist-1').mobilityConnected).toBe(
-      false
+      true
     )
   })
 
   it('O — resumed production is stored through the unchanged 08F clamp', () => {
     let state = staffedWorkshopNoRoad()
-    // Place the road first (under construction), then set the stock to 24 with
+    // Place roads (under construction), then set the stock to 24 with
     // storage capacity 25: exactly 1 unit of space for the completing tick.
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }]))
+    state = stepSimulation(
+      state,
+      roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])
+    )
     state = { ...state, resources: { ...state.resources, construction: 24 } }
     expect(materialProductionForTick(state)).toBe(0)
     state = stepSimulation(state)
@@ -310,16 +322,18 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     expect(state.resources.construction).toBe(24)
   })
 
-  it('P — the road tool adds no new gameplay rule (jobs/production inputs unchanged)', () => {
+  it('P — under-construction road keeps employment unchanged (09K)', () => {
     const before = staffedWorkshopNoRoad()
     const after = stepSimulation(before, roads([{ x: 4, y: 3 }]))
-    // Employment relation untouched by road construction.
+    // Employment unchanged: under-construction road does not connect
+    // residence to the workshop, so no worker (09K).
     expect(countWorkersAt(after, 'building-2')).toBe(
       countWorkersAt(before, 'building-2')
     )
     expect(after.buildings).toEqual(before.buildings)
     expect(after.colonists).toEqual(before.colonists)
-    expect(materialUpkeepDueForTick(after)).toBe(1)
+    // No worker → no upkeep.
+    expect(materialUpkeepDueForTick(after)).toBe(0)
   })
 })
 

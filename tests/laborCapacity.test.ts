@@ -87,6 +87,7 @@ const capacityState = (residences: number, workshops: number): SimulationState =
   for (let i = 1; i < residences; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
+    state = withRoadsForWorkshops(state) // 09K: connect the new residence
     state = stepSimulation(state)
   }
   for (let k = built; k < workshops; k++) {

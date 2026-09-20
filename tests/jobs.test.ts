@@ -212,6 +212,7 @@ describe('deterministic job assignment (Step 07C §4)', () => {
 
   it('multiple colonists / one workshop: lowest colonist id wins', () => {
     let state = stepSimulation(twoColonistState(), place('workshop', 6, 6))
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state)
     expect(state.colonists['colonist-1']?.workplaceId).toBe('building-3')
     expect(state.colonists['colonist-2']?.workplaceId).toBeNull()
@@ -236,9 +237,11 @@ describe('deterministic job assignment (Step 07C §4)', () => {
     // the stock so this ordering test funds both placements deterministically.
     let state = withConstruction(twoColonistState(), 100) // t4
     state = stepSimulation(state, place('workshop', 6, 6)) // t5: building-3
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t6: colonist-1 -> building-3
     state = withConstruction(state, 100)
     state = stepSimulation(state, place('workshop', 0, 0)) // t7: building-4
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t8: colonist-2 -> building-4
     expect(state.colonists['colonist-1']?.workplaceId).toBe('building-3')
     expect(state.colonists['colonist-2']?.workplaceId).toBe('building-4')
@@ -281,6 +284,7 @@ describe('deterministic job assignment (Step 07C §4)', () => {
 
   it('never lets one workshop hold more than one worker', () => {
     let state = stepSimulation(twoColonistState(), place('workshop', 6, 6))
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // colonist-1 -> building-3
     const forced = withWorkplace(state, 'colonist-2', 'building-3')
     const after = assignJobs(forced)
@@ -348,6 +352,7 @@ describe('construction material production (Step 07C §6-§8)', () => {
   it('multiple workers add linearly', () => {
     let state = twoWorkshopState() // 1 colonist, 2 workshops
     state = stepSimulation(state, place('residence', 0, 0)) // t7
+    state = withRoadsForWorkshops(state) // 09K: connect the new residence
     state = stepSimulation(state) // t8: second colonist admitted and employed
     expect(getEmploymentSummary(state).employed).toBe(2)
     expect(materialProductionForTick(state)).toBe(4)
@@ -361,6 +366,7 @@ describe('construction material production (Step 07C §6-§8)', () => {
 
   it('a newly operational workshop is staffed and produces the same tick', () => {
     let state = stepSimulation(colonistState(), place('workshop', 6, 6)) // t3
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     const before = getResourceStock(state).construction
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
     state = stepSimulation(state) // t4: operational this tick
@@ -381,6 +387,7 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = withRoadsForWorkshops(state) // 09F: road for W2
     state = stepSimulation(state) // t5: W3 op, net +1
     state = stepSimulation(state, place('residence', 7, 7)) // t6
+    state = withRoadsForWorkshops(state) // 09K: connect the new residence
     const beforeAdmission = getResourceStock(state).construction
     expect(Object.keys(state.colonists)).toHaveLength(1)
     state = stepSimulation(state) // t7: colonist-2 admitted this tick

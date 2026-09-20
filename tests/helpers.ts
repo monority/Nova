@@ -1,7 +1,11 @@
 import {
   createInitialState,
   createRoads,
+  getBuildingRoadAccess,
+  getRoadIdAtCell,
   iterateBuildings,
+  type BuildingState,
+  type CellCoordinate,
   type SimulationConfig,
   type SimulationState,
 } from '@/index'
@@ -19,7 +23,7 @@ const NEIGHBOR_DELTAS: ReadonlyArray<readonly [number, number]> = [
   [-1, 0],
 ]
 
-const isCellFree = (state: SimulationState, cell: { readonly x: number; readonly y: number }): boolean => {
+const isCellFree = (state: SimulationState, cell: CellCoordinate): boolean => {
   for (const building of iterateBuildings(state)) {
     if (building.x === cell.x && building.y === cell.y) {
       return false
@@ -33,45 +37,201 @@ const isCellFree = (state: SimulationState, cell: { readonly x: number; readonly
   return true
 }
 
+/** A cell a road can be written to: either free, or already a road. */
+const isCellPlaceable = (state: SimulationState, cell: CellCoordinate): boolean =>
+  isCellFree(state, cell) || getRoadIdAtCell(state, cell) !== null
+
 /**
- * Give every workshop an adjacent operational road (Step 09F fixtures).
+ * Manhattan intermediate cells from `from` to `to`, EXCLUDING both
+ * endpoints. `horizontalFirst` picks the leg order. Callers use building
+ * cells as endpoints (the path then ends orthogonally adjacent to the
+ * building) or existing road cells (the path ends orthogonally adjacent to
+ * the road, which is already a valid network endpoint).
+ */
+const manhattanPath = (
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+  horizontalFirst: boolean
+): CellCoordinate[] => {
+  const path: CellCoordinate[] = []
+  const stepX = Math.sign(to.x - from.x)
+  const stepY = Math.sign(to.y - from.y)
+  let x = from.x
+  let y = from.y
+  const push = (cx: number, cy: number): void => {
+    if (cx !== to.x || cy !== to.y) {
+      path.push({ x: cx, y: cy })
+    }
+  }
+  if (horizontalFirst) {
+    while (x !== to.x) {
+      x += stepX
+      push(x, y)
+    }
+    while (y !== to.y) {
+      y += stepY
+      push(x, y)
+    }
+  } else {
+    while (y !== to.y) {
+      y += stepY
+      push(x, y)
+    }
+    while (x !== to.x) {
+      x += stepX
+      push(x, y)
+    }
+  }
+  return path
+}
+
+/** Place an operational road at a free cell, or make an existing road operational. */
+const placeOperationalRoad = (
+  state: SimulationState,
+  cell: CellCoordinate
+): SimulationState => {
+  const existingRoadId = getRoadIdAtCell(state, cell)
+  if (existingRoadId !== null) {
+    const road = state.roads[existingRoadId]
+    if (road !== undefined && road.status !== 'operational') {
+      return {
+        ...state,
+        roads: {
+          ...state.roads,
+          [existingRoadId]: { ...road, status: 'operational', constructionRemaining: 0 },
+        },
+      }
+    }
+    return state
+  }
+  if (!isCellFree(state, cell)) {
+    return state
+  }
+  const created = createRoads(state, [cell])
+  const roadId = created.roadIds[0]
+  if (roadId === undefined) {
+    return state
+  }
+  const road = created.state.roads[roadId]
+  if (road === undefined) {
+    return state
+  }
+  return {
+    ...created.state,
+    roads: {
+      ...created.state.roads,
+      [roadId]: { ...road, status: 'operational', constructionRemaining: 0 },
+    },
+  }
+}
+
+/**
+ * Connect one building to the nearest target cell with an all-placeable
+ * Manhattan path. Both leg orders are tried; the nearest target first.
+ * Returns the state unchanged when no free route exists.
+ */
+const connectBuildingToNearest = (
+  state: SimulationState,
+  building: BuildingState,
+  targets: readonly CellCoordinate[]
+): SimulationState => {
+  if (targets.length === 0) {
+    return state
+  }
+  const sorted = [...targets].sort((a, b) => {
+    const da = Math.abs(a.x - building.x) + Math.abs(a.y - building.y)
+    const db = Math.abs(b.x - building.x) + Math.abs(b.y - building.y)
+    if (da !== db) {
+      return da - db
+    }
+    if (a.x !== b.x) {
+      return a.x - b.x
+    }
+    return a.y - b.y
+  })
+  for (const target of sorted) {
+    for (const horizontalFirst of [false, true]) {
+      const path = manhattanPath(building, target, horizontalFirst)
+      if (path.length === 0) {
+        continue
+      }
+      if (!path.every((cell) => isCellPlaceable(state, cell))) {
+        continue
+      }
+      let candidate = state
+      for (const cell of path) {
+        candidate = placeOperationalRoad(candidate, cell)
+      }
+      return candidate
+    }
+  }
+  return state
+}
+
+/** Road cells currently present in canonical state. */
+const roadCells = (state: SimulationState): CellCoordinate[] =>
+  Object.values(state.roads).map((road) => ({ x: road.x, y: road.y }))
+
+/**
+ * Give every workshop and residence operational road access AND put them on
+ * shared networks (09F + 09K fixtures).
  *
- * The 09F gameplay contract gates Material production on road access. The
- * historical economic fixtures predate roads, so workshop scenarios that
- * assert production must be road-connected. Injection is a direct domain
- * operation (no cost, no tick, no resource change) so existing numeric
- * assertions stay untouched. Deterministic: first free orthogonal neighbor
- * (N, E, S, W) per workshop.
+ * 09F gates Material production on road access; 09K gates employment on
+ * residence-to-workplace mobility connectivity. The historical economic
+ * fixtures predate roads, so scenarios that assert production or employment
+ * must be road-connected. Injection is a direct domain operation (no cost,
+ * no tick, no resource change) so existing numeric assertions stay
+ * untouched. Deterministic: targets are sorted by (Manhattan distance, x, y)
+ * and both Manhattan leg orders are tried in a fixed order.
+ *
+ * Existing road cells are preferred as connection targets (minimal new
+ * roads, fewer collisions with buildings placed later in a scenario); when
+ * no road exists yet, the other building type is used as the target.
  */
 export const withRoadsForWorkshops = (state: SimulationState): SimulationState => {
   let next = state
-  for (const building of iterateBuildings(state)) {
-    if (building.type !== 'workshop') {
+  const buildings = [...iterateBuildings(state)]
+  const residences = buildings.filter((b) => b.type === 'residence')
+  const workshops = buildings.filter((b) => b.type === 'workshop')
+
+  // Connect each workshop to an existing road (or, first time, a residence).
+  for (const workshop of workshops) {
+    if (getBuildingRoadAccess(next, workshop.id).hasRoadAccess) {
       continue
     }
-    for (const [dx, dy] of NEIGHBOR_DELTAS) {
-      const cell = { x: building.x + dx, y: building.y + dy }
-      if (!isCellFree(next, cell)) {
-        continue
+    const roads = roadCells(next)
+    const targets: CellCoordinate[] =
+      roads.length > 0
+        ? roads
+        : residences.map((r) => ({ x: r.x, y: r.y }))
+    if (targets.length === 0) {
+      // Synthetic fixtures (no residence): legacy 09F behavior — place one
+      // adjacent operational road so production eligibility can be tested.
+      for (const [dx, dy] of NEIGHBOR_DELTAS) {
+        const cell = { x: workshop.x + dx, y: workshop.y + dy }
+        if (!isCellFree(next, cell)) {
+          continue
+        }
+        next = placeOperationalRoad(next, cell)
+        break
       }
-      const created = createRoads(next, [cell])
-      const roadId = created.roadIds[0]
-      if (roadId === undefined) {
-        continue
-      }
-      const road = created.state.roads[roadId]
-      if (road === undefined) {
-        continue
-      }
-      next = {
-        ...created.state,
-        roads: {
-          ...created.state.roads,
-          [roadId]: { ...road, status: 'operational', constructionRemaining: 0 },
-        },
-      }
-      break
+      continue
     }
+    next = connectBuildingToNearest(next, workshop, targets)
   }
+
+  // Connect each residence to an existing road (or a workshop).
+  for (const residence of residences) {
+    if (getBuildingRoadAccess(next, residence.id).hasRoadAccess) {
+      continue
+    }
+    const roads = roadCells(next)
+    const targets: CellCoordinate[] =
+      roads.length > 0
+        ? roads
+        : workshops.map((w) => ({ x: w.x, y: w.y }))
+    next = connectBuildingToNearest(next, residence, targets)
+  }
+
   return next
 }

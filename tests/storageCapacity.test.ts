@@ -96,6 +96,7 @@ const staffedLadder = (n: number): SimulationState => {
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
+    state = withRoadsForWorkshops(state) // 09K: connect the new residence
     state = stepSimulation(state)
     if (i >= 2) {
       state = untilAffordable(state)
@@ -152,6 +153,7 @@ describe('material storage capacity (Step 08F)', () => {
     state = stepSimulation(state) // t2
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
     expect(getMaterialStorageCapacity(state)).toBe(0)
+    state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t4: operational + staffed same tick
     expect(getMaterialStorageCapacity(state)).toBe(25)
     // Bootstrap stock (50) covers capacity: stored 0, upkeep drains 1.

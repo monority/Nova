@@ -148,7 +148,7 @@ describe('scenario A — minimum viable settlement (Step 09I §5)', () => {
   })
 })
 
-describe('scenario B — Workshop without road (Step 09I §5)', () => {
+describe('scenario B — Workshop without road (Step 09I §5, 09K-gated)', () => {
   /** Scenario A end state (t2), then Workshop, then 6 roadless ticks. */
   const runB = (): SimulationState[] => {
     const states: SimulationState[] = []
@@ -164,40 +164,46 @@ describe('scenario B — Workshop without road (Step 09I §5)', () => {
     return states
   }
 
-  it('B1 — roadless staffed Workshop: assigned, zero production, upkeep applies', () => {
+  it('B1 — roadless Workshop: no worker, zero production, zero upkeep (09K)', () => {
     const [t3, t4, t5, t6, t7, t8, t9] = runB()
     // t3: Workshop placed (25). First food consumption (1 colonist).
     expect(slim(t3!)).toEqual({
       tick: 3, material: 50, food: 99, population: 1,
       employed: 0, gross: 0, stored: 0, upkeep: 0,
     })
-    // t4: Workshop operational + staffed, roadless: production 0, upkeep 1.
+    // t4: Workshop operational but not mobility-connected to the residence.
+    // Under 09K the colonist is never employed, so production AND upkeep are
+    // both 0 — no worker means no staffed Workshop (the old 09F
+    // "staffed roadless sink" no longer exists).
     expect(slim(t4!)).toEqual({
-      tick: 4, material: 49, food: 98, population: 1,
-      employed: 1, gross: 0, stored: 0, upkeep: 1,
+      tick: 4, material: 50, food: 98, population: 1,
+      employed: 0, gross: 0, stored: 0, upkeep: 0,
     })
     expect(t4!.buildings['building-2']?.status).toBe('operational')
     expect(getBuildingRoadAccess(t4!, 'building-2').hasRoadAccess).toBe(false)
-    // t5..t9: the sink drains exactly upkeep/tick; food drains 1/tick.
+    // t5..t9: stock frozen (no production, no upkeep); food drains 1/tick.
     expect([t5!, t6!, t7!, t8!, t9!].map(slim)).toEqual([
-      { tick: 5, material: 48, food: 97, population: 1, employed: 1, gross: 0, stored: 0, upkeep: 1 },
-      { tick: 6, material: 47, food: 96, population: 1, employed: 1, gross: 0, stored: 0, upkeep: 1 },
-      { tick: 7, material: 46, food: 95, population: 1, employed: 1, gross: 0, stored: 0, upkeep: 1 },
-      { tick: 8, material: 45, food: 94, population: 1, employed: 1, gross: 0, stored: 0, upkeep: 1 },
-      { tick: 9, material: 44, food: 93, population: 1, employed: 1, gross: 0, stored: 0, upkeep: 1 },
+      { tick: 5, material: 50, food: 97, population: 1, employed: 0, gross: 0, stored: 0, upkeep: 0 },
+      { tick: 6, material: 50, food: 96, population: 1, employed: 0, gross: 0, stored: 0, upkeep: 0 },
+      { tick: 7, material: 50, food: 95, population: 1, employed: 0, gross: 0, stored: 0, upkeep: 0 },
+      { tick: 8, material: 50, food: 94, population: 1, employed: 0, gross: 0, stored: 0, upkeep: 0 },
+      { tick: 9, material: 50, food: 93, population: 1, employed: 0, gross: 0, stored: 0, upkeep: 0 },
     ])
   })
 })
 
 describe('scenario C — minimum road-served Workshop (Step 09I §5)', () => {
-  /** Scenario A (t2) → Workshop (t3) → adjacent Road (t4) → complete (t5). */
+  /** Scenario A (t2) → Workshop (t3) → 3-cell path (t4) → complete (t5).
+   *  Under 09K a single adjacent road no longer suffices: the residence must
+   *  share the workshop's network, so the path (3,2),(4,2),(4,3) links
+   *  residence (2,2) to workshop (4,4). */
   const runC = (): SimulationState[] => {
     let state = createTestState()
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1
     const t3 = stepSimulation(state, place('workshop', 4, 4)) // t3
-    const t4 = stepSimulation(t3, roads([{ x: 4, y: 3 }])) // t4
-    const t5 = stepSimulation(t4) // t5: road operational
+    const t4 = stepSimulation(t3, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
+    const t5 = stepSimulation(t4) // t5: roads operational
     return [t3, t4, t5]
   }
 
@@ -207,24 +213,25 @@ describe('scenario C — minimum road-served Workshop (Step 09I §5)', () => {
       tick: 3, material: 50, food: 99, population: 1,
       employed: 0, gross: 0, stored: 0, upkeep: 0,
     })
-    // t4: Workshop operational + staffed; road placed (5) but under
-    // construction, so no access and no production. Upkeep still due.
+    // t4: Workshop operational; the 3-cell path costs 15 and is still under
+    // construction, so no access, no employment, no production, no upkeep.
     expect(slim(t4!)).toEqual({
-      tick: 4, material: 44, food: 98, population: 1,
-      employed: 1, gross: 0, stored: 0, upkeep: 1,
+      tick: 4, material: 35, food: 98, population: 1,
+      employed: 0, gross: 0, stored: 0, upkeep: 0,
     })
     expect(t4!.roads['road-1']?.status).toBe('underConstruction')
     expect(getBuildingRoadAccess(t4!, 'building-2').hasRoadAccess).toBe(false)
-    // t5: road operational → access → gross production resumes (2), but the
-    // 08F clamp discards it (stock 44 ≥ capacity 25). Upkeep drains to 43.
+    // t5: roads operational → mobility connects → employed → gross production
+    // resumes (2), but the 08F clamp discards it (stock 35 ≥ capacity 25).
+    // Upkeep drains to 34.
     expect(slim(t5!)).toEqual({
-      tick: 5, material: 43, food: 97, population: 1,
+      tick: 5, material: 34, food: 97, population: 1,
       employed: 1, gross: 2, stored: 0, upkeep: 1,
     })
     expect(t5!.roads['road-1']?.status).toBe('operational')
     expect(getBuildingRoadAccess(t5!, 'building-2').hasRoadAccess).toBe(true)
     // First resumed-production tick is tick 5; total bootstrap spend is
-    // 25 + 25 + 5 = 55 plus 1 upkeep, from the 100 starting stock.
+    // 25 + 25 + 15 = 65, from the 100 starting stock (no upkeep before t5).
   })
 })
 
@@ -234,7 +241,7 @@ describe('scenario D — sustained one-Workshop economy (Step 09I §7)', () => {
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }])) // t4
+    state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     const states: SimulationState[] = []
     for (let i = 0; i < 26; i += 1) {
       state = stepSimulation(state) // t5..t30
@@ -246,9 +253,10 @@ describe('scenario D — sustained one-Workshop economy (Step 09I §7)', () => {
   it('D1 — stock drains to the 08F equilibrium and fixes at 24, net zero', () => {
     const states = runD()
     const at = (tick: number): SimulationState => states[tick - 5]!
-    // Above capacity: stored 0, upkeep drains exactly 1/tick.
-    expect(at(10).resources.construction).toBe(38)
-    expect(at(20).resources.construction).toBe(28)
+    // Above capacity: stored 0, upkeep drains exactly 1/tick from the t5
+    // post-road stock (34) until the 24 equilibrium is reached at t15.
+    expect(at(10).resources.construction).toBe(29)
+    expect(at(20).resources.construction).toBe(24)
     // The 24 fixed point: stored 1, upkeep 1, net 0 — forever.
     expect(slim(at(24))).toEqual({
       tick: 24, material: 24, food: 78, population: 1,
@@ -269,33 +277,32 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }])) // t4
+    state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     return stepSimulation(state) // t5
   }
 
   it('E1 — Farm bought from transient stock recovers to the same equilibrium', () => {
     let state = scenarioCEnd()
-    // t6: Farm affordable (43 ≥ 25): 43 − 25 − 1 upkeep = 17. During the
-    // tick nothing was stored (pre-tick stock 43 ≥ capacity 25); the row's
-    // `stored` is the post-tick state query, i.e. next tick's inflow (2).
+    // t6: Farm affordable (34 ≥ 25): 34 − 25 − 1 upkeep = 8. Under 09K the
+    // road path costs 15 (not 5), so the transient stock is lower.
     state = stepSimulation(state, place('farm', 0, 0))
     expect(slim(state)).toEqual({
-      tick: 6, material: 17, food: 96, population: 1,
+      tick: 6, material: 8, food: 96, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
-    // t7: Farm operational: food +2 −1; Material stock 17 → stored 2.
+    // t7: Farm operational: food +2 −1; Material stock 8 → stored 2.
     state = stepSimulation(state)
     expect(slim(state)).toEqual({
-      tick: 7, material: 18, food: 97, population: 1,
+      tick: 7, material: 9, food: 97, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
-    // Recovery continues +1 Material and +1 Food per tick, then Material
+    // Recovery continues +1 Material and +1 Food per tick until Material
     // fixes at 24 again while Food (uncapped) keeps accumulating.
-    for (let i = 0; i < 6; i += 1) {
-      state = stepSimulation(state) // t8..t13
+    for (let i = 0; i < 16; i += 1) {
+      state = stepSimulation(state) // t8..t23
     }
     expect(slim(state)).toEqual({
-      tick: 13, material: 24, food: 103, population: 1,
+      tick: 23, material: 24, food: 113, population: 1,
       employed: 1, gross: 2, stored: 1, upkeep: 1,
     })
   })
@@ -336,14 +343,14 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
 
   it('E3 — a second (vacant) Workshop raises capacity and accumulation resumes', () => {
     let state = scenarioCEnd()
-    // t6: second Workshop bought from transient stock (43 ≥ 25).
+    // t6: second Workshop bought from transient stock (34 ≥ 25).
     state = stepSimulation(state, place('workshop', 4, 5))
-    expect(slim(state).material).toBe(17)
+    expect(slim(state).material).toBe(8)
     // t7: second Workshop operational but vacant — storage counts it anyway
     // (capacity 50), upkeep stays 1 (only the staffed Workshop pays).
     state = stepSimulation(state)
     expect(slim(state)).toEqual({
-      tick: 7, material: 18, food: 95, population: 1,
+      tick: 7, material: 9, food: 95, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
     expect(countEmployedWorkers(state)).toBe(1)
@@ -352,13 +359,13 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
       state = stepSimulation(state) // t8..t14
     }
     expect(slim(state)).toEqual({
-      tick: 14, material: 25, food: 88, population: 1,
+      tick: 14, material: 16, food: 88, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
     for (let i = 0; i < 6; i += 1) {
       state = stepSimulation(state) // t15..t20
     }
-    expect(state.resources.construction).toBe(31)
+    expect(state.resources.construction).toBe(22)
   })
 })
 
@@ -372,7 +379,7 @@ describe('food interaction (Step 09I §10)', () => {
     expect(state.resources.food).toBe(100)
     state = stepSimulation(state, place('workshop', 4, 4)) // t3: first meal
     expect(state.resources.food).toBe(99)
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }])) // t4
+    state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     state = stepSimulation(state) // t5: production resumes with NO farm
     expect(state.resources.food).toBe(97)
     expect(materialProductionForTick(state)).toBe(2)
@@ -381,24 +388,25 @@ describe('food interaction (Step 09I §10)', () => {
 })
 
 describe('roadless Workshop as a sink (Step 09I §11)', () => {
-  it('G1 — a roadless staffed Workshop self-drains at exactly the upkeep rate', () => {
+  it('G1 — a roadless Workshop is vacant under 09K: no production, no upkeep', () => {
     let state = createTestState()
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
-    state = stepSimulation(state) // t4: operational + staffed, roadless
+    state = stepSimulation(state) // t4: operational but not mobility-connected
     const start = state.resources.construction
     for (let i = 0; i < 5; i += 1) {
       state = stepSimulation(state)
-      // production = 0, upkeep = 1, net Material = −1: every single tick.
+      // 09K: no mobility connection → no worker → no staffed Workshop.
+      // production = 0, upkeep = 0, net Material = 0: stock frozen.
       expect(materialProductionForTick(state)).toBe(0)
-      expect(materialUpkeepDueForTick(state)).toBe(1)
-      expect(state.resources.construction).toBe(start - (i + 1))
+      expect(materialUpkeepDueForTick(state)).toBe(0)
+      expect(state.resources.construction).toBe(start)
     }
-    // Descriptively: yes — the state is economically self-draining at
-    // exactly 1 Material/tick (plus 1 Food/tick for its worker), with no
-    // countervailing inflow. Whether that is good or bad is a design
-    // decision, not an audit finding.
+    // This is the key 09K economy change: the old 09F "staffed roadless sink"
+    // (1 Material/tick drain for no output) no longer exists. A roadless
+    // Workshop is now simply idle — it costs nothing and produces nothing
+    // until the player connects the residence to it.
   })
 })
 
@@ -409,7 +417,7 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
       place('residence', 2, 2), // t1
       undefined, // t2
       place('workshop', 4, 4), // t3
-      roads([{ x: 4, y: 3 }]), // t4
+      roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }]), // t4
       undefined, // t5
       place('farm', 0, 0), // t6
       undefined, // t7
@@ -494,7 +502,7 @@ describe('determinism of bootstrap scenarios (Step 09I §15)', () => {
     trajectory.push(slim(state))
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
     trajectory.push(slim(state))
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }])) // t4
+    state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     trajectory.push(slim(state))
     for (let i = 0; i < 11; i += 1) {
       state = stepSimulation(state) // t5..t15
@@ -511,8 +519,8 @@ describe('determinism of bootstrap scenarios (Step 09I §15)', () => {
     // The trajectory is 16 deterministic rows, t0..t15, reproducible.
     expect(first.trajectory.length).toBe(16)
     expect(first.trajectory[15]).toEqual({
-      tick: 15, material: 33, food: 87, population: 1,
-      employed: 1, gross: 2, stored: 0, upkeep: 1,
+      tick: 15, material: 24, food: 87, population: 1,
+      employed: 1, gross: 2, stored: 1, upkeep: 1,
     })
   })
 })
@@ -523,7 +531,7 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
-    state = stepSimulation(state, roads([{ x: 4, y: 3 }])) // t4: road under construction
+    state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4: road under construction
     // Save/load at the most fragile point: transient construction states.
     const loaded = loadSave(serializeSave(state))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
@@ -537,6 +545,6 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     }
     expect(hashCanonicalState(resumed)).toBe(hashCanonicalState(direct))
     expect(slim(resumed)).toEqual(slim(direct))
-    expect(resumed.resources.construction).toBe(39)
+    expect(resumed.resources.construction).toBe(30)
   })
 })

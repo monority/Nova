@@ -62,6 +62,7 @@ const twoWorkshopsTwoWorkers = (): SimulationState => {
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: WS2 operational, cap 50
   state = stepSimulation(state, place('residence', 1, 0)) // t7
+  state = withRoadsForWorkshops(state) // 09K: connect the second residence
   state = stepSimulation(state) // t8: colonist-2 admitted + employed
   return state
 }
