@@ -15,14 +15,18 @@ import {
   applyCommand,
   assignJobs,
   consumeFood,
+  consumeWater,
   produceFood,
   produceMaterial,
+  produceWater,
   progressPlacedBuilding,
   progressPlacedRoads,
   updateNeeds,
   updatePopulation,
   upkeepBuildings,
 } from './phases.js'
+import { getWaterCoverage, hasOperationalWell } from '../water/water.js'
+import { WATER_PER_COLONIST_PER_TICK } from '../resource/resource.js'
 import type { SimulationState } from './state.js'
 
 export const stepSimulation = (
@@ -37,11 +41,40 @@ export const stepSimulation = (
   const requiredFood = updateNeeds(constructed)
   // Phase 4: farm production into the shared stock.
   const produced = produceFood(constructed)
+  // Phase 4b: Well production into the shared Water stock.
+  const watered = produceWater(produced)
   // Phase 5: all-or-nothing colony feeding.
-  const consumed = consumeFood(produced, requiredFood)
+  const consumed = consumeFood(watered, requiredFood)
+  // Phase 5b: Water coverage/consumption (Step 10P). Coverage is derived once
+  // per tick from the existing 09D/09E network data and reused for the need
+  // and the admission gate. Water shortage is a growth gate, never a survival
+  // gate — Food starvation below remains the only population-loss rule.
+  // Bootstrap rule: the Water gate only activates once the colony owns an
+  // operational Well, because the first colonist cannot exist to staff a Well
+  // before the first admission.
+  const waterActive = hasOperationalWell(consumed.state)
+  const coverage = waterActive ? getWaterCoverage(consumed.state) : null
+  const requiredWater =
+    coverage === null
+      ? 0
+      : coverage.servedColonistIds.length * WATER_PER_COLONIST_PER_TICK
+  const waterConsumed =
+    coverage === null
+      ? { state: consumed.state, shortage: false }
+      : consumeWater(consumed.state, requiredWater)
   // Phase 6: population — starvation (when the tick was not fed) then
-  // food-gated admission. The fed/starved decision is passed explicitly.
-  const populated = updatePopulation(consumed.state, consumed.fed)
+  // food-and-water-gated admission. The fed/starved decision is passed
+  // explicitly; Water only restricts admission.
+  const populated = updatePopulation(
+    waterConsumed.state,
+    consumed.fed,
+    coverage === null
+      ? undefined
+      : {
+          shortage: waterConsumed.shortage,
+          servedResidenceIds: new Set(coverage.servedResidenceIds),
+        }
+  )
   // Phase 7: deterministic employment. Runs after population so a colonist
   // admitted this tick can be employed this tick.
   const staffed = assignJobs(populated)

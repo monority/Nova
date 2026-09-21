@@ -30,6 +30,8 @@ const FARM_OPERATIONAL_COLOR = 0x5da85f
 const WORKSHOP_STAFFED_COLOR = 0x4a90d9
 /** Vacant Workshop: same silhouette, clearly dimmer (no worker inside). */
 const WORKSHOP_VACANT_COLOR = 0x2f4a63
+/** Step 10P: the Well reads as a teal service building (cylinder silhouette). */
+const WELL_OPERATIONAL_COLOR = 0x39c5bb
 const CONSTRUCTION_HEIGHT = 0.18
 const OPERATIONAL_HEIGHT = 0.55
 /** Workshops are taller as well as blue: shape + color + height all differ. */
@@ -77,6 +79,9 @@ const operationalColorOf = (data: RenderBuilding): number => {
   if (data.type === 'workshop') {
     return data.workers > 0 ? WORKSHOP_STAFFED_COLOR : WORKSHOP_VACANT_COLOR
   }
+  if (data.type === 'well') {
+    return WELL_OPERATIONAL_COLOR
+  }
   return OPERATIONAL_COLOR
 }
 
@@ -84,7 +89,7 @@ const operationalHeightOf = (type: RenderBuilding['type']): number =>
   type === 'workshop' ? WORKSHOP_OPERATIONAL_HEIGHT : OPERATIONAL_HEIGHT
 
 const geometryOf = (type: RenderBuilding['type']): BoxGeometry | CylinderGeometry =>
-  type === 'workshop' ? workshopGeometry : buildingGeometry
+  type === 'workshop' || type === 'well' ? workshopGeometry : buildingGeometry
 
 export interface BuildingView {
   readonly mesh: Mesh

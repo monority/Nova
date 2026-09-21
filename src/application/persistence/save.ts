@@ -29,9 +29,14 @@ export const SAVE_FORMAT = 'nova-save'
  * to every colonist — historical assignments are NEVER reinterpreted as
  * manual overrides. Saves older than v4 remain rejected.
  */
-export const SAVE_VERSION = 5
-/** The single previous version this build knows how to migrate. */
-export const MIGRATABLE_SAVE_VERSION = 4
+/**
+ * v6: ResourceStock gained `water` (Step 10P). A v5 save (and a v4 save
+ * chained through v5) is migrated deterministically by adding `water: 0`.
+ * Historical Water is never inferred. Saves older than v4 remain rejected.
+ */
+export const SAVE_VERSION = 6
+/** The single previous version this build knows how to migrate (and v4 chains through it). */
+export const MIGRATABLE_SAVE_VERSION = 5
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -66,13 +71,30 @@ const assertString = (value: unknown, field: string): void => {
 }
 
 /**
- * v4 -> v5 migration (Step 10M): stamp every colonist as automatic. Pure and
- * deterministic: the same v4 bytes always yield the same v5 state.
+ * Deterministic, chained migration to the current SAVE_VERSION:
+ *   v4 -> v5: stamp every colonist `workplaceAssignmentMode: 'automatic'`;
+ *   v5 -> v6: add `water: 0` to the resource stock.
+ * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
-  if (save['version'] !== MIGRATABLE_SAVE_VERSION) {
-    return save
+  let current = save
+  let version = current['version']
+  while (typeof version === 'number' && version < SAVE_VERSION) {
+    if (version === 4) {
+      current = migrateV4ToV5(current)
+    } else if (version === 5) {
+      current = migrateV5ToV6(current)
+    } else {
+      break
+    }
+    version += 1
+    current = { ...current, version }
   }
+  return current
+}
+
+/** v4 -> v5: stamp every colonist automatic. */
+const migrateV4ToV5 = (save: Record<string, unknown>): Record<string, unknown> => {
   const state = save['state']
   if (!isRecord(state) || !isRecord(state['colonists'])) {
     throw new SaveValidationError('Malformed save: missing state')
@@ -87,10 +109,27 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
         ? { ...value, workplaceAssignmentMode: 'automatic' }
         : value
   }
-  return { ...save, version: SAVE_VERSION, state: { ...state, colonists } }
+  return { ...save, state: { ...state, colonists } }
 }
 
-/** Restore canonical state from serialized content. Migrates v4 saves. */
+/** v5 -> v6: add `water: 0` to the resource stock. */
+const migrateV5ToV6 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state) || !isRecord(state['resources'])) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const resources = state['resources']
+  return {
+    ...save,
+    state: {
+      ...state,
+      resources:
+        resources['water'] === undefined ? { ...resources, water: 0 } : resources,
+    },
+  }
+}
+
+/** Restore canonical state from serialized content. Migrates v4/v5 saves. */
 export const loadSave = (raw: string): SimulationState => {
   let parsed: unknown
   try {
@@ -104,12 +143,10 @@ export const loadSave = (raw: string): SimulationState => {
   if (parsed['format'] !== SAVE_FORMAT) {
     throw new SaveValidationError('Malformed save: unknown format')
   }
-  if (
-    parsed['version'] !== SAVE_VERSION &&
-    parsed['version'] !== MIGRATABLE_SAVE_VERSION
-  ) {
+  const version = parsed['version']
+  if (version !== SAVE_VERSION && version !== 4 && version !== MIGRATABLE_SAVE_VERSION) {
     throw new SaveValidationError(
-      `Unsupported save version: ${String(parsed['version'])} (expected ${SAVE_VERSION})`
+      `Unsupported save version: ${String(version)} (expected ${SAVE_VERSION})`
     )
   }
   const migrated = migrateSave(parsed)
@@ -144,8 +181,12 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   assertFiniteInt(counters['nextColonistId'], 'counters.nextColonistId')
   assertFiniteInt(resources['construction'], 'resources.construction')
   assertFiniteInt(resources['food'], 'resources.food')
+  assertFiniteInt(resources['water'], 'resources.water')
   if ((resources['food'] as number) < 0) {
     throw new SaveValidationError('Malformed save: resources.food must be >= 0')
+  }
+  if ((resources['water'] as number) < 0) {
+    throw new SaveValidationError('Malformed save: resources.water must be >= 0')
   }
 
   const validatedBuildings: Record<string, BuildingState> = {}
@@ -194,6 +235,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   const resourcesStock: ResourceStock = {
     construction: resources['construction'] as number,
     food: resources['food'] as number,
+    water: resources['water'] as number,
   }
 
   const validatedRoads: Record<string, RoadState> = {}

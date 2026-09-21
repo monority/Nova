@@ -79,6 +79,7 @@ import {
 } from '../resource/resource.js'
 import type { CellCoordinate } from '../world/grid.js'
 import { isInBounds } from '../world/grid.js'
+import { waterProductionForTick } from '../water/water.js'
 import type { SimulationCommand } from './command.js'
 import {
   createBuilding,
@@ -257,7 +258,7 @@ export const validateReassignment = (
   if (workplace === undefined) {
     return { valid: false, reason: 'unknownWorkplace' }
   }
-  if (workplace.type !== 'farm' && workplace.type !== 'workshop') {
+  if (workplace.type !== 'farm' && workplace.type !== 'workshop' && workplace.type !== 'well') {
     return { valid: false, reason: 'notWorkplace' }
   }
   if (!isOperationalWorkplace(workplace)) {
@@ -650,8 +651,79 @@ export const produceFood = (state: SimulationState): SimulationState => {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4b - Water production & consumption (Step 10P)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add this tick's Well output to the shared Water stock. Mirrors
+ * `produceFood`: reads the PREVIOUS tick's assignments (Wells are staffed by
+ * `assignJobs`, which runs after this phase), so a newly assigned Well worker
+ * produces from the next tick. Runs before `consumeWater`. No storage cap.
+ */
+export const produceWater = (state: SimulationState): SimulationState => {
+  const output = waterProductionForTick(state)
+  if (output === 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: { ...state.resources, water: state.resources.water + output },
+  }
+}
+
+export interface WaterConsumptionResult {
+  readonly state: SimulationState
+  /**
+   * True when served colonists exist and the stock could not cover their
+   * need. Intra-tick value only: never stored, persisted or hashed.
+   */
+  readonly shortage: boolean
+}
+
+/**
+ * Water consumption (Step 10P). Served colonists consume one unit each;
+ * missing water is CLAMPED (stock -> 0) and reported as a shortage — it never
+ * kills an existing colonist. Water shortage is a growth gate, not a survival
+ * gate; Food remains the only survival rule.
+ */
+export const consumeWater = (
+  state: SimulationState,
+  requiredWater: number
+): WaterConsumptionResult => {
+  if (requiredWater < 0) {
+    throw new Error(`Negative water requirement: ${requiredWater}`)
+  }
+  if (requiredWater === 0) {
+    return { state, shortage: false }
+  }
+  if (state.resources.water >= requiredWater) {
+    return {
+      state: {
+        ...state,
+        resources: { ...state.resources, water: state.resources.water - requiredWater },
+      },
+      shortage: false,
+    }
+  }
+  return {
+    state: { ...state, resources: { ...state.resources, water: 0 } },
+    shortage: true,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Phase 6 - Population / housing admission + shortage consequence
 // ---------------------------------------------------------------------------
+
+/**
+ * Water admission gate (Step 10P). `shortage` blocks admission for the tick;
+ * `servedResidenceIds` limits admission to Water-served Residences. Absent =>
+ * the historical Food+housing rule (unit tests of the pre-10P rule).
+ */
+export interface WaterAdmissionGate {
+  readonly shortage: boolean
+  readonly servedResidenceIds: ReadonlySet<string>
+}
 
 /**
  * Colonists are admitted only when an operational residence without a
@@ -659,23 +731,34 @@ export const produceFood = (state: SimulationState): SimulationState => {
  * consumption (docs/07 growth conditions, Step 05B §Admission gating).
  * Residences are consumed in ascending id order.
  *
+ * Step 10P: when a Water gate is supplied, the Residence must also be
+ * Water-served and the colony must not be in Water shortage. Water NEVER
+ * causes population loss here — only Food starvation does.
+ *
  * Shortage consequence: when the tick was NOT fed, the entire colony
  * starves in the same tick — every colonist leaves, freeing all residences
  * (all-or-nothing, Step 05B §Shortage consequence).
  */
 export const updatePopulation = (
   state: SimulationState,
-  fed: boolean
+  fed: boolean,
+  water?: WaterAdmissionGate
 ): SimulationState => {
   let nextState = fed
     ? state
     : { ...state, colonists: {} }
+  if (water !== undefined && water.shortage) {
+    return nextState
+  }
   while (nextState.resources.food > 0) {
     const pendingCapacity = availableResidenceIds(nextState)
     if (pendingCapacity.length === 0) {
       break
     }
-    const residenceId = pendingCapacity[0]
+    const residenceId =
+      water === undefined
+        ? pendingCapacity[0]
+        : pendingCapacity.find((id) => water.servedResidenceIds.has(id))
     if (residenceId === undefined) {
       break
     }

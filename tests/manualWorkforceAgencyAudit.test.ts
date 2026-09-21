@@ -94,6 +94,7 @@ const withStocks = (
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
+    water: state.resources.water,
   },
 })
 

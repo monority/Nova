@@ -129,6 +129,7 @@ const withStocks = (
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
+    water: state.resources.water,
   },
 })
 
@@ -1118,7 +1119,7 @@ describe('13 — storage and construction pressure', () => {
 
 describe('16 — persistence and determinism', () => {
   it('SAVE_VERSION 4, no persisted Farm upkeep, deterministic replay', () => {
-    expect(SAVE_VERSION).toBe(5)
+    expect(SAVE_VERSION).toBe(6)
     const state = rowWorld({ residences: 5, farms: 3, workshops: 3, material: 5 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

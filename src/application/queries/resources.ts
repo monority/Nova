@@ -19,6 +19,11 @@ import {
   materialStorageCapacityForTick,
   materialStoredProductionForTick,
 } from '../../domain/simulation/phases.js'
+import {
+  getWaterStatus,
+  waterProductionForTick,
+  waterNeedForTick,
+} from '../../domain/water/water.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 export const getResourceStock = (state: SimulationState): ResourceStock =>
@@ -152,3 +157,41 @@ export const getMaterialStorageCapacity = (state: SimulationState): number =>
 export const getMaterialStoredProductionPerTick = (
   state: SimulationState
 ): number => materialStoredProductionForTick(state)
+
+// ---------------------------------------------------------------------------
+// Water queries (Step 10P). Derived only: coverage, service and shortage are
+// never stored, persisted or hashed; only `resources.water` is canonical.
+// ---------------------------------------------------------------------------
+
+/** Canonical Water stock. */
+export const getWaterStock = (state: SimulationState): number =>
+  state.resources.water
+
+/** Water produced per tick by staffed, road-accessible Wells. */
+export const getWaterProductionPerTick = (state: SimulationState): number =>
+  waterProductionForTick(state)
+
+/** Water required per tick by water-served colonists. */
+export const getWaterNeedPerTick = (state: SimulationState): number =>
+  waterNeedForTick(state)
+
+/** Colonists whose Residence is currently water-served. */
+export const getServedColonistCount = (state: SimulationState): number =>
+  getWaterStatus(state).servedColonistCount
+
+/** Operational Residences currently water-served. */
+export const getWaterServedResidenceCount = (state: SimulationState): number =>
+  getWaterStatus(state).servedResidenceCount
+
+/** True when served colonists exist and the stock cannot cover their need. */
+export const getWaterShortage = (state: SimulationState): boolean =>
+  getWaterStatus(state).shortage
+
+/**
+ * True when no served colonist is short of water: either nobody needs water
+ * (no coverage) or the stock covers every served colonist this tick.
+ */
+export const isWaterSupplySustainable = (state: SimulationState): boolean => {
+  const status = getWaterStatus(state)
+  return status.servedColonistCount === 0 || status.stock >= status.needPerTick
+}

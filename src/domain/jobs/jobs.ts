@@ -47,9 +47,18 @@ export const FARM_JOB_CAPACITY = 1
 export const isOperationalFarm = (building: WorkplaceLike): boolean =>
   building.type === 'farm' && building.status === 'operational'
 
-/** A building offers jobs once operational: Farm or Workshop (Step 10E). */
+/**
+ * An operational Well offers jobs (Step 10P). Same lifecycle rule as every
+ * other workplace; it is a concrete type, not a generic producer.
+ */
+export const isOperationalWell = (building: WorkplaceLike): boolean =>
+  building.type === 'well' && building.status === 'operational'
+
+/** A building offers jobs once operational: Farm, Workshop or Well (Step 10P). */
 export const isOperationalWorkplace = (building: WorkplaceLike): boolean =>
-  isOperationalWorkshop(building) || isOperationalFarm(building)
+  isOperationalWorkshop(building) ||
+  isOperationalFarm(building) ||
+  isOperationalWell(building)
 
 /** A workplace only offers jobs once operational (docs/06 lifecycle). */
 export const isOperationalWorkshop = (building: WorkplaceLike): boolean =>

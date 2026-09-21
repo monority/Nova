@@ -85,6 +85,7 @@ const withStocks = (
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
+    water: state.resources.water,
   },
 })
 
@@ -136,12 +137,12 @@ const audit = (label: string, value: unknown): void => {
 // ---------------------------------------------------------------------------
 
 describe('§1/§3 — current model surface', () => {
-  it('exposes exactly one household resource and three building types', () => {
+  it('exposes the post-10P resource and building surface', () => {
     const resources = Object.keys(createState().resources).sort()
     const buildings = Object.keys(BUILDING_CATALOG).sort()
     audit('CURRENT_SURFACE', { resources, buildings })
-    expect(resources).toEqual(['construction', 'food'])
-    expect(buildings).toEqual(['farm', 'residence', 'workshop'])
+    expect(resources).toEqual(['construction', 'food', 'water'])
+    expect(buildings).toEqual(['farm', 'residence', 'well', 'workshop'])
   })
 
   it('has one household consumption flow (Food) and no second service', () => {
@@ -238,18 +239,18 @@ describe('§2 — existing real pressures (measured)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§3 — missing causal dependencies (surface evidence)', () => {
-  it('there is no second household consumption flow and no storage/availability stage for Food', () => {
+  it('records the 10O gaps and which of them Step 10P closes', () => {
     audit('MISSING', {
-      secondNeed: 'absent',
-      foodStorageStage: 'absent (Food uncapped)',
-      materialOngoingSink: 'absent (only construction + Workshop upkeep)',
-      productionInput: 'absent (Farms need no input beyond a worker)',
-      serviceCoverage: 'absent (Food/Material availability is colony-global)',
+      secondNeed: 'closed by 10P (Water, growth gate)',
+      foodStorageStage: 'still absent (Food uncapped)',
+      materialOngoingSink: 'still absent (only construction + Workshop upkeep)',
+      productionInput: 'still absent (Farms need no input beyond a worker)',
+      serviceCoverage: 'closed by 10P (residence-network Water coverage)',
     })
     expect(true).toBe(true)
   })
 
-  it('building catalog carries no service/input/storage building', () => {
+  it('building catalog (post-10P) carries the Well service building', () => {
     const defs = Object.fromEntries(
       Object.entries(BUILDING_CATALOG).map(([type, def]) => [
         type,
@@ -258,7 +259,8 @@ describe('§3 — missing causal dependencies (surface evidence)', () => {
     )
     audit('BUILDING_CATALOG', defs)
     expect(getBuildingDefinition('farm').constructionCost).toBe(25)
-    expect(Object.keys(defs).length).toBe(3)
+    expect(Object.keys(defs).length).toBe(4)
+    expect(getBuildingDefinition('well').constructionCost).toBe(25)
   })
 })
 
@@ -269,7 +271,7 @@ describe('§3 — missing causal dependencies (surface evidence)', () => {
 describe('§17 — baseline health', () => {
   it('SAVE_VERSION, determinism and save/load remain intact', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 5 })
-    expect(SAVE_VERSION).toBe(5)
+    expect(SAVE_VERSION).toBe(6)
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))
     const a = advance(state, 60)

@@ -261,7 +261,7 @@ describe('construction material flow (Step 08G)', () => {
 
   describe('H — persistence', () => {
     it('22 — save/load round-trips after construction (SAVE_VERSION 4)', () => {
-      expect(SAVE_VERSION).toBe(5)
+      expect(SAVE_VERSION).toBe(6)
       const state = stepSimulation(equilibrium24(), place('residence', 0, 0))
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

@@ -21,7 +21,8 @@
     "test:e2e:upkeep": "node e2e/upkeepRun.mjs",
     "test:e2e:transport": "node e2e/transportRun.mjs",
     "test:e2e:road": "node e2e/roadRun.mjs",
-    "test:e2e:reassign": "node e2e/reassignRun.mjs"
+    "test:e2e:reassign": "node e2e/reassignRun.mjs",
+    "test:e2e:water": "node e2e/waterRun.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

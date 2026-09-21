@@ -15,12 +15,21 @@ export interface ResourceStock {
   readonly construction: number
   /** Colony food reserve in whole meal-units (Step 5). */
   readonly food: number
+  /**
+   * Colony water reserve (Step 10P). Produced by staffed operational Wells,
+   * consumed by water-served colonists. Canonical persisted state: it takes
+   * part in the save schema and the canonical hash. Coverage/service is
+   * derived and never stored.
+   */
+  readonly water: number
 }
 
 /** Deterministic starting construction stock (Step 4 §2: never random). */
 export const INITIAL_CONSTRUCTION_MATERIAL = 100
 /** Deterministic starting food stock (Step 05B §Food resource semantics). */
 export const INITIAL_FOOD = 100
+/** Deterministic starting water stock (Step 10P: explicitly zero). */
+export const INITIAL_WATER = 0
 /** One live colonist needs exactly one food unit per tick (Step 05B). */
 export const FOOD_PER_COLONIST_PER_TICK = 1
 /** One operational farm produces exactly two food units per tick (Step 06B). */
@@ -48,9 +57,15 @@ export const MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK = 1
  */
 export const MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP = 25
 
+/** One staffed operational Well produces two water units per tick (Step 10P). */
+export const WATER_PER_WELL_PER_TICK = 2
+/** One water-served colonist consumes one water unit per tick (Step 10P). */
+export const WATER_PER_COLONIST_PER_TICK = 1
+
 export const createInitialResourceStock = (): ResourceStock => ({
   construction: INITIAL_CONSTRUCTION_MATERIAL,
   food: INITIAL_FOOD,
+  water: INITIAL_WATER,
 })
 
 export const hasSufficientResources = (stock: ResourceStock, cost: number): boolean =>
@@ -86,4 +101,19 @@ export const deductFood = (stock: ResourceStock, amount: number): ResourceStock 
     throw new Error(`Insufficient food: ${stock.food} < ${amount}`)
   }
   return { ...stock, food: stock.food - amount }
+}
+
+/** Water reserve check (Step 10P). Mirrors the Food access rule. */
+export const hasSufficientWater = (stock: ResourceStock, required: number): boolean =>
+  stock.water >= required
+
+/** Atomic water deduction. Pure: never mutates the input stock. */
+export const deductWater = (stock: ResourceStock, amount: number): ResourceStock => {
+  if (amount < 0) {
+    throw new Error(`Negative water deduction: ${amount}`)
+  }
+  if (!hasSufficientWater(stock, amount)) {
+    throw new Error(`Insufficient water: ${stock.water} < ${amount}`)
+  }
+  return { ...stock, water: stock.water - amount }
 }

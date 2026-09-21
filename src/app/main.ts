@@ -37,6 +37,13 @@ import {
   getNetMaterialPerTick,
   getBuildingRoadAccess,
   getColonistWorkMobility,
+  getServedColonistCount,
+  getWaterProductionPerTick,
+  getWaterServedResidenceCount,
+  getWaterStock,
+  hasOperationalWell,
+  isWaterSupplySustainable,
+  WATER_PER_WELL_PER_TICK,
   expandRoadDrag,
   ROAD_CONSTRUCTION_COST,
   validateRoadsPlacement,
@@ -82,12 +89,15 @@ const ui = {
   buildResidence: document.querySelector<HTMLButtonElement>('#btn-build-residence'),
   buildFarm: document.querySelector<HTMLButtonElement>('#btn-build-farm'),
   buildWorkshop: document.querySelector<HTMLButtonElement>('#btn-build-workshop'),
+  buildWell: document.querySelector<HTMLButtonElement>('#btn-build-well'),
   buildRoad: document.querySelector<HTMLButtonElement>('#btn-build-road'),
   speed: document.querySelector<HTMLSelectElement>('#speed'),
   tick: document.querySelector<HTMLSpanElement>('#ui-tick'),
   construction: document.querySelector<HTMLSpanElement>('#ui-construction'),
   food: document.querySelector<HTMLSpanElement>('#ui-food'),
   foodForecast: document.querySelector<HTMLSpanElement>('#ui-food-forecast'),
+  water: document.querySelector<HTMLSpanElement>('#ui-water'),
+  waterStatus: document.querySelector<HTMLSpanElement>('#ui-water-status'),
   buildings: document.querySelector<HTMLSpanElement>('#ui-buildings'),
   operational: document.querySelector<HTMLSpanElement>('#ui-operational'),
   colonists: document.querySelector<HTMLSpanElement>('#ui-colonists'),
@@ -108,6 +118,7 @@ const BUILDING_LABELS: Readonly<Record<string, string>> = {
   residence: 'Residence',
   farm: 'Farm',
   workshop: 'Workshop',
+  well: 'Well',
 }
 
 const labelOf = (building: BuildingInspection): string =>
@@ -183,6 +194,21 @@ const refreshInspection = (): void => {
           ? 'upkeep 1/tick'
           : 'upkeep 0 (vacant)'
       ui.insHousing.textContent = `Jobs — Capacity ${capacity} · Workers ${workers}/${capacity} · ${upkeep}`
+    } else if (building.type === 'well') {
+      // Step 10P: the concrete Water production contract.
+      const workers = countWorkersAt(controller.getState(), building.id)
+      const roadAccess = getBuildingRoadAccess(
+        controller.getState(),
+        building.id
+      ).hasRoadAccess
+      ui.insHousing.textContent =
+        building.status !== 'operational'
+          ? 'Water production — not operational yet'
+          : workers === 0
+            ? 'Water production — vacant, producing +0/tick'
+            : !roadAccess
+              ? 'Water production — staffed but no road access, producing +0/tick'
+              : `Water production — producing +${WATER_PER_WELL_PER_TICK}/tick (staffed)`
     } else {
       ui.insHousing.textContent = `Housing — Capacity ${building.housingCapacity} · Residents ${building.occupiedHousing}`
     }
@@ -195,7 +221,9 @@ const refreshInspection = (): void => {
     selectedBuildingId === null ? undefined : state.buildings[selectedBuildingId]
   const isWorkplace =
     workplace !== undefined &&
-    (workplace.type === 'farm' || workplace.type === 'workshop')
+    (workplace.type === 'farm' ||
+      workplace.type === 'workshop' ||
+      workplace.type === 'well')
   let workerId: string | null = null
   if (isWorkplace && workplace?.status === 'operational') {
     const workers = Object.values(state.colonists)
@@ -287,6 +315,7 @@ const refreshToolButtons = (): void => {
     'aria-pressed',
     String(activeType === 'workshop')
   )
+  ui.buildWell?.setAttribute('aria-pressed', String(activeType === 'well'))
   ui.buildRoad?.setAttribute('aria-pressed', String(selectedTool.kind === 'road'))
 }
 
@@ -315,6 +344,9 @@ ui.buildFarm?.addEventListener('click', () => {
 })
 ui.buildWorkshop?.addEventListener('click', () => {
   selectBuildingType('workshop')
+})
+ui.buildWell?.addEventListener('click', () => {
+  selectBuildingType('well')
 })
 ui.buildRoad?.addEventListener('click', selectRoadTool)
 if (ui.buildRoad !== null) {
@@ -436,6 +468,16 @@ const refreshUi = (): void => {
   if (ui.foodForecast !== null) {
     ui.foodForecast.textContent = foodForecastLabel(s)
   }
+  if (ui.water !== null) {
+    ui.water.textContent = String(getWaterStock(s))
+  }
+  if (ui.waterStatus !== null) {
+    ui.waterStatus.textContent = !hasOperationalWell(s)
+      ? ''
+      : isWaterSupplySustainable(s)
+        ? ' · served'
+        : ' · shortage'
+  }
   if (ui.buildings !== null) {
     ui.buildings.textContent = String(Object.keys(s.buildings).length)
   }
@@ -544,6 +586,15 @@ const refreshUi = (): void => {
       }
     }
     if (parts.length > 0) {
+      // Step 10P: surface the Water admission block alongside the other
+      // causal messages, so the player can see why population is not growing.
+      if (
+        hasOperationalWell(s) &&
+        getHousingSummary(s).availableCapacity > 0 &&
+        getWaterServedResidenceCount(s) === 0
+      ) {
+        parts.push('No water service — population cannot grow')
+      }
       setStatus(parts.join(' · '))
       tickCausalMessage = true
     } else if (employment.employed === 0) {
@@ -555,6 +606,15 @@ const refreshUi = (): void => {
   if (!tickCausalMessage) {
     if (getHousingSummary(s).availableCapacity > 0 && food === 0) {
       setStatus('No colonist admitted — food unavailable')
+      tickCausalMessage = true
+    } else if (
+      hasOperationalWell(s) &&
+      getHousingSummary(s).availableCapacity > 0 &&
+      getWaterServedResidenceCount(s) === 0
+    ) {
+      // Step 10P: the second gate — Food and housing are not enough once a
+      // Well exists but no Residence is served by it.
+      setStatus('No water service — population cannot grow')
       tickCausalMessage = true
     } else if (starved && colonists === 0) {
       setStatus('Food shortage — colony starved (population 0)')
@@ -857,7 +917,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly hasOperationalWell: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -932,6 +992,13 @@ window.__nova = {
             ? 'sustainable'
             : '',
       foodStatus: foodStatusLabel(state),
+      // Step 10P: Water stock and derived service status (never persisted).
+      water: String(getWaterStock(state)),
+      waterProduction: String(getWaterProductionPerTick(state)),
+      waterServedResidences: String(getWaterServedResidenceCount(state)),
+      servedColonists: String(getServedColonistCount(state)),
+      waterSustainable: String(isWaterSupplySustainable(state)),
+      hasOperationalWell: String(hasOperationalWell(state)),
       buildings: ui.buildings?.textContent ?? '',
       operational: ui.operational?.textContent ?? '',
       farms: String(

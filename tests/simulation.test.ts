@@ -146,7 +146,7 @@ describe('simulation shapes', () => {
 describe('food need simulation (Step 05)', () => {
   it('keeps food stock in the canonical resource shape', () => {
     const state = createTestState()
-    expect(Object.keys(state.resources).sort()).toEqual(['construction', 'food'])
+    expect(Object.keys(state.resources).sort()).toEqual(['construction', 'food', 'water'])
   })
 
   it('colonist admitted on tick N does not consume until tick N+1', () => {
