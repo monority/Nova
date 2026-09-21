@@ -103,10 +103,16 @@
         <div id="ins-construction" data-testid="inspection-construction"></div>
         <div id="ins-housing" data-testid="inspection-housing"></div>
         <div id="ins-worker" data-testid="inspection-worker"></div>
+        <div id="ins-crew" data-testid="inspection-crew"></div>
       </div>
       <div class="row" id="reassign-row" style="display: none">
         <select id="reassign-target" data-testid="reassign-target" aria-label="reassignment target"></select>
         <button id="btn-reassign" type="button" data-testid="reassign-confirm">Move worker</button>
+      </div>
+      <div class="row" id="crew-row" style="display: none">
+        <select id="crew-target" data-testid="crew-target" aria-label="construction crew"></select>
+        <button id="btn-crew" type="button" data-testid="crew-confirm">Assign crew</button>
+        <button id="btn-crew-release" type="button" data-testid="crew-release">Release</button>
       </div>
       <div class="row">
         <button id="btn-play" type="button" data-testid="simulation-play">PLAY</button>

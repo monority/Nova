@@ -116,14 +116,18 @@ async function main() {
     } else ok(`material depleted 100 -> ${s.construction}, ${s.buildings} residences`);
 
     // STEP until the last residence is operational and all 4 colonists fed.
+    // Step 10Y: a placed 2-tick building needs two construction ticks, so the
+    // last of the four residences is operational at tick 6.
     await step(page);
     await waitFor(async () => Number((await stats(page)).tick) === 5, 'step to tick 5');
+    await step(page);
+    await waitFor(async () => Number((await stats(page)).tick) === 6, 'step to tick 6');
     s = await stats(page);
     if (s.colonists !== '4' || s.operational !== '4' || s.food !== '94') {
       fail(`after operational tick bad: ${JSON.stringify(s)}`);
     } else ok(`4 colonists fed, food ${s.food} at tick ${s.tick}, ${JSON.stringify(s)}`);
     await step(page);
-    await waitFor(async () => Number((await stats(page)).food) === 90, 'step to tick 6');
+    await waitFor(async () => Number((await stats(page)).food) === 90, 'step to tick 7');
     await shot('02-colonists-fed.png');
 
     // C. Consumption: every fed tick food decreases by exactly the population.

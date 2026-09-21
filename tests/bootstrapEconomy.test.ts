@@ -37,7 +37,6 @@ import {
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
   produceFood,
   produceMaterial,
-  progressPlacedBuilding,
   progressPlacedRoads,
   ROAD_CONSTRUCTION_COST,
   ROAD_CONSTRUCTION_TICKS,
@@ -51,6 +50,7 @@ import {
   WORKSHOP_JOB_CAPACITY,
   type SimulationState,
 } from '@/index'
+import { placeCatchUp } from './helpers.js'
 import { createTestState } from './helpers.js'
 
 const place = (
@@ -130,7 +130,7 @@ describe('scenario A — minimum viable settlement (Step 09I §5)', () => {
     })
     // t1: Residence placed (25). No colonist yet: the building is placed at
     // phase 8a, AFTER this tick's admission phase.
-    state = stepSimulation(state, place('residence', 2, 2))
+    state = placeCatchUp(state, place('residence', 2, 2))
     expect(slim(state)).toEqual({
       tick: 1, material: 75, food: 100, population: 0,
       employed: 0, gross: 0, stored: 0, upkeep: 0,
@@ -153,9 +153,9 @@ describe('scenario B — Workshop without road (Step 09I §5, 09K-gated)', () =>
   const runB = (): SimulationState[] => {
     const states: SimulationState[] = []
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     states.push(state)
     for (let i = 0; i < 6; i += 1) {
       state = stepSimulation(state) // t4..t9
@@ -199,9 +199,9 @@ describe('scenario C — minimum road-served Workshop (Step 09I §5)', () => {
    *  residence (2,2) to workshop (4,4). */
   const runC = (): SimulationState[] => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1
-    const t3 = stepSimulation(state, place('workshop', 4, 4)) // t3
+    const t3 = placeCatchUp(state, place('workshop', 4, 4)) // t3
     const t4 = stepSimulation(t3, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     const t5 = stepSimulation(t4) // t5: roads operational
     return [t3, t4, t5]
@@ -238,9 +238,9 @@ describe('scenario C — minimum road-served Workshop (Step 09I §5)', () => {
 describe('scenario D — sustained one-Workshop economy (Step 09I §7)', () => {
   const runD = (): SimulationState[] => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     const states: SimulationState[] = []
     for (let i = 0; i < 26; i += 1) {
@@ -274,9 +274,9 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
   /** Scenario C end (t5): material 43, food 97, road-served Workshop. */
   const scenarioCEnd = (): SimulationState => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     return stepSimulation(state) // t5
   }
@@ -285,7 +285,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     let state = scenarioCEnd()
     // t6: Farm affordable (34 ≥ 25): 34 − 25 − 1 upkeep = 8. Under 09K the
     // road path costs 15 (not 5), so the transient stock is lower.
-    state = stepSimulation(state, place('farm', 0, 0))
+    state = placeCatchUp(state, place('farm', 0, 0))
     expect(slim(state)).toEqual({
       tick: 6, material: 8, food: 96, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
@@ -324,7 +324,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     // ...but the real tick adds this tick's stored inflow BEFORE the
     // construction transaction (phase 8a runs after produceMaterial):
     // 24 + 1 stored = 25, exactly one building.
-    const after = stepSimulation(state, place('farm', 0, 0))
+    const after = placeCatchUp(state, place('farm', 0, 0))
     expect(Object.keys(after.buildings)).toEqual([
       'building-1',
       'building-2',
@@ -346,7 +346,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
   it('E3 — a second (vacant) Workshop raises capacity and accumulation resumes', () => {
     let state = scenarioCEnd()
     // t6: second Workshop bought from transient stock (34 ≥ 25).
-    state = stepSimulation(state, place('workshop', 4, 5))
+    state = placeCatchUp(state, place('workshop', 4, 5))
     expect(slim(state).material).toBe(8)
     // t7: second Workshop operational but vacant — storage counts it anyway
     // (capacity 50), upkeep stays 1 (only the staffed Workshop pays).
@@ -374,12 +374,12 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
 describe('food interaction (Step 09I §10)', () => {
   it('F1 — first consumption, runway, and no Farm requirement before production', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     // No colonist yet: nothing consumed.
     expect(state.resources.food).toBe(100)
     state = stepSimulation(state) // t2: colonist admitted after a 0-need tick
     expect(state.resources.food).toBe(100)
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3: first meal
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3: first meal
     expect(state.resources.food).toBe(99)
     state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     state = stepSimulation(state) // t5: production resumes with NO farm
@@ -392,9 +392,9 @@ describe('food interaction (Step 09I §10)', () => {
 describe('roadless Workshop as a sink (Step 09I §11)', () => {
   it('G1 — a roadless Workshop is vacant under 09K: no production, no upkeep', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     state = stepSimulation(state) // t4: operational but not mobility-connected
     const start = state.resources.construction
     for (let i = 0; i < 5; i += 1) {
@@ -471,8 +471,8 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
             ? command.cells.length * ROAD_CONSTRUCTION_COST
             : 25
       expect(paid).toBe(expectedCost)
-      const t8a = progressPlacedBuilding(t7)
-      const t8 = progressPlacedRoads(t8a, t7)
+      // Step 10Y: stepSimulation no longer catches a placed building up.
+      const t8 = progressPlacedRoads(t7.state, t7)
       expect(t8.resources).toEqual(t7.state.resources)
       const due = materialUpkeepDueForTick(t8)
       const t9 = upkeepBuildings(t8)
@@ -498,11 +498,11 @@ describe('determinism of bootstrap scenarios (Step 09I §15)', () => {
   const runBootstrap = (): { trajectory: TrajRow[]; hash: string } => {
     let state = createTestState()
     const trajectory: TrajRow[] = [slim(state)]
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     trajectory.push(slim(state))
     state = stepSimulation(state) // t2
     trajectory.push(slim(state))
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     trajectory.push(slim(state))
     state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     trajectory.push(slim(state))
@@ -530,14 +530,14 @@ describe('determinism of bootstrap scenarios (Step 09I §15)', () => {
 describe('persistence of bootstrap states (Step 09I §16)', () => {
   it('J1 — save/load mid-bootstrap continues identically', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4: road under construction
     // Save/load at the most fragile point: transient construction states.
     const loaded = loadSave(serializeSave(state))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     // Continue both 5 ticks: identical futures.
     let direct = state
     let resumed = loaded

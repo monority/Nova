@@ -47,7 +47,7 @@ import {
   type SimulationCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, placeCatchUp } from './helpers.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,7 +89,7 @@ const runScript = (
   let next = state
   const history: Snapshot[] = []
   for (let t = 0; t < ticks; t += 1) {
-    next = stepSimulation(next, script[t])
+    next = placeCatchUp(next, script[t])
     history.push(snapshot(next))
   }
   return history
@@ -226,7 +226,7 @@ describe('§3 — baseline bootstrap trajectory', () => {
   it('10E: residence + road + farm — the colonist staffs the farm, +1 food/tick', () => {
     // t1 residence(1,1) · t2 road cells (1,2)+(2,2) · t3 farm(2,1).
     let state = createTestState()
-    state = stepSimulation(state, place(1, 1, 'residence'))
+    state = placeCatchUp(state, place(1, 1, 'residence'))
     state = stepSimulation(state, {
       type: 'placeRoads',
       cells: [
@@ -234,7 +234,7 @@ describe('§3 — baseline bootstrap trajectory', () => {
         { x: 2, y: 2 },
       ],
     })
-    state = stepSimulation(state, place(2, 1, 'farm'))
+    state = placeCatchUp(state, place(2, 1, 'farm'))
     const history: Snapshot[] = []
     for (let t = 0; t < 10; t += 1) {
       state = stepSimulation(state)
@@ -396,10 +396,10 @@ describe('§4E — residence growth ahead of staffing', () => {
     // colony that "built enough food" still starves. This is the core
     // consequence of worker-gated production.
     let state = createTestState()
-    state = stepSimulation(state, place(1, 1, 'residence'))
-    state = stepSimulation(state, place(1, 2, 'farm'))
-    state = stepSimulation(state, place(3, 1, 'residence'))
-    state = stepSimulation(state, place(3, 2, 'farm'))
+    state = placeCatchUp(state, place(1, 1, 'residence'))
+    state = placeCatchUp(state, place(1, 2, 'farm'))
+    state = placeCatchUp(state, place(3, 1, 'residence'))
+    state = placeCatchUp(state, place(3, 2, 'farm'))
     expect(countType(state, 'farm')).toBe(2)
     expect(countStaffedOperationalFarms(state)).toBe(0)
     expect(foodProductionForTick(state)).toBe(0)
@@ -606,7 +606,7 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     // INDUSTRY: 1 residence + 1 workshop + a connecting road. The worker is
     // employed, so Material accrues while food decays (no farm at all).
     let industry = createTestState()
-    industry = stepSimulation(industry, place(1, 0, 'residence'))
+    industry = placeCatchUp(industry, place(1, 0, 'residence'))
     industry = stepSimulation(industry, {
       type: 'placeRoads',
       cells: [
@@ -614,7 +614,7 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
         { x: 2, y: 1 },
       ],
     })
-    industry = stepSimulation(industry, place(2, 0, 'workshop'))
+    industry = placeCatchUp(industry, place(2, 0, 'workshop'))
     const series: Snapshot[] = []
     for (let t = 0; t < 8; t += 1) {
       industry = stepSimulation(industry)
@@ -646,7 +646,7 @@ describe('audit determinism', () => {
   it('repeating the bootstrap produces identical canonical state and hash', () => {
     const run = (): SimulationState => {
       let s = createTestState()
-      s = stepSimulation(s, place(1, 1, 'residence'))
+      s = placeCatchUp(s, place(1, 1, 'residence'))
       s = stepSimulation(s, {
         type: 'placeRoads',
         cells: [
@@ -654,7 +654,7 @@ describe('audit determinism', () => {
           { x: 2, y: 2 },
         ],
       })
-      s = stepSimulation(s, place(2, 1, 'farm'))
+      s = placeCatchUp(s, place(2, 1, 'farm'))
       for (let t = 0; t < 6; t += 1) {
         s = stepSimulation(s)
       }

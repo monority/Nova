@@ -37,7 +37,6 @@ import {
   produceWater,
   progressOneBuilding,
   progressOneRoad,
-  progressPlacedBuilding,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -281,8 +280,8 @@ const stepAudited = (
   const staffed = excludeCrew(assignJobs(populated), busy)
   const materialized = produceMaterial(staffed)
   const commanded = applyCommand(materialized, command)
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed= progressPlacedRoads(progressedBuilding, commanded)
+  // Step 10Y removed the building placement catch-up from stepSimulation.
+  const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
 }
@@ -330,7 +329,7 @@ describe('§1 — current causal graph', () => {
         'assignJobs',
         'produceMaterial',
         'applyCommand',
-        'progressPlacedBuilding',
+        'progressPlacedRoads',
         'progressPlacedRoads',
         'upkeepBuildings',
         'advanceTime',
@@ -807,7 +806,7 @@ describe('§10/§11 — Material and population feedback', () => {
 
 describe('§12/§13 — implementation cost, persistence, performance', () => {
   it('estimates the Construction Crew contract and confirms current persistence', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     const state = world({ residences: 4, farms: 1, wells: 1, colonists: 4 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

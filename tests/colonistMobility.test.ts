@@ -408,7 +408,7 @@ describe('residential-to-work mobility contract (Step 09G)', () => {
     expect(serializeCanonicalState(loaded)).toBe(serializeCanonicalState(state))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getColonistWorkMobility(loaded, colonistId)).toEqual(before)
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('N — determinism and purity: same state, same result, state untouched', () => {
@@ -454,6 +454,8 @@ describe('residential-to-work mobility contract (Step 09G)', () => {
       // Step 10M: the assignment mode is canonical; mobility itself is still
       // a derived fact and never stored on the colonist.
       workplaceAssignmentMode: 'automatic',
+      // Step 10Y: the construction crew assignment is canonical and null here.
+      constructionAssignmentId: null,
     })
     expect(Object.keys(colonist ?? {})).not.toContain('mobilityConnected')
   })

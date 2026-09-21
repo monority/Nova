@@ -10,6 +10,12 @@
  * automatically by `assignJobs` or manually by the player. The colonist
  * remains the canonical owner of employment state; there is no reverse index
  * and no workplace-side worker array.
+ *
+ * Step 10Y adds ONE more concrete relationship: an optional construction crew
+ * assignment (`constructionAssignmentId`). It is a MANUAL-only relationship —
+ * `assignJobs` never creates one — and it is mutually exclusive with
+ * employment: a colonist either holds a workplace or crews one construction
+ * site, never both. There is no generic Task/Assignment abstraction.
  */
 
 /**
@@ -37,4 +43,12 @@ export interface ColonistState {
    * the migration value for every pre-Step-10M save.
    */
   readonly workplaceAssignmentMode: WorkplaceAssignmentMode
+  /**
+   * Under-construction building this colonist crews, or null (Step 10Y).
+   * Canonical, manual-only: `assignJobs` never sets it, and while it is set
+   * the colonist holds no workplace (`workplaceId` is null). It is cleared
+   * deterministically by the construction phase as soon as the site becomes
+   * operational, after which `assignJobs` may employ the colonist again.
+   */
+  readonly constructionAssignmentId: string | null
 }

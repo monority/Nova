@@ -60,7 +60,7 @@ import {
   type BuildingType,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, placeCatchUp } from './helpers.js'
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -1196,9 +1196,9 @@ describe('§14 — UI information audit', () => {
 describe('§15 — Farm vs Workshop production timing', () => {
   const runCommands = (type: 'farm' | 'workshop') => {
     let state = createTestState()
-    state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
+    state = placeCatchUp(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }] })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: type })
+    state = placeCatchUp(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: type })
     return state
   }
 
@@ -1255,7 +1255,7 @@ describe('§15 — Farm vs Workshop production timing', () => {
 
 describe('§16 — persistence and determinism', () => {
   it('SAVE_VERSION is 4 and employment survives save/load', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     const state = rowWorld({ residences: 3, farms: 2, workshops: 2 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

@@ -51,7 +51,6 @@ import {
   materialUpkeepDueForTick,
   produceFood,
   produceMaterial,
-  progressPlacedBuilding,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -271,8 +270,7 @@ const stepWithMetrics = (
   const materialized = produceMaterial(staffed)
   const commanded = applyCommand(materialized, command)
   const crestStock = commanded.state.resources.construction
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed = progressPlacedRoads(progressedBuilding, commanded)
+  const progressed = progressPlacedRoads(commanded.state, commanded)
 
   const workshopUpkeep = materialUpkeepDueForTick(progressed)
   const farmUpkeep = farmUpkeepDueFor(mode, staffedFarms)
@@ -1119,7 +1117,7 @@ describe('13 — storage and construction pressure', () => {
 
 describe('16 — persistence and determinism', () => {
   it('SAVE_VERSION 4, no persisted Farm upkeep, deterministic replay', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     const state = rowWorld({ residences: 5, farms: 3, workshops: 3, material: 5 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

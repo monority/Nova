@@ -4,8 +4,8 @@
  * - Saves represent canonical simulation state, never renderer state.
  * - Explicit format version from the first save implementation.
  * - Unknown/unsupported versions are rejected. A version that the repository
- *   explicitly knows how to migrate (v4 -> v5, Step 10M) is migrated with
- *   deterministic semantics; everything else is rejected.
+ *   explicitly knows how to migrate (v4 -> v5 -> v6 -> v7, Steps 10M/10P/10Y)
+ *   is migrated with deterministic semantics; everything else is rejected.
  */
 
 import { canonicalJson } from '../../domain/simulation/hash.js'
@@ -34,9 +34,17 @@ export const SAVE_FORMAT = 'nova-save'
  * chained through v5) is migrated deterministically by adding `water: 0`.
  * Historical Water is never inferred. Saves older than v4 remain rejected.
  */
-export const SAVE_VERSION = 6
-/** The single previous version this build knows how to migrate (and v4 chains through it). */
-export const MIGRATABLE_SAVE_VERSION = 5
+/**
+ * v7: ColonistState gained `constructionAssignmentId` (Step 10Y). A v6 save
+ * (and any older save chained through v6) is migrated deterministically by
+ * adding `constructionAssignmentId: null` to every colonist — historical
+ * colonists are never retroactively interpreted as construction crew.
+ */
+export const SAVE_VERSION = 7
+/** The single previous version this build knows how to migrate (v4/v5 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 6
+/** Every older version the chained migration still accepts. */
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -73,7 +81,8 @@ const assertString = (value: unknown, field: string): void => {
 /**
  * Deterministic, chained migration to the current SAVE_VERSION:
  *   v4 -> v5: stamp every colonist `workplaceAssignmentMode: 'automatic'`;
- *   v5 -> v6: add `water: 0` to the resource stock.
+ *   v5 -> v6: add `water: 0` to the resource stock;
+ *   v6 -> v7: stamp every colonist `constructionAssignmentId: null`.
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -84,6 +93,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV4ToV5(current)
     } else if (version === 5) {
       current = migrateV5ToV6(current)
+    } else if (version === 6) {
+      current = migrateV6ToV7(current)
     } else {
       break
     }
@@ -129,6 +140,25 @@ const migrateV5ToV6 = (save: Record<string, unknown>): Record<string, unknown> =
   }
 }
 
+/** v6 -> v7: stamp every colonist `constructionAssignmentId: null`. */
+const migrateV6ToV7 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state) || !isRecord(state['colonists'])) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const colonists: Record<string, unknown> = {}
+  for (const [id, value] of Object.entries(state['colonists'])) {
+    if (!isRecord(value)) {
+      throw new SaveValidationError(`Malformed save: colonist ${id}`)
+    }
+    colonists[id] =
+      value['constructionAssignmentId'] === undefined
+        ? { ...value, constructionAssignmentId: null }
+        : value
+  }
+  return { ...save, state: { ...state, colonists } }
+}
+
 /** Restore canonical state from serialized content. Migrates v4/v5 saves. */
 export const loadSave = (raw: string): SimulationState => {
   let parsed: unknown
@@ -144,7 +174,10 @@ export const loadSave = (raw: string): SimulationState => {
     throw new SaveValidationError('Malformed save: unknown format')
   }
   const version = parsed['version']
-  if (version !== SAVE_VERSION && version !== 4 && version !== MIGRATABLE_SAVE_VERSION) {
+  if (
+    version !== SAVE_VERSION &&
+    !MIGRATABLE_SAVE_VERSIONS.includes(version as number)
+  ) {
     throw new SaveValidationError(
       `Unsupported save version: ${String(version)} (expected ${SAVE_VERSION})`
     )
@@ -224,6 +257,15 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     if (mode !== 'automatic' && mode !== 'manual') {
       throw new SaveValidationError(
         `Malformed save: colonists.${id}.workplaceAssignmentMode`
+      )
+    }
+    const constructionAssignmentId = value['constructionAssignmentId']
+    if (
+      constructionAssignmentId !== null &&
+      typeof constructionAssignmentId !== 'string'
+    ) {
+      throw new SaveValidationError(
+        `Malformed save: colonists.${id}.constructionAssignmentId`
       )
     }
     if (value['id'] !== id) {

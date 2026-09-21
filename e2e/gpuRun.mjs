@@ -237,7 +237,8 @@ async function main() {
     await page.mouse.click(pt.x, pt.y);
     await waitFor(async () => (await page.evaluate(() => window.__nova.selectedBuilding()))?.id === 'building-1', 'building selected');
     const underConstruction = await page.evaluate(() => window.__nova.selectedBuilding());
-    if (underConstruction?.status !== 'underConstruction' || underConstruction.constructionRemaining !== 1) {
+    // Step 10Y: no placement catch-up — the catalog's 2 ticks are literal.
+    if (underConstruction?.status !== 'underConstruction' || underConstruction.constructionRemaining !== 2) {
       fail(`temporal inspection under construction expected, got ${JSON.stringify(underConstruction)}`);
     } else ok(`inspection under construction, ${underConstruction.constructionRemaining}/${underConstruction.constructionDuration} ticks`);
 
@@ -246,9 +247,15 @@ async function main() {
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '2', 'step to tick 2');
     s = await page.evaluate(() => window.__nova.stats());
+    if (s.operational !== '0') {
+      fail(`tick 2 should still be under construction: ${JSON.stringify(s)}`);
+    } else ok(`tick 2 still under construction, ${JSON.stringify(s)}`);
+    await page.click('[data-testid="simulation-step"]');
+    await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '3', 'step to tick 3');
+    s = await page.evaluate(() => window.__nova.stats());
     if (s.operational !== '1' || s.colonists !== '1') {
-      fail(`after step2 bad: ${JSON.stringify(s)}`);
-    } else ok(`STEP tick 2: building-1 operational, colonist admitted, ${JSON.stringify(s)}`);
+      fail(`after step3 bad: ${JSON.stringify(s)}`);
+    } else ok(`STEP tick 3: building-1 operational, colonist admitted, ${JSON.stringify(s)}`);
     const initiallyOperational = await page.evaluate(() => window.__nova.selectedBuilding());
     if (initiallyOperational?.status !== 'operational' || initiallyOperational.occupiedHousing !== 1) {
       fail(`inspection operational expected, got ${JSON.stringify(initiallyOperational)}`);
@@ -300,7 +307,7 @@ async function main() {
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => Number((await page.evaluate(() => window.__nova.stats())).tick) === temporalTickBefore + 1, 'step advances one tick');
     s = await page.evaluate(() => window.__nova.stats());
-    if (s.operational !== '4' || s.colonists !== '4') {
+    if (s.operational !== '3' || s.colonists !== '3') {
       fail(`after deterministic step bad: ${JSON.stringify(s)}`);
     } else ok(`deterministic STEP: ${s.operational} operational, ${s.colonists} colonists, ${JSON.stringify(s)}`);
     stats.render = true;

@@ -398,9 +398,9 @@ describe('5 — economic verification and recovery', () => {
 // ---------------------------------------------------------------------------
 
 describe('6 — persistence and migration', () => {
-  it('SAVE_VERSION is 5 and a manual assignment round-trips', () => {
-    expect(SAVE_VERSION).toBe(6)
-    expect(MIGRATABLE_SAVE_VERSION).toBe(5)
+  it('SAVE_VERSION is 7 and a manual assignment round-trips', () => {
+    expect(SAVE_VERSION).toBe(7)
+    expect(MIGRATABLE_SAVE_VERSION).toBe(6)
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2 })
     const manual = reassign(state, 'colonist-2', 'building-5')
     const restored = loadSave(serializeSave(manual))
@@ -459,6 +459,8 @@ describe('7 — colonist inspection', () => {
       residenceId: 'building-2',
       workplaceId: 'building-5',
       workplaceAssignmentMode: 'manual',
+      // Step 10Y: the crew assignment is part of the colonist inspection.
+      constructionAssignmentId: null,
     })
     expect(getColonistInspection(manual, 'colonist-999')).toBeNull()
   })

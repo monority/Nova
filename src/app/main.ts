@@ -22,7 +22,10 @@ import {
   getBuildingIdAtCell,
   getBuildingInspection,
   getColonistInspection,
+  getConstructionCrewId,
+  getConstructionCrewOptions,
   getReassignmentOptions,
+  serializeSave,
   getAccessibleBuildingCount,
   getEmploymentSummary,
   getFoodTicksRemaining,
@@ -109,9 +112,14 @@ const ui = {
   insConstruction: document.querySelector<HTMLElement>('#ins-construction'),
   insHousing: document.querySelector<HTMLElement>('#ins-housing'),
   insWorker: document.querySelector<HTMLElement>('#ins-worker'),
+  insCrew: document.querySelector<HTMLElement>('#ins-crew'),
   reassignRow: document.querySelector<HTMLElement>('#reassign-row'),
   reassignTarget: document.querySelector<HTMLSelectElement>('#reassign-target'),
   reassignConfirm: document.querySelector<HTMLButtonElement>('#btn-reassign'),
+  crewRow: document.querySelector<HTMLElement>('#crew-row'),
+  crewTarget: document.querySelector<HTMLSelectElement>('#crew-target'),
+  crewConfirm: document.querySelector<HTMLButtonElement>('#btn-crew'),
+  crewRelease: document.querySelector<HTMLButtonElement>('#btn-crew-release'),
 }
 
 const BUILDING_LABELS: Readonly<Record<string, string>> = {
@@ -150,6 +158,15 @@ const REASSIGN_REASON_LABELS: Readonly<Record<string, string>> = {
   notOperational: 'not operational',
   workplaceOccupied: 'occupied',
   notConnected: 'no road access',
+}
+
+/** Step 10Y: deterministic crew-rejection labels. */
+const CREW_REASON_LABELS: Readonly<Record<string, string>> = {
+  unknownColonist: 'unknown worker',
+  unknownBuilding: 'missing',
+  notUnderConstruction: 'not under construction',
+  alreadyAssignedToConstruction: 'already building elsewhere',
+  siteAlreadyCrewed: 'site already crewed',
 }
 
 const refreshInspection = (): void => {
@@ -291,6 +308,63 @@ const refreshInspection = (): void => {
       ui.reassignConfirm?.toggleAttribute('disabled', !hasEligible)
     }
   }
+
+  // Step 10Y: construction crew surface. The player sees whether the site has
+  // a crew, which colonist it is, and the resulting speed, and can assign an
+  // eligible colonist or release the current crew. Eligibility comes from the
+  // domain query, never re-derived here.
+  const underConstruction = workplace !== undefined && workplace.status === 'underConstruction'
+  if (ui.insCrew !== null) {
+    if (!underConstruction || building === null) {
+      ui.insCrew.textContent = ''
+    } else {
+      const crewId = building.constructionCrewId
+      const crewLabel =
+        crewId === null
+          ? 'None'
+          : `Colonist #${crewId.replace('colonist-', '')}`
+      ui.insCrew.textContent =
+        building.constructionProgressPerTick === 2
+          ? `Crew — ${crewLabel} · Speed +1 per tick`
+          : `Crew — ${crewLabel} · Speed normal`
+    }
+  }
+  if (ui.crewRow !== null && ui.crewTarget !== null) {
+    if (!underConstruction || selectedBuildingId === null) {
+      ui.crewRow.style.display = 'none'
+      ui.crewTarget.replaceChildren()
+    } else {
+      ui.crewRow.style.display = 'flex'
+      const options = getConstructionCrewOptions(state, selectedBuildingId)
+      const select = ui.crewTarget
+      select.replaceChildren()
+      for (const option of options) {
+        const element = document.createElement('option')
+        element.value = option.colonistId
+        const ordinal = option.colonistId.replace('colonist-', '')
+        if (option.isCurrent) {
+          element.textContent = `Colonist #${ordinal} — current crew`
+          element.disabled = true
+        } else if (!option.eligible) {
+          const reason =
+            CREW_REASON_LABELS[option.reason ?? ''] ?? option.reason
+          element.textContent = `Colonist #${ordinal} — ${reason}`
+          element.disabled = true
+        } else {
+          element.textContent = `Colonist #${ordinal} · ${option.workplaceId === null ? 'idle' : 'working'}`
+        }
+        select.appendChild(element)
+      }
+      ui.crewConfirm?.toggleAttribute(
+        'disabled',
+        !options.some((option) => option.eligible)
+      )
+      ui.crewRelease?.toggleAttribute(
+        'disabled',
+        building?.constructionCrewId === null
+      )
+    }
+  }
 }
 
 // --- Placement tool selection (Step 06B Part B, Road tool Step 09H) ----------
@@ -394,6 +468,59 @@ const confirmReassign = (): void => {
   refreshInspection()
 }
 ui.reassignConfirm?.addEventListener('click', confirmReassign)
+
+// Step 10Y: the construction crew control reuses the 10M conventions — one
+// domain-validated select plus explicit buttons, no drag, no dashboard.
+const confirmCrewAssign = (): void => {
+  if (selectedBuildingId === null || ui.crewTarget === null) {
+    return
+  }
+  const colonistId = ui.crewTarget.value
+  if (colonistId === '') {
+    return
+  }
+  controller.dispatch({
+    type: 'assignConstructionCrew',
+    colonistId,
+    buildingId: selectedBuildingId,
+  })
+  const after = controller.getState()
+  const crewed = after.colonists[colonistId]?.constructionAssignmentId === selectedBuildingId
+  // A 2-tick site completes on the assignment tick itself, so the crew is
+  // already released by the time we look: an operational site also proves the
+  // assignment was accepted.
+  const completed = after.buildings[selectedBuildingId]?.status === 'operational'
+  setStatus(
+    crewed || completed
+      ? `Construction crew assigned — Colonist #${colonistId.replace('colonist-', '')} builds +1 per tick`
+      : 'Crew assignment rejected'
+  )
+}
+
+const releaseCrew = (): void => {
+  if (selectedBuildingId === null) {
+    return
+  }
+  const crewId = getConstructionCrewId(controller.getState(), selectedBuildingId)
+  if (crewId === null) {
+    setStatus('No construction crew to release')
+    return
+  }
+  controller.dispatch({
+    type: 'assignConstructionCrew',
+    colonistId: crewId,
+    buildingId: null,
+  })
+  const after = controller.getState()
+  setStatus(
+    after.colonists[crewId]?.constructionAssignmentId === null
+      ? 'Construction crew released'
+      : 'Crew release rejected'
+  )
+}
+
+ui.crewConfirm?.addEventListener('click', confirmCrewAssign)
+ui.crewRelease?.addEventListener('click', releaseCrew)
 
 // --- Render + UI update on canonical state change ----------------------------
 
@@ -917,11 +1044,12 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly hasOperationalWell: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly hasOperationalWell: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
       selectedBuilding: () => BuildingInspection | null
+      readonly serialize: () => string
       buildingAt: (cell: { readonly x: number; readonly y: number }) => BuildingInspection | null
     }
   }
@@ -1044,6 +1172,24 @@ window.__nova = {
         .map((colonist) => colonist.id)
         .sort()
         .join(','),
+      // Step 10Y: which colonists crew a construction site and which sites
+      // are crewed (diagnostic only; never persisted beyond
+      // constructionAssignmentId).
+      crewWorkerIds: Object.values(state.colonists)
+        .filter((colonist) => colonist.constructionAssignmentId !== null)
+        .map((colonist) => colonist.id)
+        .sort()
+        .join(','),
+      crewedSiteIds: Object.values(state.colonists)
+        .filter((colonist) => colonist.constructionAssignmentId !== null)
+        .map((colonist) => colonist.constructionAssignmentId as string)
+        .sort()
+        .join(','),
+      contractors: String(
+        Object.values(state.colonists).filter(
+          (colonist) => colonist.constructionAssignmentId !== null
+        ).length
+      ),
       colonists: ui.colonists?.textContent ?? '',
       jobs: ui.jobs?.textContent ?? '',
       employed: String(employment.employed),
@@ -1098,6 +1244,10 @@ window.__nova = {
     selectedBuildingId === null
       ? null
       : getBuildingInspection(controller.getState(), selectedBuildingId),
+  // Step 10Y diagnostic: the canonical save payload, read-only. Used by the
+  // browser E2E to prove constructionAssignmentId is part of canonical save
+  // state (the app itself has no save/load UI).
+  serialize: () => serializeSave(controller.getState()),
   buildingAt: (cell) => {
     const buildingId = getBuildingIdAtCell(controller.getState(), cell)
     return buildingId === null

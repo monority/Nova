@@ -168,10 +168,15 @@ describe('transport network connectivity (Step 09A)', () => {
       stepSimulation(createTestState(), place('residence', 0, 0)),
       place('farm', 1, 0)
     )
+    // Step 10Y: the residence needs two construction ticks after placement.
+    state = stepSimulation(state)
     const farmId = 'building-2'
+    expect(state.buildings['building-1']?.status).toBe('operational')
     expect(getAccessibleBuildingIds(state)).toEqual(['building-1'])
     expect(isBuildingAccessible(state, farmId)).toBe(false)
     // Becoming operational makes it accessible (existing lifecycle, no phase change).
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
     expect(state.buildings[farmId]?.status).toBe('operational')
     expect(getAccessibleBuildingIds(state)).toEqual(['building-1', farmId].sort())
@@ -309,6 +314,6 @@ describe('transport network connectivity (Step 09A)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getAccessibleBuildingIds(loaded)).toEqual(before)
     // No accessibility state persisted: SAVE_VERSION unchanged.
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 })

@@ -38,7 +38,6 @@ import {
   produceFood,
   produceMaterial,
   produceWater,
-  progressPlacedBuilding,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -222,8 +221,7 @@ const stepMirror = (state: SimulationState, opts: MirrorOptions): SimulationStat
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
   const commanded = applyCommand(materialized, undefined)
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed = progressPlacedRoads(progressedBuilding, commanded)
+  const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
 }
@@ -305,8 +303,7 @@ const stepBaselineMirror = (state: SimulationState): SimulationState => {
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
   const commanded = applyCommand(materialized, undefined)
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed = progressPlacedRoads(progressedBuilding, commanded)
+  const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
 }
@@ -734,7 +731,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       granaryBuilding: 'if added, a new building type string only — no shape change',
       farmInput: 'no new state (reads resources.construction)',
     })
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('measures 60/120/600-tick cost of the current economy', () => {

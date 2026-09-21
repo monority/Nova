@@ -104,9 +104,13 @@ async function main() {
     else ok(`resource deduction 100 -> ${s.construction}, ${JSON.stringify(s)}`);
     await shot('03-after-construction-start.png');
 
-    // STEP: construction progresses to operational.
+    // STEP: construction progresses to operational (Step 10Y: two ticks).
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await stats(page)).tick === '2', 'step to tick 2');
+    s = await stats(page);
+    if (s.operational !== '0') fail(`tick 2 should still be under construction: ${JSON.stringify(s)}`);
+    await page.click('[data-testid="simulation-step"]');
+    await waitFor(async () => (await stats(page)).tick === '3', 'step to tick 3');
     s = await stats(page);
     if (s.operational !== '1' || s.colonists !== '1' || s.construction !== '75') fail(`after STEP bad: ${JSON.stringify(s)}`);
     else ok(`building operational, stock stable at ${s.construction}, ${JSON.stringify(s)}`);

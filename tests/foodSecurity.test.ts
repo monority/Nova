@@ -520,6 +520,6 @@ describe('determinism and persistence', () => {
     expect(serialized).not.toContain('foodShortage')
     expect(serialized).not.toContain('fed')
     // SAVE_VERSION unchanged.
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 })

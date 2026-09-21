@@ -8,8 +8,12 @@ import {
   getBuildingRoadAccess,
   getRoadIdAtCell,
   iterateBuildings,
+  progressOneBuilding,
+  stepSimulation,
   type BuildingState,
   type CellCoordinate,
+  type PlaceBuildingCommand,
+  type SimulationCommand,
   type SimulationConfig,
   type SimulationState,
 } from '@/index'
@@ -19,6 +23,48 @@ export const testConfig: SimulationConfig = {
 }
 
 export const createTestState = () => createInitialState(testConfig)
+
+/**
+ * Step 10Y timing isolation for the historical audit fixtures.
+ *
+ * Step 10Y removed the placement catch-up, so a 2-tick building now needs
+ * exactly two construction ticks after placement (that is what makes a
+ * construction crew's +1 observable at all). Audit fixtures from earlier
+ * steps document HISTORICAL tick-by-tick trajectories; `placeCatchUp`
+ * restores the old placement timing for them so their documented rows stay
+ * exact. Current construction timing is asserted by constructionCrew,
+ * inspection, jobs and simulation tests instead.
+ */
+export const catchUpPlaced = (
+  state: SimulationState,
+  buildingId: string
+): SimulationState => {
+  const building = state.buildings[buildingId]
+  if (building === undefined) {
+    return state
+  }
+  const advanced = progressOneBuilding(building)
+  return advanced === building
+    ? state
+    : { ...state, buildings: { ...state.buildings, [buildingId]: advanced } }
+}
+
+/** Place a building with the historical placement catch-up (see above). */
+export const placeCatchUp = (
+  state: SimulationState,
+  command: PlaceBuildingCommand | SimulationCommand | undefined
+): SimulationState => {
+  if (command === undefined || command.type !== 'placeBuilding') {
+    return stepSimulation(state, command)
+  }
+  if (command === undefined || command.type !== 'placeBuilding') {
+    return stepSimulation(state, command)
+  }
+  const before = new Set(Object.keys(state.buildings))
+  const after = stepSimulation(state, command)
+  const placedId = Object.keys(after.buildings).find((id) => !before.has(id))
+  return placedId === undefined ? after : catchUpPlaced(after, placedId)
+}
 
 const NEIGHBOR_DELTAS: ReadonlyArray<readonly [number, number]> = [
   [0, -1],

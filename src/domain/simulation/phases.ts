@@ -21,6 +21,18 @@
  *       no debt)
  *   9. advanceTime         - tick += 1
  *
+ * Construction crew ordering (Step 10Y): phase 1 progresses each site by 1,
+ * plus 1 when the site has a crew (derived from `constructionAssignmentId` on
+ * colonists). A crew assigned by the command phase (8a) therefore first
+ * affects the NEXT tick's phase 1, and a newly placed building still uses the
+ * existing 8a catch-up progress. The crew member stays crewed for the WHOLE
+ * completion tick (so phase 8's `produceMaterial` cannot pay them twice) and
+ * is released by the end-of-tick `releaseCompletedConstructionCrew`
+ * normalization, run after upkeep and before `advanceTime`. Food/Water/
+ * Material production rules are untouched: a crewed colonist holds no
+ * workplace, so `countWorkersAt` and every production rule already exclude
+ * them.
+ *
  * Production (4) precedes consumption (5): food produced on the tick a farm
  * becomes operational — or on any tick the colony would otherwise starve —
  * saves the colony on THAT tick, not the next one. Deterministic and tested.
@@ -286,6 +298,98 @@ export const validateReassignment = (
   return { valid: true, distance }
 }
 
+// ---------------------------------------------------------------------------
+// Construction crew (Step 10Y)
+// ---------------------------------------------------------------------------
+
+/** Deterministic rejection reasons for `assignConstructionCrew`. */
+export type ConstructionCrewReason =
+  | 'unknownColonist'
+  | 'unknownBuilding'
+  | 'notUnderConstruction'
+  | 'alreadyAssignedToConstruction'
+  | 'siteAlreadyCrewed'
+
+export type ConstructionCrewValidation =
+  | { readonly valid: true; readonly currentCrewId: string | null }
+  | { readonly valid: false; readonly reason: ConstructionCrewReason }
+
+/**
+ * The colonist crewing this site, or null (Step 10Y). Derived from colonist
+ * state in ascending colonist-id order — never persisted, never cached, and
+ * there is no site-side crew array. One crew per site is an invariant of
+ * `assignConstructionCrew`, so the first match is the only match.
+ */
+export const getConstructionCrewId = (
+  state: SimulationState,
+  buildingId: string
+): string | null => {
+  for (const colonist of iterateColonists(state)) {
+    if (colonist.constructionAssignmentId === buildingId) {
+      return colonist.id
+    }
+  }
+  return null
+}
+
+/** True iff an under-construction site currently has a crew (Step 10Y). */
+export const isConstructionSiteCrewed = (
+  state: SimulationState,
+  buildingId: string
+): boolean => getConstructionCrewId(state, buildingId) !== null
+
+/**
+ * Construction progress for one site this tick: the base 1 tick, plus 1 when
+ * the site has a crew (Step 10Y §2). Derived, deterministic, never persisted.
+ */
+export const constructionProgressPerTick = (
+  state: SimulationState,
+  buildingId: string
+): number => (isConstructionSiteCrewed(state, buildingId) ? 2 : 1)
+
+/**
+ * Validation for an explicit construction crew assignment (Step 10Y). Single
+ * source of truth shared by `applyCommand` and `getConstructionCrewOptions`.
+ *
+ * Deterministic validation order:
+ *   1. colonist exists
+ *   2. target building exists (roads are not buildings, so a road id rejects here)
+ *   3. target is under construction
+ *   4. the colonist is not already crewing a DIFFERENT site
+ *   5. the site has no other crew
+ *
+ * No mobility or residence requirement is introduced: construction crew is a
+ * workforce allocation, not a commute (Step 10Y §4 lists exactly these five).
+ */
+export const validateConstructionCrew = (
+  state: SimulationState,
+  colonistId: string,
+  buildingId: string
+): ConstructionCrewValidation => {
+  const colonist = state.colonists[colonistId]
+  if (colonist === undefined) {
+    return { valid: false, reason: 'unknownColonist' }
+  }
+  const building = state.buildings[buildingId]
+  if (building === undefined) {
+    return { valid: false, reason: 'unknownBuilding' }
+  }
+  if (building.status !== 'underConstruction') {
+    return { valid: false, reason: 'notUnderConstruction' }
+  }
+  if (
+    colonist.constructionAssignmentId !== null &&
+    colonist.constructionAssignmentId !== buildingId
+  ) {
+    return { valid: false, reason: 'alreadyAssignedToConstruction' }
+  }
+  const currentCrewId = getConstructionCrewId(state, buildingId)
+  if (currentCrewId !== null && currentCrewId !== colonistId) {
+    return { valid: false, reason: 'siteAlreadyCrewed' }
+  }
+  return { valid: true, currentCrewId }
+}
+
 /**
  * Valid placement: known type, inside bounds, free cell, affordable against
  * the stock of the state this runs on. Invalid command = explicit no-op
@@ -393,35 +497,75 @@ export const applyCommand = (
         placedRoadIds: [],
       }
     }
-  }
-}
-
-/**
- * Catch-up progress for a newly placed building (Step 08G). The construction
- * transaction runs after advanceConstruction, so the placed building missed
- * this tick's progress slot; progress it once to preserve the catalog 2-tick
- * completion contract (placed tick: 2 -> 1, next tick: 1 -> 0 operational).
- * Reuses progressOneBuilding, so a hypothetical 1-tick catalog entry would
- * complete exactly as if placed before advanceConstruction. No-op when no
- * building was placed, or when the id is absent (defensive: never throws).
- */
-export const progressPlacedBuilding = (
-  result: CommandApplicationResult
-): SimulationState => {
-  if (result.placedBuildingId === null) {
-    return result.state
-  }
-  const placed = result.state.buildings[result.placedBuildingId]
-  if (placed === undefined) {
-    return result.state
-  }
-  const advanced = progressOneBuilding(placed)
-  if (advanced === placed) {
-    return result.state
-  }
-  return {
-    ...result.state,
-    buildings: { ...result.state.buildings, [advanced.id]: advanced },
+    case 'assignConstructionCrew': {
+      const current = state.colonists[command.colonistId]
+      if (command.buildingId === null) {
+        // Release (Step 10Y §15): the colonist returns to automatic workplace
+        // behavior; `assignJobs` may employ them on the next assignment pass.
+        if (current === undefined) {
+          return { state, accepted: false, reason: 'unknownColonist', placedBuildingId: null, placedRoadIds: [] }
+        }
+        if (current.constructionAssignmentId === null) {
+          return { state, accepted: true, reason: null, placedBuildingId: null, placedRoadIds: [] }
+        }
+        return {
+          state: {
+            ...state,
+            colonists: {
+              ...state.colonists,
+              [current.id]: { ...current, constructionAssignmentId: null },
+            },
+          },
+          accepted: true,
+          reason: null,
+          placedBuildingId: null,
+          placedRoadIds: [],
+        }
+      }
+      // Deterministic no-op when the colonist already crews this exact site.
+      if (current !== undefined && current.constructionAssignmentId === command.buildingId) {
+        return { state, accepted: true, reason: null, placedBuildingId: null, placedRoadIds: [] }
+      }
+      const validation = validateConstructionCrew(
+        state,
+        command.colonistId,
+        command.buildingId
+      )
+      if (!validation.valid) {
+        return {
+          state,
+          accepted: false,
+          reason: validation.reason,
+          placedBuildingId: null,
+          placedRoadIds: [],
+        }
+      }
+      if (current === undefined) {
+        // Defensive: validateConstructionCrew already rejected this.
+        return { state, accepted: false, reason: 'unknownColonist', placedBuildingId: null, placedRoadIds: [] }
+      }
+      // The crew relationship is exclusive with employment: the colonist is
+      // transferred away from any workplace in the same atomic step, so no
+      // duplicated assignment can remain.
+      return {
+        state: {
+          ...state,
+          colonists: {
+            ...state.colonists,
+            [current.id]: {
+              ...current,
+              workplaceId: null,
+              workplaceAssignmentMode: 'automatic',
+              constructionAssignmentId: command.buildingId,
+            },
+          },
+        },
+        accepted: true,
+        reason: null,
+        placedBuildingId: null,
+        placedRoadIds: [],
+      }
+    }
   }
 }
 
@@ -469,10 +613,30 @@ export const progressOneRoad = (road: RoadState): RoadState => {
 export const advanceConstruction = (
   state: SimulationState
 ): SimulationState => {
+  // Step 10Y: derived crew presence. One crew per site (an
+  // `assignConstructionCrew` invariant), read from colonist state in ascending
+  // id order — never persisted, never cached. A crew assigned during tick N's
+  // command phase (8a) accelerates tick N+1's construction phase (1).
+  const crewedSiteIds = new Set<string>()
+  for (const colonist of iterateColonists(state)) {
+    if (colonist.constructionAssignmentId !== null) {
+      crewedSiteIds.add(colonist.constructionAssignmentId)
+    }
+  }
+
   const nextBuildings: Record<string, BuildingState> = {}
   let changed = false
   for (const building of iterateBuildings(state)) {
-    const progressed = progressOneBuilding(building)
+    let progressed = progressOneBuilding(building)
+    if (
+      building.status === 'underConstruction' &&
+      crewedSiteIds.has(building.id)
+    ) {
+      // +1 progress from the crew: a 2-tick building completes in one tick.
+      // `progressOneBuilding` is a no-op on an already-operational building,
+      // so a 1-tick remaining site never underflows.
+      progressed = progressOneBuilding(progressed)
+    }
     nextBuildings[building.id] = progressed
     if (progressed !== building) {
       changed = true
@@ -486,10 +650,48 @@ export const advanceConstruction = (
       changed = true
     }
   }
+
+  // Step 10Y §14: a construction assignment is valid only while its site is
+  // under construction. The release is a SEPARATE end-of-tick normalization
+  // (`releaseCompletedConstructionCrew`, run after all production) so a
+  // colonist can never receive production output AND construction credit in
+  // the same tick. Nothing to do here beyond progress.
   if (!changed) {
     return state
   }
   return { ...state, buildings: nextBuildings, roads: nextRoads }
+}
+
+/**
+ * End-of-tick crew normalization (Step 10Y §14). Clears every construction
+ * assignment whose site is no longer under construction (completed, or gone).
+ *
+ * Runs AFTER `produceMaterial`/`upkeepBuildings` in the orchestrator, i.e.
+ * after every production rule of the tick, so the crew member is excluded from
+ * production for the WHOLE tick in which the site completes — construction
+ * credit and production output are mutually exclusive (Step 10Y §3). The
+ * cleared colonist is `automatic` again and `assignJobs` may employ them from
+ * the next tick on. Deterministic, pure, and a no-op when no crew exists.
+ */
+export const releaseCompletedConstructionCrew = (
+  state: SimulationState
+): SimulationState => {
+  let nextColonists: Record<string, ColonistState> | null = null
+  for (const colonist of iterateColonists(state)) {
+    const siteId = colonist.constructionAssignmentId
+    if (siteId === null) {
+      continue
+    }
+    const site = state.buildings[siteId]
+    if (site !== undefined && site.status === 'underConstruction') {
+      continue
+    }
+    if (nextColonists === null) {
+      nextColonists = { ...state.colonists }
+    }
+    nextColonists[colonist.id] = { ...colonist, constructionAssignmentId: null }
+  }
+  return nextColonists === null ? state : { ...state, colonists: nextColonists }
 }
 
 /**
@@ -905,6 +1107,20 @@ export const assignJobs = (state: SimulationState): SimulationState => {
   let changed = false
 
   for (const colonist of colonists) {
+    // Step 10Y: a colonist on a construction crew is not available for
+    // workplace employment. This is a manual-only relationship, so
+    // `assignJobs` never creates OR reclaims it — it only guarantees the
+    // exclusivity invariant (a crewed colonist holds no workplace). The
+    // construction phase clears the assignment when the site completes.
+    if (colonist.constructionAssignmentId !== null) {
+      if (colonist.workplaceId !== null) {
+        nextColonists[colonist.id] = { ...colonist, workplaceId: null }
+        changed = true
+      } else {
+        nextColonists[colonist.id] = colonist
+      }
+      continue
+    }
     // A still-valid manual choice is preserved verbatim: the player's
     // decision is never overwritten by the nearest-workplace preference.
     if (manualValid.has(colonist.id)) {

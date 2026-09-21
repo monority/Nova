@@ -10,7 +10,10 @@ import { getHousingSummary, iterateBuildings, iterateColonists } from '../../dom
 import { countWorkersAt, jobCapacityOf } from '../../domain/jobs/jobs.js'
 import type { WorkplaceAssignmentMode } from '../../domain/population/colonist.js'
 import {
+  getConstructionCrewId,
+  validateConstructionCrew,
   validateReassignment,
+  type ConstructionCrewReason,
   type ReassignmentReason,
 } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
@@ -66,6 +69,16 @@ export interface BuildingInspection {
   readonly housingCapacity: number
   /** Colonists whose residence is this building, derived from colonists. */
   readonly occupiedHousing: number
+  /**
+   * The colonist crewing this building (Step 10Y), or null. Derived from
+   * colonist state in ascending id order; never persisted.
+   */
+  readonly constructionCrewId: string | null
+  /**
+   * Construction progress this site receives per tick: 1, plus 1 when crewed
+   * (Step 10Y §2). Derived, deterministic, never persisted.
+   */
+  readonly constructionProgressPerTick: number
 }
 
 /** Inspection detail for one building, or null when the id is unknown. */
@@ -93,6 +106,12 @@ export const getBuildingInspection = (
     constructionDuration: definition.constructionTicks,
     housingCapacity: definition.housingCapacity,
     occupiedHousing,
+    constructionCrewId: getConstructionCrewId(state, building.id),
+    constructionProgressPerTick:
+      building.status === 'underConstruction' &&
+      getConstructionCrewId(state, building.id) !== null
+        ? 2
+        : 1,
   }
 }
 
@@ -123,6 +142,8 @@ export interface ColonistInspection {
   readonly residenceId: string | null
   readonly workplaceId: string | null
   readonly workplaceAssignmentMode: WorkplaceAssignmentMode
+  /** Under-construction building this colonist crews, or null (Step 10Y). */
+  readonly constructionAssignmentId: string | null
 }
 
 export const getColonistInspection = (
@@ -138,6 +159,7 @@ export const getColonistInspection = (
     residenceId: colonist.residenceId,
     workplaceId: colonist.workplaceId,
     workplaceAssignmentMode: colonist.workplaceAssignmentMode,
+    constructionAssignmentId: colonist.constructionAssignmentId,
   }
 }
 
@@ -189,6 +211,55 @@ export const getReassignmentOptions = (
       eligible: validation.valid && !isCurrent,
       reason: validation.valid ? null : validation.reason,
       isCurrent,
+    })
+  }
+  return options
+}
+
+// ---------------------------------------------------------------------------
+// Construction crew queries (Step 10Y)
+// ---------------------------------------------------------------------------
+
+/** Player-facing view of one colonist as a potential construction crew member. */
+export interface ConstructionCrewOption {
+  readonly colonistId: string
+  /** True when this colonist may be assigned to the inspected site right now. */
+  readonly eligible: boolean
+  /** Deterministic rejection cause when not eligible. */
+  readonly reason: ConstructionCrewReason | null
+  /** True when this colonist already crews the inspected site. */
+  readonly isCurrent: boolean
+  /** The colonist's workplace (cleared by a successful crew assignment). */
+  readonly workplaceId: string | null
+  /** The site this colonist crews, when it is a different one. */
+  readonly constructionAssignmentId: string | null
+}
+
+/**
+ * All colonists as candidate crew for one under-construction building, in
+ * ascending colonist-id order. `validateConstructionCrew` is the single
+ * source of truth for eligibility, so the UI never re-derives the one-crew /
+ * one-site invariants. Returns an empty list for an operational building.
+ */
+export const getConstructionCrewOptions = (
+  state: SimulationState,
+  buildingId: string
+): readonly ConstructionCrewOption[] => {
+  const building = state.buildings[buildingId]
+  if (building === undefined || building.status !== 'underConstruction') {
+    return []
+  }
+  const options: ConstructionCrewOption[] = []
+  for (const colonist of iterateColonists(state)) {
+    const validation = validateConstructionCrew(state, colonist.id, buildingId)
+    const isCurrent = colonist.constructionAssignmentId === buildingId
+    options.push({
+      colonistId: colonist.id,
+      eligible: validation.valid && !isCurrent,
+      reason: validation.valid ? null : validation.reason,
+      isCurrent,
+      workplaceId: colonist.workplaceId,
+      constructionAssignmentId: colonist.constructionAssignmentId,
     })
   }
   return options

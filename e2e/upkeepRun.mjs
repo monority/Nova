@@ -204,8 +204,9 @@ async function main() {
     if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '75') {
       fail(`J under-construction bad: ${JSON.stringify(s)}`);
     } else ok('J under construction: capacity 0, production 0, upkeep 0');
-    s = await step(page); // t2: operational, vacant
-    if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '75' || s.tick !== '2' || s.storageCapacity !== '25') {
+    await step(page); // t2: Step 10Y — 1 construction tick left
+    s = await step(page); // t3: operational, vacant
+    if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '75' || s.tick !== '3' || s.storageCapacity !== '25') {
       fail(`B vacant bad: ${JSON.stringify(s)}`);
     } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.construction}, capacity ${s.storageCapacity} (no leak)`);
     await selectAt(page, { x: 4, y: 4 });
@@ -219,14 +220,15 @@ async function main() {
     // 25 still below the bootstrap stock, so stored production is 0 and the
     // column drains -1/tick (Step 08F).
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 5, y: 4 }); // t3
+    await placeRoad(page, { x: 5, y: 4 }); // t4
     await selectPalette(page, 'build-residence', 'Residence selected');
-    await placeAt(page, { x: 6, y: 4 }); // t4
-    s = await step(page); // t5: road + residence operational, colonist staffed
+    await placeAt(page, { x: 6, y: 4 }); // t5
+    await step(page); // t6: Step 10Y — 1 construction tick left
+    s = await step(page); // t7: road + residence operational, colonist staffed
     if (s.colonists !== '1' || s.materialUpkeep !== '1' || s.storageCapacity !== '25' || s.employed !== '1') {
       fail(`C staffed bad: ${JSON.stringify(s)}`);
     } else ok(`C 1 worker: employed ${s.employed}, upkeep ${s.materialUpkeep}, net ${s.netMaterial} (capacity ${s.storageCapacity}), material ${s.construction}`);
-    s = await step(page); // t6: no newcomer, production/upkeep readout visible
+    s = await step(page); // t8: no newcomer, production/upkeep readout visible
     const causal = await statusText(page);
     if (!causal.includes('1 worker produced 2 material') || !causal.includes('upkeep 1')) {
       fail(`C causal text bad: ${JSON.stringify(causal)}`);

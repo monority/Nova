@@ -39,7 +39,25 @@ export interface ReassignColonistCommand {
   readonly workplaceId: string
 }
 
+/**
+ * Explicit construction crew assignment (Step 10Y). Construction crew is a
+ * MANUAL-only relationship: the player picks one colonist and one
+ * under-construction building, and that colonist stops working a workplace
+ * for as long as the site is under construction (it progresses +1 per tick).
+ *
+ * `buildingId === null` releases the colonist from construction — one
+ * command, two concrete intents, no second command type and no generic task
+ * model. Validated by the domain against the existing construction lifecycle
+ * and the one-crew-per-site / one-site-per-colonist invariants.
+ */
+export interface AssignConstructionCrewCommand {
+  readonly type: 'assignConstructionCrew'
+  readonly colonistId: string
+  readonly buildingId: string | null
+}
+
 export type SimulationCommand =
   | PlaceBuildingCommand
   | PlaceRoadsCommand
   | ReassignColonistCommand
+  | AssignConstructionCrewCommand

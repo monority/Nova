@@ -23,15 +23,20 @@ describe('building inspection (Step 3)', () => {
       type: 'residence',
       status: 'underConstruction',
       cell: { x: 6, y: 6 },
-      constructionRemaining: 1,
+      constructionRemaining: 2,
       constructionDuration: 2,
       housingCapacity: 1,
       occupiedHousing: 0,
+      // Step 10Y: derived crew state (no crew on a freshly placed building).
+      constructionCrewId: null,
+      constructionProgressPerTick: 1,
     })
   })
 
   it('construction remaining decreases as ticks progress', () => {
     let state = stepSimulation(createTestState(), placeResidence(6, 6))
+    expect(getBuildingInspection(state, 'building-1')?.constructionRemaining).toBe(2)
+    state = stepSimulation(state)
     expect(getBuildingInspection(state, 'building-1')?.constructionRemaining).toBe(1)
     state = stepSimulation(state)
     expect(getBuildingInspection(state, 'building-1')?.constructionRemaining).toBe(0)
@@ -39,6 +44,8 @@ describe('building inspection (Step 3)', () => {
 
   it('transitions to operational when construction finishes', () => {
     let state = stepSimulation(createTestState(), placeResidence(6, 6))
+    expect(getBuildingInspection(state, 'building-1')?.status).toBe('underConstruction')
+    state = stepSimulation(state)
     expect(getBuildingInspection(state, 'building-1')?.status).toBe('underConstruction')
     state = stepSimulation(state)
     expect(getBuildingInspection(state, 'building-1')?.status).toBe('operational')
@@ -50,6 +57,7 @@ describe('building inspection (Step 3)', () => {
     expect(under?.housingCapacity).toBe(1)
     expect(under?.occupiedHousing).toBe(0)
     state = stepSimulation(state)
+    state = stepSimulation(state)
     const operational = getBuildingInspection(state, 'building-1')
     expect(operational?.status).toBe('operational')
     expect(operational?.housingCapacity).toBe(1)
@@ -58,6 +66,7 @@ describe('building inspection (Step 3)', () => {
 
   it('colonist residence points to the correct building', () => {
     let state = stepSimulation(createTestState(), placeResidence(6, 6))
+    state = stepSimulation(state)
     state = stepSimulation(state)
     expect(state.colonists['colonist-1']?.residenceId).toBe('building-1')
     expect(getBuildingInspection(state, 'building-1')?.occupiedHousing).toBe(1)

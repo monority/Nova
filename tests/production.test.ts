@@ -42,6 +42,7 @@ const withFood = (state: SimulationState, food: number): SimulationState => ({
 const colonistState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, placeResidence(2, 2))
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state)
   return state
 }
@@ -52,11 +53,14 @@ const colonistState = (): SimulationState => {
  * timing contract); first +2 lands tick 5.
  */
 const staffedFarmState = (): SimulationState => {
-  let state = colonistState() // t2, pop 1, food 100
-  state = stepSimulation(state, placeFarm(0, 0)) // t3: farm underConstruction
+  let state = colonistState() // t3, pop 1
+  state = stepSimulation(state, placeFarm(0, 0)) // t4: farm underConstruction
   state = withRoadsForWorkshops(state) // Step 10E: staffing needs roads
-  state = stepSimulation(state) // t4: farm operational, colonist assigned
-  return state
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // farm operational, colonist assigned
+  // Step 10Y timing isolation: pin food to the historical fixture value so
+  // the production assertions keep measuring production, not extra ticks.
+  return withFood(state, 98)
 }
 
 describe('farm catalog (Step 06B)', () => {
@@ -79,6 +83,7 @@ describe('farm catalog (Step 06B)', () => {
   it('farms never provide housing capacity', () => {
     let state = stepSimulation(createTestState(), placeFarm(1, 1))
     state = stepSimulation(state)
+    state = stepSimulation(state) // Step 10Y: 2 construction ticks
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(getHousingSummary(state)).toEqual({
       totalCapacity: 0,
@@ -106,6 +111,7 @@ describe('produceFood phase (Step 06B)', () => {
   it('an operational farm produces nothing without a worker (Step 10E)', () => {
     let state = stepSimulation(createTestState(), placeFarm(1, 1))
     state = stepSimulation(state)
+    state = stepSimulation(state) // Step 10Y: 2 construction ticks
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(countOperationalFarms(state)).toBe(1)
     // Vacant farm: 0 production even though operational.
@@ -128,12 +134,13 @@ describe('produceFood phase (Step 06B)', () => {
 
   it('multiple producers sum deterministically (staffed farms only)', () => {
     // Two residences + two colonists + two farms, all road-connected.
-    let state = colonistState() // t2, pop 1
-    state = stepSimulation(state, placeResidence(5, 5)) // t3
-    state = stepSimulation(state, placeFarm(0, 0)) // t4: farm-1 UC
-    state = stepSimulation(state, placeFarm(7, 7)) // t5: farm-1 op, farm-2 UC
+    let state = colonistState() // t3, pop 1
+    state = stepSimulation(state, placeResidence(5, 5)) // t4
+    state = stepSimulation(state, placeFarm(0, 0)) // t5: farm-1 UC
+    state = stepSimulation(state, placeFarm(7, 7)) // t6: farm-1 op, farm-2 UC
     state = withRoadsForWorkshops(state)
-    state = stepSimulation(state) // t6: both operational, both staffed
+    state = stepSimulation(state) // Step 10Y: farm-2 1 tick left
+    state = stepSimulation(state) // both operational, both staffed
     expect(countOperationalFarms(state)).toBe(2)
     expect(getFoodProductionPerTick(state)).toBe(4)
     const foodBefore = getResourceStock(state).food
@@ -150,6 +157,7 @@ describe('produceFood phase (Step 06B)', () => {
     state = stepSimulation(state, placeFarm(0, 0))
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
     state = withRoadsForWorkshops(state)
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = withFood(state, 0)
     const after = stepSimulation(state)
     expect(after.buildings['building-2']?.status).toBe('operational')
@@ -165,7 +173,7 @@ describe('produceFood phase (Step 06B)', () => {
     state = stepSimulation(state, placeFarm(0, 0))
     state = stepSimulation(state, placeResidence(5, 5))
     state = stepSimulation(state, placeResidence(7, 7))
-    state = stepSimulation(state)
+    for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(3)
     state = withFood(state, 0)
     const starved = stepSimulation(state)
@@ -179,6 +187,7 @@ describe('produceFood phase (Step 06B)', () => {
     state = stepSimulation(state, placeFarm(0, 0))
     state = stepSimulation(state, placeResidence(5, 5))
     state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(2)
     const foodBefore = getResourceStock(state).food
@@ -239,7 +248,7 @@ describe('farm persistence (Step 06B §14)', () => {
   it('round-trips a state containing farms (SAVE_VERSION 4 since Step 07C)', () => {
     // Step 07C added ColonistState.workplaceId, bumping the save version from
     // 3 to 4. Farm behavior itself is unchanged and still round-trips.
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     let state = stepSimulation(createTestState(), placeFarm(1, 1))
     state = stepSimulation(state)
     const restored = loadSave(serializeSave(state))

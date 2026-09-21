@@ -45,7 +45,8 @@ const workshopState = (): SimulationState => {
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for production
-  state = stepSimulation(state) // t4: operational, employed
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // operational, employed
   return state
 }
 
@@ -53,7 +54,8 @@ const workshopState = (): SimulationState => {
 const vacantWorkshopState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('workshop', 1, 1)) // t1
-  state = stepSimulation(state) // t2: operational, nobody housed
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // operational, nobody housed
   return state
 }
 
@@ -86,20 +88,24 @@ const staffedState = (n: number): SimulationState => {
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for WS1
-  state = stepSimulation(state) // t4: colonist-1 employed, stock 49
-  state = stepSimulation(state, place('workshop', 1, 5)) // t5: stock 24
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // colonist-1 employed, stock 49
+  state = stepSimulation(state, place('workshop', 1, 5))
   state = withRoadsForWorkshops(state) // 09F: road for WS2
-  state = stepSimulation(state) // t6: second operational, stock 25
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // second operational
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
     if (i >= 2) {
       // Base already provides two Workshops; further pairs need one more.
       state = untilAffordable(state)
       state = stepSimulation(state, place('workshop', i + 1, 5))
       state = withRoadsForWorkshops(state) // 09F: road for the new workshop
+      state = stepSimulation(state) // Step 10Y: 1 construction tick left
       state = stepSimulation(state)
     }
   }
@@ -247,6 +253,6 @@ describe('operational upkeep (Step 08C)', () => {
     expect(getResourceStock(state).construction).toBe(
       getResourceStock(after).construction + 1
     )
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 })

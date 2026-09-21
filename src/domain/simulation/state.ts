@@ -116,6 +116,8 @@ export const createColonist = (
     residenceId,
     workplaceId: null,
     workplaceAssignmentMode: 'automatic',
+    // Step 10Y: a new colonist never starts on a construction crew.
+    constructionAssignmentId: null,
   }
   return {
     colonistId: id,

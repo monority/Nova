@@ -99,7 +99,9 @@ describe('resource model (Step 4)', () => {
   it('construction lifecycle is unchanged by the new resource', () => {
     let state = stepSimulation(createTestState(), placeResidence(6, 6))
     expect(state.buildings['building-1']?.status).toBe('underConstruction')
-    expect(state.buildings['building-1']?.constructionRemaining).toBe(1)
+    expect(state.buildings['building-1']?.constructionRemaining).toBe(2)
+    state = stepSimulation(state)
+    expect(state.buildings['building-1']?.status).toBe('underConstruction')
     state = stepSimulation(state)
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(state.buildings['building-1']?.constructionRemaining).toBe(0)

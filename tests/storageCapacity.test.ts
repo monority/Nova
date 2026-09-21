@@ -67,6 +67,7 @@ const vacantWorkshops = (n: number): SimulationState => {
   let state = createTestState()
   for (let i = 0; i < n; i++) {
     state = stepSimulation(state, place('workshop', i, 5))
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
   }
   return state
@@ -79,7 +80,8 @@ const singleWorkshop = (): SimulationState => {
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for production
-  state = stepSimulation(state) // t4: operational + staffed, stock 49
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // operational + staffed, stock 49
   return state
 }
 
@@ -95,19 +97,23 @@ const staffedLadder = (n: number): SimulationState => {
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 0, 5)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for WS1
-  state = stepSimulation(state) // t4: employed, stock 49
-  state = stepSimulation(state, place('workshop', 1, 5)) // t5
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // employed, stock 49
+  state = stepSimulation(state, place('workshop', 1, 5))
   state = withRoadsForWorkshops(state) // 09F: road for WS2
-  state = stepSimulation(state) // t6: cap 50, stock 25
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
+  state = stepSimulation(state) // cap 50
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
     if (i >= 2) {
       state = untilAffordable(state)
       state = stepSimulation(state, place('workshop', i + 1, 5))
       state = withRoadsForWorkshops(state) // 09F: road for the new workshop
+      state = stepSimulation(state) // Step 10Y: 1 construction tick left
       state = stepSimulation(state)
     }
   }
@@ -160,7 +166,8 @@ describe('material storage capacity (Step 08F)', () => {
     state = stepSimulation(state, place('workshop', 4, 4)) // t3
     expect(getMaterialStorageCapacity(state)).toBe(0)
     state = withRoadsForWorkshops(state) // 09K: mobility connection
-    state = stepSimulation(state) // t4: operational + staffed same tick
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
+    state = stepSimulation(state) // operational + staffed same tick
     expect(getMaterialStorageCapacity(state)).toBe(25)
     // Bootstrap stock (50) covers capacity: stored 0, upkeep drains 1.
     expect(materialStoredProductionForTick(state)).toBe(0)
@@ -322,7 +329,7 @@ describe('material storage capacity (Step 08F)', () => {
   })
 
   it('19/20 — save/load round-trip (empty, partial, full, multi) + hash', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     const states: SimulationState[] = [
       withConstruction(singleWorkshop(), 0),
       withConstruction(singleWorkshop(), 13),

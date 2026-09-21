@@ -46,7 +46,8 @@ const staffedWorkshopNoRoad = (): SimulationState => {
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
-  state = stepSimulation(state) // t4: operational + staffed, roadless
+  state = stepSimulation(state) // t4: 1 construction tick left
+  state = stepSimulation(state) // t5: operational + staffed, roadless
   return state
 }
 
@@ -204,7 +205,7 @@ describe('road access production constraint (Step 09F)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getBuildingRoadAccess(loaded, 'building-2')).toEqual(before)
     expect(materialProductionForTick(loaded)).toBe(productionBefore)
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('M — determinism: identical runs produce identical states and production', () => {

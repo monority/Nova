@@ -75,22 +75,30 @@ const withWorkplace = (
   },
 })
 
-/** Tick 2: one operational residence + one unemployed colonist. */
+/** Tick 3: one operational residence + one unemployed colonist.
+ *
+ * Step 10Y: a placed building is no longer caught up on its placement tick,
+ * so `constructionTicks: 2` now means exactly two construction ticks after
+ * placement (this is what makes a construction crew's +1 observable).
+ */
 const colonistState = (): SimulationState => {
   let state = createTestState()
-  state = stepSimulation(state, place('residence', 2, 2))
-  state = stepSimulation(state)
+  state = stepSimulation(state, place('residence', 2, 2)) // t1: placed (2 remaining)
+  state = stepSimulation(state) // t2: 1 remaining
+  state = stepSimulation(state) // t3: operational, colonist-1
   return state
 }
 
-/** Tick 4: operational residence + colonist employed in `building-2`. */
+/** Tick 5: operational residence + colonist employed in `building-2`. */
 const workshopState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
-  state = stepSimulation(state) // t2: residence operational, colonist-1
-  state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = stepSimulation(state) // t2: residence 1 remaining
+  state = stepSimulation(state) // t3: residence operational, colonist-1
+  state = stepSimulation(state, place('workshop', 4, 4)) // t4
   state = withRoadsForWorkshops(state) // 09F: road for production
-  state = stepSimulation(state) // t4: workshop operational, employed, net +1
+  state = stepSimulation(state) // t5: workshop 1 remaining
+  state = stepSimulation(state) // t6: workshop operational, employed, net +1
   return state
 }
 
@@ -98,21 +106,25 @@ const workshopState = (): SimulationState => {
 const twoColonistState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
-  state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('residence', 4, 4)) // t3
-  state = stepSimulation(state) // t4: colonist-2
+  state = stepSimulation(state) // t2: residence 1 remaining
+  state = stepSimulation(state) // t3: colonist-1
+  state = stepSimulation(state, place('residence', 4, 4)) // t4
+  state = stepSimulation(state) // t5: residence 1 remaining
+  state = stepSimulation(state) // t6: colonist-2
   return state
 }
 
-/** Tick 6: two colonists, two operational Workshops (building-2, building-3). */
+/** Tick 8: two colonists, two operational Workshops (building-2, building-3). */
 const twoWorkshopState = (): SimulationState => {
-  let state = colonistState() // t2
-  state = stepSimulation(state, place('workshop', 6, 6)) // t3: building-2
+  let state = colonistState() // t3
+  state = stepSimulation(state, place('workshop', 6, 6)) // t4: building-2
   state = withRoadsForWorkshops(state) // 09F: road for WS1
-  state = stepSimulation(state) // t4: building-2 operational, colonist-1 employed
-  state = stepSimulation(state, place('workshop', 7, 7)) // t5: building-3
+  state = stepSimulation(state) // t5: 1 remaining
+  state = stepSimulation(state) // t6: building-2 operational, colonist-1 employed
+  state = stepSimulation(state, place('workshop', 7, 7)) // t7: building-3
   state = withRoadsForWorkshops(state) // 09F: road for WS2
-  state = stepSimulation(state) // t6: building-3 operational
+  state = stepSimulation(state) // t8: 1 remaining
+  state = stepSimulation(state) // t9: building-3 operational
   return state
 }
 
@@ -142,12 +154,15 @@ describe('workshop building (Step 07C §3)', () => {
     const workshop = state.buildings['building-1']
     expect(workshop?.type).toBe('workshop')
     expect(workshop?.status).toBe('underConstruction')
-    expect(workshop?.constructionRemaining).toBe(1)
+    // Step 10Y: no placement catch-up — a 2-tick building starts at 2.
+    expect(workshop?.constructionRemaining).toBe(2)
     expect(state.time.tick).toBe(1)
   })
 
   it('becomes operational after the catalog construction duration', () => {
     let state = stepSimulation(createTestState(), place('workshop', 1, 1))
+    state = stepSimulation(state)
+    expect(state.buildings['building-1']?.status).toBe('underConstruction')
     state = stepSimulation(state)
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(state.buildings['building-1']?.constructionRemaining).toBe(0)
@@ -156,6 +171,7 @@ describe('workshop building (Step 07C §3)', () => {
 
   it('never provides housing and never admits a colonist by itself', () => {
     let state = stepSimulation(createTestState(), place('workshop', 1, 1))
+    state = stepSimulation(state)
     state = stepSimulation(state)
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(Object.keys(state.colonists)).toHaveLength(0)
@@ -171,6 +187,7 @@ describe('deterministic job assignment (Step 07C §4)', () => {
 
     let state = stepSimulation(empty, place('workshop', 1, 1))
     state = stepSimulation(state)
+    state = stepSimulation(state) // Step 10Y: 2 construction ticks after placement
     expect(getJobCapacity(state)).toBe(1)
     expect(assignJobs(state)).toBe(state)
     expect(Object.keys(assignJobs(state).colonists)).toHaveLength(0)
@@ -215,6 +232,7 @@ describe('deterministic job assignment (Step 07C §4)', () => {
     let state = stepSimulation(twoColonistState(), place('workshop', 6, 6))
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state)
+    state = stepSimulation(state) // Step 10Y: operational
     expect(state.colonists['colonist-1']?.workplaceId).toBe('building-3')
     expect(state.colonists['colonist-2']?.workplaceId).toBeNull()
     expect(getEmploymentSummary(state)).toEqual({
@@ -236,14 +254,16 @@ describe('deterministic job assignment (Step 07C §4)', () => {
   it('multiple colonists / multiple workshops: deterministic nearest-Workshop preference (09M)', () => {
     // Step 08F: storage clamp changes material flow, not assignment. Top up
     // the stock so this ordering test funds both placements deterministically.
-    let state = withConstruction(twoColonistState(), 100) // t4
-    state = stepSimulation(state, place('workshop', 6, 6)) // t5: building-3
+    let state = withConstruction(twoColonistState(), 100) // t6
+    state = stepSimulation(state, place('workshop', 6, 6)) // t7: building-3
     state = withRoadsForWorkshops(state) // 09K: mobility connection
-    state = stepSimulation(state) // t6: colonist-1 -> building-3
+    state = stepSimulation(state) // 1 remaining
+    state = stepSimulation(state) // t9: colonist-1 -> building-3
     state = withConstruction(state, 100)
-    state = stepSimulation(state, place('workshop', 0, 0)) // t7: building-4
+    state = stepSimulation(state, place('workshop', 0, 0)) // t10: building-4
     state = withRoadsForWorkshops(state) // 09K: mobility connection
-    state = stepSimulation(state) // t8: nearest-Workshop preference
+    state = stepSimulation(state) // 1 remaining
+    state = stepSimulation(state) // t12: nearest-Workshop preference
     // Step 09M: among eligible Workshops the NEAREST road distance wins.
     // Residence (2,2) is 4 road steps from building-4 (0,0) and 6 from
     // building-3 (6,6), so colonist-1 takes building-4; residence (4,4) is
@@ -288,6 +308,7 @@ describe('deterministic job assignment (Step 07C §4)', () => {
 
     let farmState = stepSimulation(colonistState(), place('farm', 6, 6))
     farmState = stepSimulation(farmState)
+    farmState = stepSimulation(farmState) // Step 10Y: operational
     expect(farmState.buildings['building-2']?.status).toBe('operational')
     const farm = withWorkplace(farmState, 'colonist-1', 'building-2')
     expect(assignJobs(farm).colonists['colonist-1']?.workplaceId).toBeNull()
@@ -296,7 +317,8 @@ describe('deterministic job assignment (Step 07C §4)', () => {
   it('never lets one workshop hold more than one worker', () => {
     let state = stepSimulation(twoColonistState(), place('workshop', 6, 6))
     state = withRoadsForWorkshops(state) // 09K: mobility connection
-    state = stepSimulation(state) // colonist-1 -> building-3
+    state = stepSimulation(state) // 1 remaining
+    state = stepSimulation(state) // Step 10Y: colonist-1 -> building-3
     const forced = withWorkplace(state, 'colonist-2', 'building-3')
     const after = assignJobs(forced)
     expect(after.colonists['colonist-1']?.workplaceId).toBe('building-3')
@@ -331,7 +353,8 @@ describe('construction material production (Step 07C §6-§8)', () => {
 
   it('an operational workshop with no worker produces nothing', () => {
     let state = stepSimulation(createTestState(), place('workshop', 1, 1))
-    state = stepSimulation(state)
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
+    state = stepSimulation(state) // operational
     expect(getJobCapacity(state)).toBe(1)
     expect(materialProductionForTick(state)).toBe(0)
     expect(produceMaterial(state)).toBe(state)
@@ -362,9 +385,10 @@ describe('construction material production (Step 07C §6-§8)', () => {
 
   it('multiple workers add linearly', () => {
     let state = twoWorkshopState() // 1 colonist, 2 workshops
-    state = stepSimulation(state, place('residence', 0, 0)) // t7
+    state = stepSimulation(state, place('residence', 0, 0)) // t10
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
-    state = stepSimulation(state) // t8: second colonist admitted and employed
+    state = stepSimulation(state) // 1 construction tick left
+    state = stepSimulation(state) // t12: second colonist admitted and employed
     expect(getEmploymentSummary(state).employed).toBe(2)
     expect(materialProductionForTick(state)).toBe(4)
     // Step 08C: two staffed Workshops pay 2 upkeep, net +2.
@@ -376,11 +400,12 @@ describe('construction material production (Step 07C §6-§8)', () => {
   })
 
   it('a newly operational workshop is staffed and produces the same tick', () => {
-    let state = stepSimulation(colonistState(), place('workshop', 6, 6)) // t3
+    let state = stepSimulation(colonistState(), place('workshop', 6, 6)) // t4
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     const before = getResourceStock(state).construction
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
-    state = stepSimulation(state) // t4: operational this tick
+    state = stepSimulation(state) // t5: 1 construction tick left
+    state = stepSimulation(state) // t6: operational this tick
     expect(state.buildings['building-2']?.status).toBe('operational')
     expect(state.colonists['colonist-1']?.workplaceId).toBe('building-2')
     // Step 08C: same-tick production (+2) pays same-tick upkeep (−1).
@@ -391,17 +416,24 @@ describe('construction material production (Step 07C §6-§8)', () => {
   })
 
   it('a newly admitted colonist is employed and produces the same tick', () => {
-    let state = colonistState() // t2: colonist-1
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    let state = colonistState() // t3: colonist-1
+    state = stepSimulation(state, place('workshop', 4, 4)) // t4
     state = withRoadsForWorkshops(state) // 09F: road for production
-    state = stepSimulation(state, place('workshop', 6, 6)) // t4: W2 op, net +1
+    state = stepSimulation(state) // t5: W1 1 construction tick left
+    state = stepSimulation(state) // t6: W1 operational, net +1
+    state = stepSimulation(state, place('workshop', 6, 6)) // t7: W2 placed
     state = withRoadsForWorkshops(state) // 09F: road for W2
-    state = stepSimulation(state) // t5: W3 op, net +1
-    state = stepSimulation(state, place('residence', 7, 7)) // t6
+    state = stepSimulation(state) // t8: W2 1 construction tick left
+    state = stepSimulation(state) // t9: W2 operational
+    state = stepSimulation(state, place('residence', 7, 7)) // t10
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
     const beforeAdmission = getResourceStock(state).construction
     expect(Object.keys(state.colonists)).toHaveLength(1)
-    state = stepSimulation(state) // t7: colonist-2 admitted this tick
+    state = stepSimulation(state) // t11: residence 1 construction tick left
+    // Step 10Y timing isolation: pin the stock so the admission tick measures
+    // exactly the same economics as before the extra construction tick.
+    state = withConstruction(state, beforeAdmission)
+    state = stepSimulation(state) // t12: colonist-2 admitted this tick
     expect(Object.keys(state.colonists)).toHaveLength(2)
     expect(state.colonists['colonist-2']?.workplaceId).toBe('building-3')
     // Step 08C: two staffed Workshops produce +4 and pay 2 upkeep (net +2).
@@ -456,15 +488,19 @@ describe('jobs integration: housing -> colonist -> workshop -> employment -> mat
     // Step 08G: the construction transaction runs AFTER production and
     // BEFORE upkeep, so a placement tick stores first, then deducts 25,
     // then pays upkeep on the remainder.
-    let state = workshopState() // t4: 1 worker, material 49 (50 + 0 stored − 1)
-    state = stepSimulation(state, place('workshop', 6, 6)) // t5: 49 + 0 stored − 25 − 1 upkeep → 23
+    let state = workshopState() // t6: 1 worker, material 49 (50 + 0 stored − 1)
+    state = stepSimulation(state, place('workshop', 6, 6)) // t7: 49 + 0 stored − 25 − 1 upkeep → 23
     expect(getResourceStock(state).construction).toBe(23)
-    state = stepSimulation(state) // t6: building-3 operational (vacant): cap 50, 23 + 2 − 1 → 24
+    state = stepSimulation(state) // t8: 1 construction tick left
+    // Step 10Y timing isolation: pin the stock so the post-completion trace
+    // measures exactly the same economics as before the extra tick.
+    state = withConstruction(state, 23)
+    state = stepSimulation(state) // t9: building-3 operational (vacant): cap 50, 23 + 2 − 1 → 24
     expect(getResourceStock(state).construction).toBe(24)
     expect(getMaterialStorageCapacity(state)).toBe(50)
-    state = stepSimulation(state) // t7: cap 50, 24 + 2 − 1 → 25
+    state = stepSimulation(state) // t10: cap 50, 24 + 2 − 1 → 25
     expect(getResourceStock(state).construction).toBe(25)
-    state = stepSimulation(state, place('workshop', 7, 7)) // t8: 25 + 2 − 25 − 1 = 1
+    state = stepSimulation(state, place('workshop', 7, 7)) // t11: 25 + 2 − 25 − 1 = 1
     expect(getResourceStock(state).construction).toBe(1)
 
     // Below the 25 cost: another building would be rejected right now.
@@ -556,7 +592,7 @@ describe('employment render projection (Step 07C §13)', () => {
 
 describe('jobs persistence (Step 07C §10)', () => {
   it('bumps the save version to 4', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('round-trips employment state with hash and behavioral equivalence', () => {
@@ -626,6 +662,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
     let state = twoColonistState()
     state = stepSimulation(state, place('farm', 6, 6))
     state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
+    state = stepSimulation(state) // 1 construction tick left
     state = stepSimulation(state)
     expect(getJobCapacity(state)).toBe(1)
     expect(getFoodConsumptionPerTick(state)).toBe(2)
@@ -638,19 +675,21 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
     let state = colonistState()
     state = stepSimulation(state, place('farm', 6, 6))
     state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
+    state = stepSimulation(state) // 1 construction tick left
     state = stepSimulation(state)
     expect(getFoodTicksRemaining(state)).toBeNull()
     expect(isFoodSupplySustainable(state)).toBe(true)
   })
 
   it('never claims a finite starvation time on a non-negative net flow', () => {
-    // Step 10E timing: the completing farm is staffed tick 4 but produces
-    // from tick 5, so the colony needs a 2-food buffer to survive the gap.
-    let state = withFood(colonistState(), 2)
-    state = stepSimulation(state, place('farm', 6, 6)) // t3: eat 1 -> 1
+    // Step 10Y timing: a 2-tick building completes two ticks after placement,
+    // so the completing farm is staffed and produces from the second tick.
+    let state = withFood(colonistState(), 3)
+    state = stepSimulation(state, place('farm', 6, 6)) // t4: eat 1 -> 2
     state = withRoadsForWorkshops(state) // Step 10E: farm staffing needs roads
-    state = stepSimulation(state) // t4: farm op + assigned; eat 1 -> 0
-    state = stepSimulation(state) // t5: +2 produced, 1 eaten -> 1
+    state = stepSimulation(state) // t5: 1 tick left; eat 1 -> 1
+    state = stepSimulation(state) // t6: farm op + assigned; eat 1 -> 0
+    state = stepSimulation(state) // t7: +2 produced, 1 eaten -> 1
     expect(state.resources.food).toBeGreaterThanOrEqual(0)
     expect(getFoodTicksRemaining(state)).toBeNull()
     expect(isFoodSupplySustainable(state)).toBe(true)

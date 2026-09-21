@@ -169,6 +169,7 @@ async function main() {
 
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 });
+    await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
     assert(s.colonists === '1', `expected 1 colonist, got ${s.colonists}`);
 
@@ -181,11 +182,13 @@ async function main() {
 
     await selectPalette(page, 'build-farm', 'Farm selected');
     await placeAt(page, { x: 4, y: 2 });
+    await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
     assert(s.staffedFarmIds !== '', `Farm should be automatically staffed, got "${s.staffedFarmIds}"`);
 
     await selectPalette(page, 'build-workshop', 'Workshop selected');
     await placeAt(page, { x: 4, y: 3 });
+    await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
 
     // Automatic allocation: the nearer Farm wins; the Workshop is vacant.

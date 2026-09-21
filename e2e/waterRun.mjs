@@ -152,6 +152,7 @@ async function main() {
     assert(s.water === '0', `fresh water must be 0, got ${s.water}`);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 });
+    await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
     assert(s.colonists === '1', `bootstrap colonist expected, got ${s.colonists}`);
     assert(s.hasOperationalWell === 'false', `no Well expected yet, got ${s.hasOperationalWell}`);
@@ -166,7 +167,8 @@ async function main() {
     // ---------------------------------------------------------------------
     await selectPalette(page, 'build-well', 'Well selected');
     await placeAt(page, { x: 5, y: 2 }); // roadless for now
-    s = await step(page); // t: operational
+    await step(page); // Step 10Y: 1 construction tick left
+    s = await step(page); // operational
     assert(s.hasOperationalWell === 'true', `Well should be operational, got ${s.hasOperationalWell}`);
     assert(s.waterServedResidences === '0', `roadless Well must serve nothing, got ${s.waterServedResidences}`);
     // Add a second Residence on the main network (no Well on it yet).
@@ -175,6 +177,7 @@ async function main() {
     s = await step(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 3 });
+    s = await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
     s = await step(page);
     assert(s.colonists === '1', `unserved Residence must block admission, got ${s.colonists}`);

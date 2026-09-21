@@ -111,31 +111,42 @@ async function main() {
     await clickCell(page, { x: 6, y: 6 });
     await waitFor(async () => (await selected(page))?.id === 'building-1', 'building selected');
     let insp = await selected(page);
-    if (insp?.status !== 'underConstruction' || insp?.constructionRemaining !== 1) {
+    // Step 10Y: no placement catch-up — the catalog's 2 ticks are literal.
+    if (insp?.status !== 'underConstruction' || insp?.constructionRemaining !== 2) {
       fail(`inspection under construction expected, got ${JSON.stringify(insp)}`);
     } else ok(`inspection: ${insp.status}, ${insp.constructionRemaining}/${insp.constructionDuration} ticks, capacity ${insp.housingCapacity}`);
     await shot('02-construction.png');
 
-    // Second placement at (4,4): tick 2. building-1 is now operational with a
-    // resident while building-2 is still under construction: temporal contrast.
+    // Second placement at (4,4): tick 2. building-1 has one construction tick
+    // left while building-2 is freshly started: temporal contrast.
     await clickCell(page, { x: 4, y: 4 });
     await waitFor(async () => (await stats(page)).tick === '2', 'tick 2 after second placement');
     const b1 = await at(page, { x: 6, y: 6 });
     const b2 = await at(page, { x: 4, y: 4 });
-    if (b1?.status !== 'operational' || b1?.occupiedHousing !== 1) fail(`b1 should be operational, got ${JSON.stringify(b1)}`);
-    else ok(`building-1 operational with ${b1.occupiedHousing} resident`);
-    if (b2?.status !== 'underConstruction' || b2?.constructionRemaining !== 1) fail(`b2 should be under construction, got ${JSON.stringify(b2)}`);
+    if (b1?.status !== 'underConstruction' || b1?.constructionRemaining !== 1) fail(`b1 should have 1 tick left, got ${JSON.stringify(b1)}`);
+    else ok(`building-1 has ${b1.constructionRemaining} construction tick left`);
+    if (b2?.status !== 'underConstruction' || b2?.constructionRemaining !== 2) fail(`b2 should be under construction, got ${JSON.stringify(b2)}`);
     else ok(`building-2 under construction, ${b2.constructionRemaining}/${b2.constructionDuration} ticks`);
     s = await stats(page);
-    if (s.colonists !== '1') fail(`colonists should be 1, got ${JSON.stringify(s)}`);
-    else ok(`colonist admitted from real housing capacity, ${JSON.stringify(s)}`);
+    if (s.colonists !== '0') fail(`no colonist yet, got ${JSON.stringify(s)}`);
+    else ok(`no colonist before the first residence is operational, ${JSON.stringify(s)}`);
     await clickCell(page, { x: 4, y: 4 });
     await waitFor(async () => (await selected(page))?.id === 'building-2', 'building-2 selected');
     await shot('03-progress.png');
 
-    // STEP: building-2 becomes operational, second colonist admitted.
+    // STEP: building-1 becomes operational, first colonist admitted.
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await stats(page)).tick === '3', 'step to tick 3');
+    const b1After = await at(page, { x: 6, y: 6 });
+    if (b1After?.status !== 'operational' || b1After?.occupiedHousing !== 1) fail(`b1 should be operational, got ${JSON.stringify(b1After)}`);
+    else ok(`building-1 operational with ${b1After.occupiedHousing} resident`);
+    s = await stats(page);
+    if (s.colonists !== '1') fail(`colonists should be 1, got ${JSON.stringify(s)}`);
+    else ok(`colonist admitted from real housing capacity, ${JSON.stringify(s)}`);
+
+    // STEP: building-2 becomes operational, second colonist admitted.
+    await page.click('[data-testid="simulation-step"]');
+    await waitFor(async () => (await stats(page)).tick === '4', 'step to tick 4');
     insp = await selected(page);
     if (insp?.status !== 'operational' || insp?.occupiedHousing !== 1) fail(`b2 should be operational, got ${JSON.stringify(insp)}`);
     else ok(`inspection after STEP: ${insp.status}, ${insp.occupiedHousing} resident`);

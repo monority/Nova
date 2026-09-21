@@ -77,7 +77,8 @@ const staffedWorkshopNoRoad = (): SimulationState => {
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(state, place('workshop', 4, 4)) // t3
-  state = stepSimulation(state) // t4: operational + staffed
+  state = stepSimulation(state) // t4: 1 construction tick left
+  state = stepSimulation(state) // t5: operational + staffed
   return state
 }
 
@@ -422,7 +423,7 @@ describe('road projection, persistence and determinism (Step 09H)', () => {
     const raw = serializeSave(state)
     expect(raw.includes('connections')).toBe(false)
     expect(raw.includes('orientation')).toBe(false)
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('T — deterministic replay: same gestures, same state and hash', () => {

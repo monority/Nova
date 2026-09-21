@@ -21,7 +21,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, withRoadsForWorkshops } from './helpers.js'
+import { createTestState, withRoadsForWorkshops, placeCatchUp } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -68,30 +68,30 @@ const capacityState = (residences: number, workshops: number): SimulationState =
   // pre-stocked instead of produced by (now worker-requiring) farms. This
   // keeps population and employment counts exactly as asserted.
   let state = withFood(createTestState(), 100000)
-  state = stepSimulation(state, place('residence', 0, 0)) // t1
+  state = placeCatchUp(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   let built = 0
   if (workshops >= 1) {
-    state = stepSimulation(state, place('workshop', 0, 5)) // stock 50
+    state = placeCatchUp(state, place('workshop', 0, 5)) // stock 50
     state = withRoadsForWorkshops(state) // 09F: road for WS1
     state = stepSimulation(state) // colonist-1 employed, stock 49
     built = 1
   }
   if (workshops >= 2) {
-    state = stepSimulation(state, place('workshop', 1, 5)) // stock 24
+    state = placeCatchUp(state, place('workshop', 1, 5)) // stock 24
     state = withRoadsForWorkshops(state) // 09F: road for WS2
     state = stepSimulation(state) // second operational, cap 50, stock 25
     built = 2
   }
   for (let i = 1; i < residences; i++) {
     state = untilAffordable(state)
-    state = stepSimulation(state, place('residence', i, 0))
+    state = placeCatchUp(state, place('residence', i, 0))
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
     state = stepSimulation(state)
   }
   for (let k = built; k < workshops; k++) {
     state = untilAffordable(state)
-    state = stepSimulation(state, place('workshop', k + 2, 5))
+    state = placeCatchUp(state, place('workshop', k + 2, 5))
     state = withRoadsForWorkshops(state) // 09F: road for the new workshop
     state = stepSimulation(state)
   }
@@ -114,7 +114,7 @@ describe('productive labor constraint (Step 08E)', () => {
 
   it('B — vacant operational Workshop: production 0, upkeep 0', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('workshop', 1, 1)) // t1
+    state = placeCatchUp(state, place('workshop', 1, 1)) // t1
     state = stepSimulation(state) // t2: operational, nobody housed
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(getProductiveWorkerCount(state)).toBe(0)
@@ -167,9 +167,9 @@ describe('productive labor constraint (Step 08E)', () => {
 
   it('G — Workshop under construction: no production, no upkeep', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3: constructing
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3: constructing
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
     expect(getProductiveWorkerCount(state)).toBe(0)
     expect(materialProductionForTick(state)).toBe(0)
@@ -181,9 +181,9 @@ describe('productive labor constraint (Step 08E)', () => {
   it('H — starvation: 0 workers => 0 production, 0 upkeep, no penalty', () => {
     // Farm-less colony: food 0 starves on the very next tick.
     let state = createTestState()
-    state = stepSimulation(state, place('residence', 2, 2)) // t1
+    state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = placeCatchUp(state, place('workshop', 4, 4)) // t3
     state = stepSimulation(state) // t4: operational, employed
     state = withFood(state, 0)
     const materialBefore = getResourceStock(state).construction
@@ -261,7 +261,7 @@ describe('productive labor constraint (Step 08E)', () => {
   it('determinism: capacity scenario replays to identical state + hash', () => {
     const run = (): SimulationState => {
       let state = capacityState(5, 2)
-      state = stepSimulation(state, place('farm', 3, 3))
+      state = placeCatchUp(state, place('farm', 3, 3))
       state = stepSimulation(state)
       state = stepSimulation(state)
       return state
@@ -273,7 +273,7 @@ describe('productive labor constraint (Step 08E)', () => {
   })
 
   it('save/hash: SAVE_VERSION 4, round-trip stable, nothing new persisted', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     const state = stepSimulation(capacityState(5, 2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('productive')

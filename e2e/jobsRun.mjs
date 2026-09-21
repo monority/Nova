@@ -131,13 +131,15 @@ async function fresh(page) {
 async function placeCoreLoop(page, kind) {
   await selectPalette(page, 'build-residence', 'Residence selected');
   await placeAt(page, { x: 2, y: 2 }); // tick 1
-  await step(page); // tick 2: residence operational, colonist admitted
+  await step(page); // tick 2: Step 10Y — 1 construction tick left
+  await step(page); // tick 3: residence operational, colonist admitted
   await selectPalette(page, 'build-road', 'Road selected');
-  await placeRoad(page, { x: 3, y: 2 }); // tick 3
-  await step(page); // tick 4: road operational
+  await placeRoad(page, { x: 3, y: 2 }); // tick 4
+  await step(page); // tick 5: road operational
   await selectPalette(page, kind === 'farm' ? 'build-farm' : 'build-workshop', kind === 'farm' ? 'Farm selected' : 'Workshop selected');
-  await placeAt(page, { x: 4, y: 2 }); // tick 5
-  return step(page); // tick 6: workplace operational + staffed
+  await placeAt(page, { x: 4, y: 2 }); // tick 6
+  await step(page); // tick 7: Step 10Y — 1 construction tick left
+  return step(page); // tick 8: workplace operational + staffed
 }
 
 async function main() {
@@ -192,8 +194,10 @@ async function main() {
     // Phase A/B: residence, road, workshop through the real palettes.
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
-    s = await step(page); // t2
-    assert(s.colonists === '1', `expected 1 colonist at tick 2, got ${s.colonists}`);
+    s = await step(page); // t2: Step 10Y — 1 construction tick left
+    assert(s.colonists === '0', `tick 2 should still be under construction, got ${s.colonists} colonists`);
+    s = await step(page); // t3
+    assert(s.colonists === '1', `expected 1 colonist at tick 3, got ${s.colonists}`);
     assert(s.construction === '75', `material after residence expected 75, got ${s.construction}`);
     assert(s.status.includes('Colonist arrived'), `arrival feedback missing: ${JSON.stringify(s.status)}`);
     const finiteForecast = Number((await forecastText(page)).replace(/[^0-9]/g, ''));
@@ -202,13 +206,13 @@ async function main() {
     await shot('02-colonist.png');
 
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 2 }); // t3
-    s = await step(page); // t4
-    assert(s.roads === '1' && s.operationalRoads === '1', `road should be operational at tick 4, got ${JSON.stringify(s)}`);
+    await placeRoad(page, { x: 3, y: 2 }); // t4
+    s = await step(page); // t5 (roads keep their 09C catch-up)
+    assert(s.roads === '1' && s.operationalRoads === '1', `road should be operational at tick 5, got ${JSON.stringify(s)}`);
     ok(`road operational at tick ${s.tick} (09K mobility link), material ${s.construction}`);
 
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 2 }); // t5
+    await placeAt(page, { x: 4, y: 2 }); // t6
     s = await stats(page);
     assert(s.workshops === '1', `expected 1 workshop, got ${s.workshops}`);
     assert(s.jobCapacity === '0', `under-construction workshop must offer no job, got ${s.jobCapacity}`);
@@ -217,15 +221,16 @@ async function main() {
     assert(underConstruction === 'Jobs — Capacity 0 · Workers 0/0 · upkeep 0 (vacant)', `under-construction workshop inspection bad: "${underConstruction}"`);
     ok(`workshop placed at tick ${s.tick}; material ${s.construction}; inspection "${underConstruction}"`);
 
-    s = await step(page); // t6: operational + staffed + producing
-    assert(s.employed === '1' && s.jobCapacity === '1', `expected 1/1 employment at tick 6, got ${JSON.stringify(s)}`);
+    await step(page); // t7: Step 10Y — 1 construction tick left
+    s = await step(page); // t8: operational + staffed + producing
+    assert(s.employed === '1' && s.jobCapacity === '1', `expected 1/1 employment at tick 8, got ${JSON.stringify(s)}`);
     assert((await jobsText(page)) === '1 / 1', `HUD jobs expected "1 / 1", got "${await jobsText(page)}"`);
     assert(s.materialProduction === '2', `material production expected 2, got ${s.materialProduction}`);
     assert(s.status.includes('Colonist assigned to Workshop'), `employment feedback missing: ${JSON.stringify(s.status)}`);
     assert(s.status.includes('1 worker produced 2 material'), `material feedback missing: ${JSON.stringify(s.status)}`);
     // Step 08F: stock above the 25 capacity stores nothing and drains -1 upkeep.
     assert(s.storageCapacity === '25' && s.storedProduction === '0', `capacity expectations broken: ${JSON.stringify(s)}`);
-    assert(s.construction === '44', `material at tick 6 expected 44, got ${s.construction}`);
+    assert(s.construction === '44', `material at tick 8 expected 44, got ${s.construction}`);
     const selection = await selectAt(page, { x: 4, y: 2 });
     assert(selection?.type === 'workshop', `selection expected workshop, got ${JSON.stringify(selection)}`);
     assert((await page.locator('[data-testid="inspection-type"]').textContent()) === 'Workshop', 'inspection type label missing');
@@ -254,16 +259,17 @@ async function main() {
     // ---------------------------------------------------------------------
     console.log('--- Scenario 2: labor income funds further construction ---');
     await fresh(page);
-    s = await placeCoreLoop(page, 'workshop'); // tick 6: material 44, one staffed workshop
+    s = await placeCoreLoop(page, 'workshop'); // tick 8: material 44, one staffed workshop
     assert(s.construction === '44', `core loop expected material 44, got ${s.construction}`);
     // Raise capacity to 50 with a second (road-connected) workshop: 44 - 5
     // road - 1 upkeep = 38, then -25 workshop - 1 upkeep = 12 sub-capacity.
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 3 }); // t7
-    s = await step(page); // t8
+    await placeRoad(page, { x: 3, y: 3 }); // t9
+    s = await step(page); // t10
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 }); // t9
-    s = await step(page); // t10: operational, capacity 50
+    await placeAt(page, { x: 4, y: 3 }); // t11
+    await step(page); // t12: Step 10Y — 1 construction tick left
+    s = await step(page); // t13: operational, capacity 50
     assert(s.workshops === '2' && s.storageCapacity === '50', `capacity should be 50 now, got ${JSON.stringify(s)}`);
     assert(Number(s.construction) < 25, `material should be below the 25 cost, got ${s.construction}`);
     assert(s.materialProduction === '2', `only one worker exists, gross must stay 2, got ${s.materialProduction}`);
@@ -297,15 +303,18 @@ async function main() {
     await fresh(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
-    await step(page); // t2 colonist-1
-    await placeAt(page, { x: 2, y: 4 }); // t3 residence-2
-    await step(page); // t4 colonist-2
+    await step(page); // t2 Step 10Y — 1 construction tick left
+    await step(page); // t3 colonist-1
+    await placeAt(page, { x: 2, y: 4 }); // t4 residence-2
+    await step(page); // t5 Step 10Y — 1 construction tick left
+    await step(page); // t6 colonist-2
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 2, y: 3 }); // t5 (touches both residences)
-    await step(page); // t6 road operational
+    await placeRoad(page, { x: 2, y: 3 }); // t7 (touches both residences)
+    await step(page); // t8 road operational
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 3, y: 3 }); // t7 (adjacent to the same road cell)
-    s = await step(page); // t8
+    await placeAt(page, { x: 3, y: 3 }); // t9 (adjacent to the same road cell)
+    await step(page); // t10 Step 10Y — 1 construction tick left
+    s = await step(page); // t11
     assert(s.colonists === '2' && s.jobCapacity === '1', `expected 2 colonists / 1 job, got ${JSON.stringify(s)}`);
     assert(s.employed === '1' && s.unemployed === '1', `expected 1 employed / 1 unemployed, got ${JSON.stringify(s)}`);
     assert((await jobsText(page)) === '1 / 1', `HUD jobs expected "1 / 1", got "${await jobsText(page)}"`);
@@ -326,19 +335,22 @@ async function main() {
     await fresh(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
-    await step(page); // t2 colonist-1
+    await step(page); // t2 Step 10Y — 1 construction tick left
+    await step(page); // t3 colonist-1
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 2 }); // t3
-    await step(page); // t4 road operational
+    await placeRoad(page, { x: 3, y: 2 }); // t4
+    await step(page); // t5 road operational
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 2 }); // t5 workshop-1 (nearest: distance 0)
-    await step(page); // t6 operational + staffed
+    await placeAt(page, { x: 4, y: 2 }); // t6 workshop-1 (nearest: distance 0)
+    await step(page); // t7 Step 10Y — 1 construction tick left
+    await step(page); // t8 operational + staffed
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 3 }); // t7
-    await step(page); // t8 road operational
+    await placeRoad(page, { x: 3, y: 3 }); // t9
+    await step(page); // t10 road operational
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 }); // t9 workshop-2 (farther: distance 1)
-    s = await step(page); // t10
+    await placeAt(page, { x: 4, y: 3 }); // t11 workshop-2 (farther: distance 1)
+    await step(page); // t12 Step 10Y — 1 construction tick left
+    s = await step(page); // t13
     assert(s.employed === '1' && s.jobCapacity === '2', `expected 1 employed / 2 jobs, got ${JSON.stringify(s)}`);
     assert((await jobsText(page)) === '1 / 2', `HUD jobs expected "1 / 2", got "${await jobsText(page)}"`);
     assert(s.unemployed === '0', `no colonist should be unemployed, got ${s.unemployed}`);
@@ -411,20 +423,22 @@ async function main() {
     assert((await forecastText(page)) === '', `population 0 -> no forecast, got "${await forecastText(page)}"`);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
-    s = await step(page); // t2 colonist: production 0 < consumption 1
+    await step(page); // t2 Step 10Y — 1 construction tick left
+    s = await step(page); // t3 colonist: production 0 < consumption 1
     const declining = (await forecastText(page)).trim();
     assert(/^·\s*~[0-9]+ ticks$/.test(declining), `declining reserve must show a finite forecast, got "${declining}"`);
     assert(Number(s.foodForecast) > 0 && Number(s.foodForecast) < 200, `finite forecast out of range: ${s.foodForecast}`);
     ok(`population 0 -> ""; production 0 -> "${declining}" (finite)`);
     await fresh(page);
-    s = await placeCoreLoop(page, 'farm'); // t6: 1 colonist, 1 staffed farm (production 2 > 1)
+    s = await placeCoreLoop(page, 'farm'); // t8: 1 colonist, 1 staffed farm (production 2 > 1)
     assert(s.colonists === '1', `expected 1 colonist, got ${s.colonists}`);
     assert(s.foodForecast === 'sustainable', `production > consumption must be sustainable, got "${s.foodForecast}"`);
     assert((await forecastText(page)).includes('sustainable'), `UI must show " · sustainable", got "${await forecastText(page)}"`);
     ok(`1 colonist + 1 staffed farm: "${(await forecastText(page)).trim()}" (2 > 1)`);
     await selectPalette(page, 'build-residence', 'Residence selected');
-    await placeAt(page, { x: 6, y: 2 }); // t7 residence (admission is not road-gated)
-    s = await step(page); // t8 second colonist: production 2 = consumption 2
+    await placeAt(page, { x: 6, y: 2 }); // t9 residence (admission is not road-gated)
+    await step(page); // t10 Step 10Y — 1 construction tick left
+    s = await step(page); // t11 second colonist: production 2 = consumption 2
     assert(s.colonists === '2', `expected 2 colonists, got ${s.colonists}`);
     assert(s.foodForecast === 'sustainable', `production = consumption must be sustainable, got "${s.foodForecast}"`);
     ok(`2 colonists + 1 staffed farm: "${(await forecastText(page)).trim()}" (2 = 2)`);
@@ -435,7 +449,7 @@ async function main() {
     // ---------------------------------------------------------------------
     console.log('--- Scenario 7: Step 10E farm employment ---');
     await fresh(page);
-    s = await placeCoreLoop(page, 'farm'); // t6: farm operational + staffed
+    s = await placeCoreLoop(page, 'farm'); // t8: farm operational + staffed
     assert(s.farms === '1' && s.staffedFarmIds !== '', `farm must be staffed once road-connected: ${JSON.stringify(s)}`);
     assert(s.vacantOperationalFarms === '0', `no vacant farm expected, got ${s.vacantOperationalFarms}`);
     assert(s.jobs === '1 / 1' && s.materialProduction === '0', `farm job should be the only one, got ${JSON.stringify(s)}`);
@@ -443,7 +457,7 @@ async function main() {
     // this tick produces from the NEXT tick. The assignment is visible now.
     assert(s.status.includes('Colonist assigned to Farm'), `farm-assignment feedback missing: ${JSON.stringify(s.status)}`);
     assert(!s.status.includes('assigned to Workshop'), `farm assignment must not claim Workshop: ${JSON.stringify(s.status)}`);
-    s = await step(page); // t7: first productive tick
+    s = await step(page); // t9: first productive tick
     assert(s.status.includes('1 farm produced 2 food'), `staffed-farm production feedback missing: ${JSON.stringify(s.status)}`);
     await selectAt(page, { x: 4, y: 2 });
     const farmInspection = await inspectionHousingText(page);
@@ -454,10 +468,12 @@ async function main() {
     await fresh(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
-    await step(page); // t2 colonist
+    await step(page); // t2 Step 10Y — 1 construction tick left
+    await step(page); // t3 colonist
     await selectPalette(page, 'build-farm', 'Farm selected');
-    await placeAt(page, { x: 6, y: 2 }); // t3 (no road anywhere)
-    s = await step(page); // t4 farm operational but unreachable
+    await placeAt(page, { x: 6, y: 2 }); // t4 (no road anywhere)
+    await step(page); // t5 Step 10Y — 1 construction tick left
+    s = await step(page); // t6 farm operational but unreachable
     assert(s.vacantOperationalFarms === '1', `farm with no road must be vacant, got ${JSON.stringify(s)}`);
     assert(s.staffedFarmIds === '', `vacant farm must have no worker, got "${s.staffedFarmIds}"`);
     assert(s.employed === '0' && s.jobCapacity === '1', `farm job must stay open, got ${JSON.stringify(s)}`);
@@ -471,19 +487,22 @@ async function main() {
     await fresh(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
-    await step(page); // t2 colonist-1
+    await step(page); // t2 Step 10Y — 1 construction tick left
+    await step(page); // t3 colonist-1
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 2 }); // t3 (touches residence + farm contact)
-    await step(page); // t4 road operational
+    await placeRoad(page, { x: 3, y: 2 }); // t4 (touches residence + farm contact)
+    await step(page); // t5 road operational
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 3 }); // t5 (extends the network)
-    await step(page); // t6 road operational
+    await placeRoad(page, { x: 3, y: 3 }); // t6 (extends the network)
+    await step(page); // t7 road operational
     await selectPalette(page, 'build-farm', 'Farm selected');
-    await placeAt(page, { x: 4, y: 2 }); // t7 farm, distance 0
-    await step(page); // t8 operational + staffed
+    await placeAt(page, { x: 4, y: 2 }); // t8 farm, distance 0
+    await step(page); // t9 Step 10Y — 1 construction tick left
+    await step(page); // t10 operational + staffed
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 }); // t9 workshop, distance 1
-    s = await step(page); // t10
+    await placeAt(page, { x: 4, y: 3 }); // t11 workshop, distance 1
+    await step(page); // t12 Step 10Y — 1 construction tick left
+    s = await step(page); // t13
     assert(s.colonists === '1' && s.jobCapacity === '2', `expected 1 colonist / 2 workplaces, got ${JSON.stringify(s)}`);
     assert(s.employed === '1' && s.unemployed === '0', `exactly one worker must be placed, got ${JSON.stringify(s)}`);
     // 09M is authoritative and type-blind: the NEARER workplace (the farm,

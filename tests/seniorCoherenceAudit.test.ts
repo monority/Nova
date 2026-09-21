@@ -512,7 +512,7 @@ describe('§8 — scalability benchmark', () => {
     for (const residenceId of residenceIds) {
       const id = `colonist-${nextColonistId}`
       nextColonistId += 1
-      colonistRecords[id] = { id, residenceId, workplaceId: null, workplaceAssignmentMode: 'automatic' }
+      colonistRecords[id] = { id, residenceId, workplaceId: null, workplaceAssignmentMode: 'automatic', constructionAssignmentId: null }
     }
     for (let i = 0; i < roads; i += 1) {
       const id = `road-${nextRoadId}`
@@ -630,7 +630,7 @@ describe('§12 — save/hash: persisted vs derived audit', () => {
     ]) {
       expect(serialized).not.toContain(`"${key}"`)
     }
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('corrupt/foreign saves are rejected, never silently migrated', () => {

@@ -40,7 +40,6 @@ import {
   produceFood,
   produceMaterial,
   produceWater,
-  progressPlacedBuilding,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -238,8 +237,7 @@ const stepAudit = (state: SimulationState, model: AdmissionModel): SimulationSta
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
   const commanded = applyCommand(materialized, undefined)
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed = progressPlacedRoads(progressedBuilding, commanded)
+  const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
 }
@@ -750,7 +748,7 @@ describe('§15/§16 — persistence and performance impact', () => {
     const state = waterWorld({ residences: 2, wells: 1, colonists: 1, water: 4 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('measures the admission-loop cost (existing population/residence scan)', () => {

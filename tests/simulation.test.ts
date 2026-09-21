@@ -29,6 +29,7 @@ const withFood = (state: SimulationState, food: number): SimulationState => ({
 const colonistState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, placeResidence(2, 2))
+  state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state)
   return state
 }
@@ -58,12 +59,16 @@ describe('simulation tick', () => {
     const b1 = state.buildings['building-1']
     expect(b1).toBeDefined()
     expect(b1?.status).toBe('underConstruction')
-    expect(b1?.constructionRemaining).toBe(1)
+    // Step 10Y: no placement catch-up — the catalog's 2 ticks are literal.
+    expect(b1?.constructionRemaining).toBe(2)
     expect(Object.keys(state.colonists)).toHaveLength(0)
 
-    // Tick 2: construction finishes => operational => housing capacity
-    // exists => colonist admitted and assigned in the same tick
-    // (phase 2 then phase 3).
+    // Tick 2: still under construction.
+    state = stepSimulation(state)
+    expect(state.buildings['building-1']?.status).toBe('underConstruction')
+
+    // Tick 3: construction finishes => operational => housing capacity
+    // exists => colonist admitted and assigned in the same tick.
     state = stepSimulation(state)
     const b2 = state.buildings['building-1']
     expect(b2?.status).toBe('operational')
@@ -168,8 +173,12 @@ describe('food need simulation (Step 05)', () => {
   it('two colonists consume 2 food per tick', () => {
     let state = colonistState()
     state = stepSimulation(state, placeResidence(5, 5))
+    state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(2)
+    // Step 10Y timing isolation: pin food so the consumption deltas below
+    // measure consumption, not the extra construction tick.
+    state = withFood(state, 98)
     expect(getResourceStock(state).food).toBe(98)
     const a = stepSimulation(state)
     const b = stepSimulation(a)
@@ -182,8 +191,9 @@ describe('food need simulation (Step 05)', () => {
     state = stepSimulation(state, placeResidence(5, 5))
     state = stepSimulation(state, placeResidence(7, 7))
     state = stepSimulation(state, placeResidence(3, 3))
-    state = stepSimulation(state)
+    for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(4)
+    state = withFood(state, 93) // Step 10Y timing isolation
     expect(getResourceStock(state).food).toBe(93)
     expect(getResourceStock(stepSimulation(state)).food).toBe(89)
   })
@@ -222,6 +232,7 @@ describe('food need simulation (Step 05)', () => {
   it('admission is gated on food > 0', () => {
     let state = stepSimulation(createTestState(), placeResidence(2, 2))
     state = stepSimulation(state)
+    state = stepSimulation(state) // Step 10Y: 2 construction ticks
     expect(Object.keys(state.colonists)).toHaveLength(1)
     // Simulate an exhausted, emptied colony with free capacity.
     state = {
@@ -238,6 +249,7 @@ describe('food need simulation (Step 05)', () => {
     let state = createTestState()
     state = stepSimulation(state, placeResidence(1, 1))
     state = stepSimulation(state, placeResidence(5, 5))
+    state = stepSimulation(state)
     state = stepSimulation(state)
     state = stepSimulation(state)
     expect(state.colonists['colonist-1']?.residenceId).toBe('building-1')

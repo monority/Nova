@@ -160,7 +160,7 @@ describe('building road access (Step 09E)', () => {
     expect(placed.buildings[buildingId]!.status).toBe('underConstruction')
     expect(getBuildingRoadAccess(placed, buildingId).hasRoadAccess).toBe(false)
     // Once operational, access becomes active.
-    const advanced = stepSimulation(placed)
+    const advanced = stepSimulation(stepSimulation(placed)) // Step 10Y: 2 ticks
     const access = getBuildingRoadAccess(advanced, buildingId)
     expect(access.hasRoadAccess).toBe(true)
     expect(access.roadIds).toEqual([r.id])
@@ -261,7 +261,7 @@ describe('building road access (Step 09E)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getBuildingRoadAccess(loaded, b.id)).toEqual(before)
     // No access state persisted: SAVE_VERSION unchanged.
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('L — unknown building id has no access', () => {

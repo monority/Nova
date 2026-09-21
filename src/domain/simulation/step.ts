@@ -19,8 +19,8 @@ import {
   produceFood,
   produceMaterial,
   produceWater,
-  progressPlacedBuilding,
   progressPlacedRoads,
+  releaseCompletedConstructionCrew,
   updateNeeds,
   updatePopulation,
   upkeepBuildings,
@@ -33,10 +33,24 @@ export const stepSimulation = (
   state: SimulationState,
   command?: SimulationCommand
 ): SimulationState => {
+  // Step 10Y: a construction crew assignment is resolved BEFORE the
+  // construction phase. Construction crew is the only command with a
+  // required same-tick effect (§3, "a newly assigned crew can affect the
+  // intended tick"): the crew must be present for phase 1 of the tick the
+  // player issued the command on, otherwise the site's remaining work is
+  // already down to one tick and the crew could never change the completion
+  // tick. Resolving it here also keeps the exclusivity invariant honest: the
+  // colonist is crewed before `assignJobs`/`produceMaterial`, so no tick can
+  // pay them production output AND construction credit. Every other command
+  // keeps its documented 8a position untouched.
+  const isCrewCommand =
+    command !== undefined && command.type === 'assignConstructionCrew'
+  const preResolved = isCrewCommand ? applyCommand(state, command).state : state
+  const lateCommand = isCrewCommand ? undefined : command
   // Construction progress / lifecycle. Runs BEFORE the player transaction
-  // (Step 08G §5): a placed building misses this slot and is progressed
-  // once explicitly below, preserving the 2-tick completion contract.
-  const constructed = advanceConstruction(state)
+  // (Step 08G §5): a placed ROAD misses this slot and is progressed once
+  // explicitly below, preserving the 09C road contract.
+  const constructed = advanceConstruction(preResolved)
   // Phase 3: food need — derived from the colony before admission.
   const requiredFood = updateNeeds(constructed)
   // Phase 4: farm production into the shared stock.
@@ -94,18 +108,24 @@ export const stepSimulation = (
   // before upkeep so upkeep sees the post-construction stock. Consumes
   // authoritative stock only: overflow was already discarded by the 08F
   // storage clamp, and affordability still means current stock >= cost (§13).
-  const commanded = applyCommand(materialized, command)
-  // The placed building / roads missed this tick's construction progress:
-  // catch each up once so catalog completion timing is unchanged (Step 08G,
-  // Step 09C Phase D). At most one command type applies per tick, so only
-  // one of the two catch-ups ever does work.
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed = progressPlacedRoads(progressedBuilding, commanded)
+  const commanded = applyCommand(materialized, lateCommand)
+  // The placed ROAD missed this tick's construction progress: catch it up
+  // once so the 09C road contract is unchanged. Step 10Y deliberately leaves
+  // road timing alone (a crew cannot work on a road cell); a placed BUILDING
+  // is no longer caught up, because a 2-tick building must need exactly two
+  // construction ticks for the crew's +1 to be observable at all.
+  const progressed = progressPlacedRoads(commanded.state, commanded)
   // Phase 8b: operational upkeep (Step 08C). Runs after production so
   // same-tick output pays same-tick upkeep, and after construction so a
   // 25-cost build from a 25 stock leaves upkeep 0 under the existing
   // partial-clamp semantics (Step 08G §11). No debt, no deactivation.
   const maintained = upkeepBuildings(progressed)
+  // Phase 8c: end-of-tick crew normalization (Step 10Y §14). A crew whose
+  // site completed this tick is released only AFTER every production rule has
+  // run, so a colonist never earns construction credit and production output
+  // in the same tick. The released colonist is `automatic` again and is
+  // employed normally from the next tick on.
+  const released = releaseCompletedConstructionCrew(maintained)
   // Phase 9: advance simulation time.
-  return advanceTime(maintained)
+  return advanceTime(released)
 }

@@ -99,11 +99,12 @@ describe('construction material flow (Step 08G)', () => {
       const placed = after.buildings['building-3']
       expect(placed?.type).toBe('residence')
       expect(placed?.status).toBe('underConstruction')
-      // The transaction runs after advanceConstruction: the placed building
-      // missed its progress slot and is caught up once (2 -> 1), so it
-      // still becomes operational on the very next tick.
-      expect(placed?.constructionRemaining).toBe(1)
-      const next = stepSimulation(after)
+      // Step 10Y: a placed building is no longer caught up, so the catalog's
+      // 2 construction ticks are exactly two ticks after placement.
+      expect(placed?.constructionRemaining).toBe(2)
+      const mid = stepSimulation(after)
+      expect(mid.buildings['building-3']?.status).toBe('underConstruction')
+      const next = stepSimulation(mid)
       expect(next.buildings['building-3']?.status).toBe('operational')
     })
 
@@ -261,7 +262,7 @@ describe('construction material flow (Step 08G)', () => {
 
   describe('H — persistence', () => {
     it('22 — save/load round-trips after construction (SAVE_VERSION 4)', () => {
-      expect(SAVE_VERSION).toBe(6)
+      expect(SAVE_VERSION).toBe(7)
       const state = stepSimulation(equilibrium24(), place('residence', 0, 0))
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

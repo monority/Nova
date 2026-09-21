@@ -682,8 +682,8 @@ describe('§13 — architecture', () => {
   it('the colonist is the only canonical employment owner', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2 })
     const colonistKeys = Object.keys(Object.values(state.colonists)[0]!).sort()
-    audit('ARCHITECTURE', { colonistKeys, workplaceId: 'canonical owner', reverseIndex: 'none' })
-    expect(colonistKeys).toEqual(['id', 'residenceId', 'workplaceAssignmentMode', 'workplaceId'])
+    audit('ARCHITECTURE', { colonistKeys, workplaceId: 'canonical owner', constructionAssignmentId: 'canonical crew owner (Step 10Y)', reverseIndex: 'none' })
+    expect(colonistKeys).toEqual(['constructionAssignmentId', 'id', 'residenceId', 'workplaceAssignmentMode', 'workplaceId'])
     for (const building of Object.values(state.buildings)) {
       expect(Object.keys(building)).not.toContain('workerIds')
       expect(Object.keys(building)).not.toContain('workers')

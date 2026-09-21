@@ -59,7 +59,6 @@ import {
   materialUpkeepDueForTick,
   produceFood,
   produceMaterial,
-  progressPlacedBuilding,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -247,8 +246,7 @@ const stepWithMetrics = (
   const materialized = produceMaterial(staffed)
   const commanded = applyCommand(materialized, command)
   const crestStock = commanded.state.resources.construction
-  const progressedBuilding = progressPlacedBuilding(commanded)
-  const progressed = progressPlacedRoads(progressedBuilding, commanded)
+  const progressed = progressPlacedRoads(commanded.state, commanded)
 
   const workshopUpkeep = materialUpkeepDueForTick(progressed)
   const farmUpkeepDue = farmUpkeep ? staffedFarms : 0
@@ -1162,9 +1160,10 @@ describe('§11 — spatial preference under the candidate', () => {
 
 describe('§12 — one-tick Food timing under the candidate', () => {
   it('Farm upkeep is charged on the staffing tick, one tick BEFORE the first Food arrives', () => {
-    // Farm placed on tick T, operational on T+1. produceFood runs before
-    // assignJobs, so the newly staffed Farm pays upkeep on T+1 but produces
-    // nothing until T+2. Phase order is preserved (not reordered).
+    // Step 10Y: a placed 2-tick building needs two construction ticks, so a
+    // Farm placed on tick T is operational on T+2. produceFood runs before
+    // assignJobs, so the newly staffed Farm pays upkeep on T+2 but produces
+    // nothing until T+3. Phase order is preserved (not reordered).
     const commands: readonly (SimulationCommand | null)[] = [
       { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' },
       { type: 'placeRoads', cells: [{ x: 1, y: 1 }] },
@@ -1182,12 +1181,12 @@ describe('§12 — one-tick Food timing under the candidate', () => {
       farmUpkeep: r.farmUpkeep,
       material: r.material,
     })))
-    const operational = trace.records[3]!
-    // T+1: staffed and charged upkeep, but zero Food produced yet.
+    const operational = trace.records[4]!
+    // T+2: staffed and charged upkeep, but zero Food produced yet.
     expect(operational.staffedFarms).toBe(1)
     expect(operational.foodProduction).toBe(0)
     expect(operational.farmUpkeep).toBe(1)
-    const next = trace.records[4]!
+    const next = trace.records[5]!
     expect(next.foodProduction).toBe(2)
     expect(next.farmUpkeep).toBe(1)
   })
@@ -1472,7 +1471,7 @@ describe('§21 — audit harness performance (separate from production)', () => 
 
 describe('§22 — persistence and determinism (audit-only)', () => {
   it('SAVE_VERSION is 4 and no candidate state exists to persist', () => {
-    expect(SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(7)
     const state = rowWorld({ residences: 3, farms: 2, workshops: 2, material: 20 })
     const serialized = serializeCanonicalState(state)
     expect(serialized).not.toContain('farmUpkeep')
