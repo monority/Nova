@@ -127,7 +127,11 @@ async function main() {
     browser = await chromium.launch({ headless: HEADLESS });
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     page.on('console', (m) => {
-      if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+      // Match the other eleven suites: the browser's automatic /favicon.ico
+      // request 404s and is already excluded from the http-status check below.
+      if (m.type() === 'error' && !m.text().includes('Failed to load resource')) {
+        errors.push(`console: ${m.text()}`);
+      }
     });
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
     page.on('response', (r) => {

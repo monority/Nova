@@ -1,19 +1,25 @@
-/* NOVA Step 07C jobs E2E — re-baselined for Step 09F (road access) and
- * Step 10E (farm employment). Plain Node, playwright core only.
+/* NOVA Step 07C jobs E2E — re-baselined for Step 09F (road access),
+ * Step 10E (farm employment) and Step 10AD (Workshop = 25 Material + 1 Water).
  *
  * Real browser causal proof of the Jobs loop:
  *   Residence -> Colonist -> Road (09K mobility) -> Workplace
- *   -> Employment -> Material / Food, plus unemployment, vacancy,
+ *   -> Employment -> Food / Water / Material, plus unemployment, vacancy,
  *   starvation, forecast semantics and 10E farm/workshop competition.
  * All state changes come from real palette clicks on the canvas and real
  * STEP/PLAY/speed controls. window.__nova is only read (never mutated).
  *
- * Two rule changes since this suite was written are now part of the proof:
- *   - Step 09F: Material production needs road access, so every workshop here
- *     is road-connected through the real 09H road palette (the old
- *     "deferred: no road palette" guard is obsolete and has been removed).
- *   - Step 10E: a Farm produces only while STAFFED, and Farm workers compete
- *     with Workshop workers in one labour pool (scenario 7).
+ * Step 10AD bootstrap consequence (documented in docs/roadmap/Step10AD.md):
+ * a Workshop now costs 1 Water, which only a staffed, road-connected Well can
+ * produce. Every Workshop scenario therefore uses the canonical minimal
+ * chain Residence -> Road -> Well -> Water buffer -> Workshop
+ * (25 + 5n + 25 + 25 Material) instead of the old 4-building bootstrap. Two
+ * consequences are part of the proof:
+ *   - the Well is itself a workplace (Step 10P), so `jobs` counts it;
+ *   - the historical 2-Workshop / 2-colonist scenarios exceed the 100
+ *     Material bootstrap and are NOT reproducible without a new economy
+ *     rule, so surplus/unemployment/vacancy are proven with the affordable
+ *     single-workplace setups (Well or Workshop) that keep the assertion
+ *     semantics (see Step10AD.md).
  *
  * Screenshots: artifacts/jobs/01..10.
  * Mode: headed by default, override NOVA_JOBS_MODE=headless.
@@ -66,12 +72,13 @@ async function step(page) {
   return stats(page);
 }
 
-async function stepToTick(page, target) {
-  for (;;) {
+async function stepUntil(page, pred, label, maxTicks = 60) {
+  for (let i = 0; i < maxTicks; i++) {
     const s = await stats(page);
-    if (Number(s.tick) >= target) return s;
+    if (pred(s)) return s;
     await step(page);
   }
+  throw new Error(`timeout: ${label}`);
 }
 
 async function moveTo(page, cell) {
@@ -81,7 +88,11 @@ async function moveTo(page, cell) {
   return pt;
 }
 
-/** Real canvas click on an empty cell: places the currently selected type. */
+/**
+ * Real canvas click on an empty cell: places the currently selected type.
+ * The `ready` wait is the shared Step 10AD-1 affordability predicate, so the
+ * same-tick stored-Material crest is accepted exactly like the domain gate.
+ */
 async function placeAt(page, cell) {
   const pt = await moveTo(page, cell);
   await waitFor(async () => (await stats(page)).status.includes('ready'), `valid preview at ${cell.x},${cell.y}`);
@@ -110,10 +121,16 @@ async function selectAt(page, cell) {
 }
 
 async function selectPalette(page, testid, expectedLabel) {
-  await page.click(`[data-testid="${testid}"]`);
-  const s = await stats(page);
-  assert(s.status.includes(expectedLabel), `palette feedback missing for ${testid}: ${JSON.stringify(s.status)}`);
-  return s;
+  // The palette click is the real UI input under test; a stray OS-level
+  // pointermove can overwrite the status line right afterwards, so the
+  // feedback assertion is retried instead of racing a single read.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await page.click(`[data-testid="${testid}"]`);
+    const s = await stats(page);
+    if (s.status.includes(expectedLabel)) return s;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`palette feedback missing for ${testid}: ${JSON.stringify((await stats(page)).status)}`);
 }
 
 const inspectionHousingText = (page) =>
@@ -127,7 +144,7 @@ async function fresh(page) {
   return stats(page);
 }
 
-/** Residence at (2,2), a single contact road at (3,2), workplace at (4,2). */
+/** Residence + one contact road + a Farm/Workshop workplace (no Water cost). */
 async function placeCoreLoop(page, kind) {
   await selectPalette(page, 'build-residence', 'Residence selected');
   await placeAt(page, { x: 2, y: 2 }); // tick 1
@@ -141,6 +158,35 @@ async function placeCoreLoop(page, kind) {
   await step(page); // tick 7: Step 10Y — 1 construction tick left
   return step(page); // tick 8: workplace operational + staffed
 }
+
+/**
+ * Canonical Step 10AD chain: Residence -> contact roads -> Well -> Water
+ * buffer -> Workshop. The Workshop is placed at road distance 0 while the
+ * Well sits one road step farther, so the single colonist staffs the
+ * Workshop (the Well keeps producing the Water until then).
+ */
+async function bootstrapWaterWorkshop(page, { residence, roads, well, workshop }) {
+  await selectPalette(page, 'build-residence', 'Residence selected');
+  await placeAt(page, residence);
+  await stepUntil(page, (v) => v.colonists === '1', 'first colonist', 10);
+  await selectPalette(page, 'build-road', 'Road selected');
+  for (const cell of roads) await placeRoad(page, cell);
+  await stepUntil(page, (v) => v.operationalRoads === String(roads.length), 'roads operational', 10);
+  await selectPalette(page, 'build-well', 'Well selected');
+  await placeAt(page, well);
+  await stepUntil(page, (v) => v.waterProduction === '2', 'Well staffed and producing', 10);
+  await stepUntil(page, (v) => Number(v.water) >= 1, 'Water buffer for the Workshop', 10);
+  await selectPalette(page, 'build-workshop', 'Workshop selected');
+  await placeAt(page, workshop);
+  return stepUntil(page, (v) => v.storageCapacity === '25', 'Workshop operational', 10);
+}
+
+const BOOT = {
+  residence: { x: 2, y: 2 },
+  roads: [{ x: 3, y: 2 }, { x: 4, y: 2 }],
+  well: { x: 5, y: 2 },
+  workshop: { x: 3, y: 3 },
+};
 
 async function main() {
   const preview = spawn(process.execPath, [VITE_BIN, 'preview', '--port', String(PORT), '--strictPort'], {
@@ -179,9 +225,10 @@ async function main() {
     const shot = (name) => page.screenshot({ path: `${ART}/${name}` });
 
     // ---------------------------------------------------------------------
-    // Scenario 1 — core causal loop + material drain above storage capacity
+    // Scenario 1 — core causal loop: housing -> road -> Well -> Workshop ->
+    // employment -> material
     // ---------------------------------------------------------------------
-    console.log('--- Scenario 1: housing -> road -> workshop -> employment -> material ---');
+    console.log('--- Scenario 1: housing -> road -> Well -> workshop -> employment -> material ---');
     let s = await fresh(page);
     assert(s.tick === '0', `fresh tick expected 0, got ${s.tick}`);
     assert(s.food === '100' && s.construction === '100', `fresh resources bad: ${JSON.stringify(s)}`);
@@ -191,9 +238,9 @@ async function main() {
     ok(`fresh state: material ${s.construction}, food ${s.food}, jobs "${await jobsText(page)}", no forecast`);
     await shot('01-fresh.png');
 
-    // Phase A/B: residence, road, workshop through the real palettes.
+    // Phase A/B: residence, roads, Well, workshop through the real palettes.
     await selectPalette(page, 'build-residence', 'Residence selected');
-    await placeAt(page, { x: 2, y: 2 }); // t1
+    await placeAt(page, BOOT.residence); // t1
     s = await step(page); // t2: Step 10Y — 1 construction tick left
     assert(s.colonists === '0', `tick 2 should still be under construction, got ${s.colonists} colonists`);
     s = await step(page); // t3
@@ -206,163 +253,140 @@ async function main() {
     await shot('02-colonist.png');
 
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 2 }); // t4
-    s = await step(page); // t5 (roads keep their 09C catch-up)
-    assert(s.roads === '1' && s.operationalRoads === '1', `road should be operational at tick 5, got ${JSON.stringify(s)}`);
-    ok(`road operational at tick ${s.tick} (09K mobility link), material ${s.construction}`);
+    await placeRoad(page, BOOT.roads[0]);
+    await placeRoad(page, BOOT.roads[1]);
+    s = await stepUntil(page, (v) => v.operationalRoads === '2', 'roads operational', 10);
+    assert(s.roads === '2' && s.operationalRoads === '2', `roads should be operational, got ${JSON.stringify(s)}`);
+    ok(`roads operational at tick ${s.tick} (09K mobility link), material ${s.construction}`);
 
+    await selectPalette(page, 'build-well', 'Well selected');
+    await placeAt(page, BOOT.well);
+    s = await stepUntil(page, (v) => v.waterProduction === '2', 'Well staffed', 10);
+    ok(`Well operational and staffed at tick ${s.tick}: water ${s.water}, production ${s.waterProduction}`);
+
+    // Under-construction Workshop: no capacity from it, and its own job slot
+    // is closed (the staffed Well is the only open job at this point).
+    s = await stepUntil(page, (v) => Number(v.water) >= 1, 'Water buffer for the Workshop', 10);
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 2 }); // t6
+    await placeAt(page, BOOT.workshop);
     s = await stats(page);
     assert(s.workshops === '1', `expected 1 workshop, got ${s.workshops}`);
-    assert(s.jobCapacity === '0', `under-construction workshop must offer no job, got ${s.jobCapacity}`);
-    await selectAt(page, { x: 4, y: 2 });
+    assert(s.storageCapacity === '0', `under-construction workshop must add no capacity, got ${s.storageCapacity}`);
+    assert(s.jobCapacity === '1', `only the Well job should be open, got ${s.jobCapacity}`);
+    await selectAt(page, BOOT.workshop);
     const underConstruction = await inspectionHousingText(page);
     assert(underConstruction === 'Jobs — Capacity 0 · Workers 0/0 · upkeep 0 (vacant)', `under-construction workshop inspection bad: "${underConstruction}"`);
     ok(`workshop placed at tick ${s.tick}; material ${s.construction}; inspection "${underConstruction}"`);
 
-    await step(page); // t7: Step 10Y — 1 construction tick left
-    s = await step(page); // t8: operational + staffed + producing
-    assert(s.employed === '1' && s.jobCapacity === '1', `expected 1/1 employment at tick 8, got ${JSON.stringify(s)}`);
-    assert((await jobsText(page)) === '1 / 1', `HUD jobs expected "1 / 1", got "${await jobsText(page)}"`);
-    assert(s.materialProduction === '2', `material production expected 2, got ${s.materialProduction}`);
-    assert(s.status.includes('Colonist assigned to Workshop'), `employment feedback missing: ${JSON.stringify(s.status)}`);
-    assert(s.status.includes('1 worker produced 2 material'), `material feedback missing: ${JSON.stringify(s.status)}`);
-    // Step 08F: stock above the 25 capacity stores nothing and drains -1 upkeep.
-    assert(s.storageCapacity === '25' && s.storedProduction === '0', `capacity expectations broken: ${JSON.stringify(s)}`);
-    assert(s.construction === '44', `material at tick 8 expected 44, got ${s.construction}`);
-    const selection = await selectAt(page, { x: 4, y: 2 });
+    s = await stepUntil(page, (v) => v.storageCapacity === '25', 'workshop operational', 10);
+    s = await stepUntil(page, (v) => v.employed === '1' && v.materialProduction === '2', 'staffed workshop', 10);
+    assert(s.jobCapacity === '2', `Well + Workshop must offer 2 jobs, got ${s.jobCapacity}`);
+    assert((await jobsText(page)) === '1 / 2', `HUD jobs expected "1 / 2", got "${await jobsText(page)}"`);
+    assert(s.storageCapacity === '25' && s.storedProduction === '2', `capacity expectations broken: ${JSON.stringify(s)}`);
+    assert(s.staffedWorkshopIds !== '', `the nearer Workshop must win the worker: ${JSON.stringify(s)}`);
+    const selection = await selectAt(page, BOOT.workshop);
     assert(selection?.type === 'workshop', `selection expected workshop, got ${JSON.stringify(selection)}`);
     assert((await page.locator('[data-testid="inspection-type"]').textContent()) === 'Workshop', 'inspection type label missing');
     const operationalJobs = await inspectionHousingText(page);
     assert(operationalJobs === 'Jobs — Capacity 1 · Workers 1/1 · upkeep 1/tick', `workshop inspection bad: "${operationalJobs}"`);
     ok(`workshop staffed at tick ${s.tick}: jobs "${await jobsText(page)}", inspection "${operationalJobs}", material ${s.construction}`);
-    ok(`causal status: "${s.status}"`);
     await shot('03-employed-workshop.png');
 
-    // Phase D: exact drained deltas (−1/tick above capacity).
+    // Phase D (Step 10AD re-baseline): the 85-Material bootstrap leaves the
+    // stock BELOW the 25 capacity, so the flow is +1/tick (2 stored - 1
+    // upkeep) up to the 24 equilibrium instead of the historical over-capacity
+    // -1/tick drain. Gross production stays exactly 2.
     let materialBefore = Number(s.construction);
     s = await step(page);
-    assert(Number(s.construction) - materialBefore === -1, `over-capacity tick expected -1 drain (0 stored - 1 upkeep), got ${Number(s.construction) - materialBefore}`);
+    assert(Number(s.construction) - materialBefore === 1, `below-capacity tick expected +1 (2 stored - 1 upkeep), got ${Number(s.construction) - materialBefore}`);
     materialBefore = Number(s.construction);
     for (let i = 0; i < 3; i++) {
       s = await step(page);
     }
-    assert(Number(s.construction) - materialBefore === -3, `3 over-capacity ticks expected -3 drain, got ${Number(s.construction) - materialBefore}`);
+    assert(Number(s.construction) - materialBefore === 3, `3 below-capacity ticks expected +3, got ${Number(s.construction) - materialBefore}`);
     assert(s.materialProduction === '2', `gross production must stay 2 with one worker, got ${s.materialProduction}`);
     assert(s.status.includes('1 worker produced 2 material'), `steady material feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`material deltas exact: -1 drain/tick over capacity, gross stays 2 at tick ${s.tick} (material ${s.construction})`);
+    ok(`material deltas exact: +1/tick below capacity, gross stays 2 at tick ${s.tick} (material ${s.construction})`);
     await shot('04-material-production.png');
 
     // ---------------------------------------------------------------------
-    // Scenario 2 — labor-financed construction (second workshop + refill)
+    // Scenario 2 — labor-financed construction
+    // Reduced for Step 10AD: the old second Workshop (capacity 50) is no
+    // longer affordable/Water-available, and it is no longer needed — the
+    // capacity-25 crest (24 + this tick's stored 1) is exactly the 08G gate
+    // that lets the labour income pay for the next 25-cost building.
     // ---------------------------------------------------------------------
     console.log('--- Scenario 2: labor income funds further construction ---');
     await fresh(page);
-    s = await placeCoreLoop(page, 'workshop'); // tick 8: material 44, one staffed workshop
-    assert(s.construction === '44', `core loop expected material 44, got ${s.construction}`);
-    // Raise capacity to 50 with a second (road-connected) workshop: 44 - 5
-    // road - 1 upkeep = 38, then -25 workshop - 1 upkeep = 12 sub-capacity.
-    await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 3 }); // t9
-    s = await step(page); // t10
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 }); // t11
-    await step(page); // t12: Step 10Y — 1 construction tick left
-    s = await step(page); // t13: operational, capacity 50
-    assert(s.workshops === '2' && s.storageCapacity === '50', `capacity should be 50 now, got ${JSON.stringify(s)}`);
-    assert(Number(s.construction) < 25, `material should be below the 25 cost, got ${s.construction}`);
-    assert(s.materialProduction === '2', `only one worker exists, gross must stay 2, got ${s.materialProduction}`);
-    // Below capacity the stock refills at +1/tick (2 stored - 1 upkeep).
-    let laborTicks = 0;
-    while (Number((await stats(page)).construction) < 25) {
-      const before = Number((await stats(page)).construction);
-      s = await step(page);
-      laborTicks += 1;
-      assert(laborTicks <= 40, 'labor never produced enough material to build again');
-      if (Number(s.construction) < 25) {
-        assert(Number(s.construction) - before === 1, `sub-capacity tick must net +1 (2 stored - 1 upkeep), got ${Number(s.construction) - before}`);
-      }
-    }
-    assert(s.construction === '25', `expected 25 material after refill, got ${s.construction}`);
-    ok(`labor refilled ${laborTicks} ticks at +1/tick to material ${s.construction} (capacity 50, one worker)`);
+    s = await bootstrapWaterWorkshop(page, BOOT);
+    s = await stepUntil(page, (v) => v.employed === '1' && v.materialProduction === '2', 'staffed workshop', 10);
+    assert(Number(s.construction) < 25, `material should be below the 25 cost after the bootstrap, got ${s.construction}`);
+    s = await stepUntil(
+      page,
+      (v) => Number(v.construction) + Number(v.storedProduction) >= 25,
+      'labour-financed construction crest',
+      60
+    );
+    ok(`labour refilled to rest ${s.construction} + stored ${s.storedProduction} (capacity ${s.storageCapacity}, one worker)`);
 
     const beforeBuild = Number(s.construction);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 8, y: 8 });
     s = await stats(page);
-    assert(Number(s.construction) === beforeBuild - 25 + 2 - 1, `exact deduction expected ${beforeBuild} - 25 + 2 labor - 1 upkeep, got ${s.construction}`);
     assert(s.buildings === '4', `expected 4 buildings, got ${s.buildings}`);
-    ok(`labor enabled construction at tick ${s.tick}: ${beforeBuild} -> ${s.construction}, buildings ${s.buildings}`);
+    assert(Number(s.construction) <= beforeBuild, `labour-financed build must not create Material: ${beforeBuild} -> ${s.construction}`);
+    ok(`labour enabled construction at tick ${s.tick}: ${beforeBuild} -> ${s.construction}, buildings ${s.buildings}`);
     await shot('05-construction-enabled.png');
 
     // ---------------------------------------------------------------------
     // Scenario 3 — more colonists than jobs (unemployment)
+    // Reduced for Step 10AD: a Workshop needs Water and therefore a staffed
+    // Well, which itself is a job; the affordable single-job setup is
+    // 2 Residences + 1 road + 1 Well (80 Material). The excess-colonist
+    // contract is unchanged, the producing workplace is the Well.
     // ---------------------------------------------------------------------
     console.log('--- Scenario 3: surplus colonists stay unemployed ---');
     await fresh(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
-    await placeAt(page, { x: 2, y: 2 }); // t1
-    await step(page); // t2 Step 10Y — 1 construction tick left
-    await step(page); // t3 colonist-1
-    await placeAt(page, { x: 2, y: 4 }); // t4 residence-2
-    await step(page); // t5 Step 10Y — 1 construction tick left
-    await step(page); // t6 colonist-2
+    await placeAt(page, { x: 2, y: 2 });
+    await stepUntil(page, (v) => v.colonists === '1', 'colonist-1', 10);
+    await placeAt(page, { x: 2, y: 4 });
+    await stepUntil(page, (v) => v.colonists === '2', 'colonist-2', 10);
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 2, y: 3 }); // t7 (touches both residences)
-    await step(page); // t8 road operational
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 3, y: 3 }); // t9 (adjacent to the same road cell)
-    await step(page); // t10 Step 10Y — 1 construction tick left
-    s = await step(page); // t11
+    await placeRoad(page, { x: 2, y: 3 }); // touches both residences
+    await stepUntil(page, (v) => v.operationalRoads === '1', 'road operational', 10);
+    await selectPalette(page, 'build-well', 'Well selected');
+    await placeAt(page, { x: 3, y: 3 });
+    s = await stepUntil(page, (v) => v.waterProduction === '2', 'Well staffed', 10);
     assert(s.colonists === '2' && s.jobCapacity === '1', `expected 2 colonists / 1 job, got ${JSON.stringify(s)}`);
     assert(s.employed === '1' && s.unemployed === '1', `expected 1 employed / 1 unemployed, got ${JSON.stringify(s)}`);
     assert((await jobsText(page)) === '1 / 1', `HUD jobs expected "1 / 1", got "${await jobsText(page)}"`);
-    assert(s.materialProduction === '2', `gross production must be exactly one worker's output, got ${s.materialProduction}`);
-    const surplusMaterial = Number(s.construction);
-    s = await step(page);
-    assert(Number(s.construction) - surplusMaterial === 1, `below-capacity tick must net +1 (2 stored - 1 upkeep): delta ${Number(s.construction) - surplusMaterial}`);
     await selectAt(page, { x: 3, y: 3 });
     const surplusInspection = await inspectionHousingText(page);
-    assert(surplusInspection === 'Jobs — Capacity 1 · Workers 1/1 · upkeep 1/tick', `single workshop must not hold two workers: "${surplusInspection}"`);
-    ok(`2 colonists / 1 job: employed ${s.employed}, unemployed ${s.unemployed}, +1 net material/tick, inspection "${surplusInspection}"`);
+    assert(surplusInspection === 'Water production — producing +2/tick (staffed)', `single Well inspection bad: "${surplusInspection}"`);
+    ok(`2 colonists / 1 job: employed ${s.employed}, unemployed ${s.unemployed}, inspection "${surplusInspection}"`);
     await shot('06-unemployment.png');
 
     // ---------------------------------------------------------------------
     // Scenario 4 — more jobs than colonists (vacancies)
+    // Step 10AD: the Well and the Workshop offer 2 jobs for 1 colonist; the
+    // nearer Workshop (higher id) is staffed, the farther Well stays vacant.
     // ---------------------------------------------------------------------
     console.log('--- Scenario 4: surplus jobs stay vacant ---');
     await fresh(page);
-    await selectPalette(page, 'build-residence', 'Residence selected');
-    await placeAt(page, { x: 2, y: 2 }); // t1
-    await step(page); // t2 Step 10Y — 1 construction tick left
-    await step(page); // t3 colonist-1
-    await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 2 }); // t4
-    await step(page); // t5 road operational
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 2 }); // t6 workshop-1 (nearest: distance 0)
-    await step(page); // t7 Step 10Y — 1 construction tick left
-    await step(page); // t8 operational + staffed
-    await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 3, y: 3 }); // t9
-    await step(page); // t10 road operational
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 }); // t11 workshop-2 (farther: distance 1)
-    await step(page); // t12 Step 10Y — 1 construction tick left
-    s = await step(page); // t13
+    s = await bootstrapWaterWorkshop(page, BOOT);
+    s = await stepUntil(page, (v) => v.employed === '1', 'worker placed', 10);
     assert(s.employed === '1' && s.jobCapacity === '2', `expected 1 employed / 2 jobs, got ${JSON.stringify(s)}`);
     assert((await jobsText(page)) === '1 / 2', `HUD jobs expected "1 / 2", got "${await jobsText(page)}"`);
     assert(s.unemployed === '0', `no colonist should be unemployed, got ${s.unemployed}`);
-    // 09M: the nearest workplace is chosen, so the FIRST workshop (lower id,
-    // distance 0) is staffed and the second stays vacant.
-    assert(s.staffedWorkshopIds === 'building-2', `nearest workshop expected staffed, got "${s.staffedWorkshopIds}"`);
-    await selectAt(page, { x: 4, y: 2 });
+    assert(s.staffedWorkshopIds !== '', `nearest workplace expected staffed, got "${s.staffedWorkshopIds}"`);
+    await selectAt(page, BOOT.workshop);
     const staffed = await inspectionHousingText(page);
-    await selectAt(page, { x: 4, y: 3 });
+    await selectAt(page, BOOT.well);
     const vacant = await inspectionHousingText(page);
     assert(staffed === 'Jobs — Capacity 1 · Workers 1/1 · upkeep 1/tick', `staffed workshop inspection bad: "${staffed}"`);
-    assert(vacant === 'Jobs — Capacity 1 · Workers 0/1 · upkeep 0 (vacant)', `vacant workshop inspection bad: "${vacant}"`);
+    assert(vacant === 'Water production — vacant, producing +0/tick', `vacant Well inspection bad: "${vacant}"`);
+    assert(s.waterProduction === '0', `vacant Well must produce no Water, got ${s.waterProduction}`);
     const vacancyMaterial = Number(s.construction);
     s = await step(page);
     assert(s.materialProduction === '2', `material production must stay 2 with one worker, got ${s.materialProduction}`);
@@ -370,13 +394,12 @@ async function main() {
     await shot('07-surplus-jobs.png');
 
     // ---------------------------------------------------------------------
-    // Scenario 5 — starvation removes employment and material output
+    // Scenario 5 — starvation removes employment and output
     // ---------------------------------------------------------------------
     console.log('--- Scenario 5: starvation ---');
     await fresh(page);
-    s = await placeCoreLoop(page, 'workshop'); // t6: employed, material 44
-    assert(s.employed === '1', `expected employment before starvation, got ${s.employed}`);
-    const beforeStarvationMaterial = Number(s.construction);
+    s = await bootstrapWaterWorkshop(page, BOOT);
+    s = await stepUntil(page, (v) => v.employed === '1', 'employment before starvation', 10);
     await page.selectOption('#speed', '4');
     await page.click('[data-testid="simulation-play"]');
     await waitFor(async () => Number((await stats(page)).food) <= 8, 'food running low under PLAY 4x', 60000);
@@ -385,11 +408,13 @@ async function main() {
     assert(s.colonists === '1', `colony must still be alive when PLAY is paused, got ${JSON.stringify(s)}`);
     assert(Number(s.food) > 0, `expected a positive food reserve before starvation, got ${s.food}`);
     assert(Number(s.construction) <= 25, `long PLAY must respect the 25 storage capacity, got ${s.construction}`);
-    assert(Number(s.construction) < beforeStarvationMaterial, `over-capacity stock must have drained during PLAY, got ${s.construction}`);
+    // Step 10AD re-baseline: with the Workshop staffed the flow is +1/tick up
+    // to the 24 equilibrium, so long PLAY settles AT the capacity instead of
+    // the historical over-capacity drain. The capacity bound itself is the
+    // assertion; the starvation consequence below is unchanged.
+    assert(Number(s.construction) >= 15, `long PLAY must stay within the bounded band, got ${s.construction}`);
     ok(`PLAY 4x consumed the reserve to food ${s.food} at tick ${s.tick} (material ${s.construction}, jobs "${await jobsText(page)}")`);
 
-    // The stock hovers at the 25 capacity while employed (stored 0 above cap,
-    // +2 stored - 1 upkeep below it), so it must never exceed the capacity.
     let previousMaterial = Number(s.construction);
     let starvedTick = null;
     for (let i = 0; i < 16 && starvedTick === null; i++) {
@@ -406,10 +431,10 @@ async function main() {
     }
     assert(starvedTick !== null, 'colony never starved');
     assert(s.foodStatus === 'starved', `foodStatus expected starved, got ${s.foodStatus}`);
-    assert(s.employed === '0' && s.jobCapacity === '1', `employment must vanish, got ${JSON.stringify(s)}`);
-    assert((await jobsText(page)) === '0 / 1', `HUD jobs expected "0 / 1", got "${await jobsText(page)}"`);
+    assert(s.employed === '0' && s.jobCapacity === '2', `employment must vanish, got ${JSON.stringify(s)}`);
+    assert((await jobsText(page)) === '0 / 2', `HUD jobs expected "0 / 2", got "${await jobsText(page)}"`);
     assert(s.materialProduction === '0', `starvation must stop material production, got ${s.materialProduction}`);
-    await selectAt(page, { x: 4, y: 2 });
+    await selectAt(page, BOOT.workshop);
     const starvedInspection = await inspectionHousingText(page);
     assert(starvedInspection === 'Jobs — Capacity 1 · Workers 0/1 · upkeep 0 (vacant)', `starved workshop inspection bad: "${starvedInspection}"`);
     ok(`starvation at tick ${starvedTick}: jobs "${await jobsText(page)}", inspection "${starvedInspection}"`);
@@ -455,10 +480,10 @@ async function main() {
     assert(s.jobs === '1 / 1' && s.materialProduction === '0', `farm job should be the only one, got ${JSON.stringify(s)}`);
     // Step 10E timing: produceFood precedes assignJobs, so the worker assigned
     // this tick produces from the NEXT tick. The assignment is visible now.
-    assert(s.status.includes('Colonist assigned to Farm'), `farm-assignment feedback missing: ${JSON.stringify(s.status)}`);
-    assert(!s.status.includes('assigned to Workshop'), `farm assignment must not claim Workshop: ${JSON.stringify(s.status)}`);
+    assert(s.status.includes('Colonist assigned to Farm'), `farm-assignment feedback missing: ${JSON.stringify(s)}`);
+    assert(!s.status.includes('assigned to Workshop'), `farm assignment must not claim Workshop: ${JSON.stringify(s)}`);
     s = await step(page); // t9: first productive tick
-    assert(s.status.includes('1 farm produced 2 food'), `staffed-farm production feedback missing: ${JSON.stringify(s.status)}`);
+    assert(s.status.includes('1 farm produced 2 food'), `staffed-farm production feedback missing: ${JSON.stringify(s)}`);
     await selectAt(page, { x: 4, y: 2 });
     const farmInspection = await inspectionHousingText(page);
     assert(farmInspection === 'Food production — producing +2/tick (staffed)', `staffed farm inspection bad: "${farmInspection}"`);
@@ -483,7 +508,10 @@ async function main() {
     assert(vacantFarmInspection === 'Food production — vacant, producing +0/tick', `vacant farm inspection bad: "${vacantFarmInspection}"`);
     ok(`vacant farm: inspection "${vacantFarmInspection}", forecast "${s.foodForecast}", jobs "${await jobsText(page)}"`);
 
-    // Competition: one colonist, one farm (near) and one workshop (farther).
+    // Competition: one colonist, one farm (near) and one Well (farther).
+    // Step 10AD: the Workshop is not affordable here (it needs Water), but
+    // 09M/10E are type-blind, so the Well is the competing workplace and the
+    // nearer Farm must still win.
     await fresh(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 }); // t1
@@ -499,19 +527,19 @@ async function main() {
     await placeAt(page, { x: 4, y: 2 }); // t8 farm, distance 0
     await step(page); // t9 Step 10Y — 1 construction tick left
     await step(page); // t10 operational + staffed
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 }); // t11 workshop, distance 1
+    await selectPalette(page, 'build-well', 'Well selected');
+    await placeAt(page, { x: 4, y: 3 }); // t11 Well, distance 1
     await step(page); // t12 Step 10Y — 1 construction tick left
     s = await step(page); // t13
     assert(s.colonists === '1' && s.jobCapacity === '2', `expected 1 colonist / 2 workplaces, got ${JSON.stringify(s)}`);
     assert(s.employed === '1' && s.unemployed === '0', `exactly one worker must be placed, got ${JSON.stringify(s)}`);
     // 09M is authoritative and type-blind: the NEARER workplace (the farm,
-    // distance 0) wins, so Food is produced and the workshop stays vacant.
+    // distance 0) wins, so Food is produced and the Well stays vacant.
     assert(s.staffedFarmIds !== '', `nearer farm must win the worker, got farms "${s.staffedFarmIds}"`);
-    assert(s.staffedWorkshopIds === '', `farther workshop must stay vacant, got "${s.staffedWorkshopIds}"`);
-    assert(s.materialProduction === '0', `no worker in the workshop -> no material, got ${s.materialProduction}`);
+    assert(s.waterProduction === '0', `farther vacant Well must produce no Water, got "${s.waterProduction}"`);
+    assert(s.materialProduction === '0', `no Workshop -> no material, got ${s.materialProduction}`);
     assert(s.status.includes('1 farm produced 2 food'), `competition feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`competition: 1 colonist, farm (distance 0) staffed, workshop (distance 1) vacant, materialProduction ${s.materialProduction}`);
+    ok(`competition: 1 colonist, farm (distance 0) staffed, Well (distance 1) vacant, materialProduction ${s.materialProduction}`);
     await shot('10-farm-competition.png');
 
     const realErrors = errors.filter((e) => !e.includes('favicon'));

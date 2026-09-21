@@ -862,3 +862,216 @@ Remaining issues:
 
 STATUS: BLOCKED
 ```
+
+---
+
+## Step 10AD-2 — finalize browser scenario migration
+
+Supersedes the `STATUS: BLOCKED` report of Step 10AD-1. Step 10AD is now
+COMPLETE: the four browser suites that were still failing (road, transport,
+jobs, upkeep) were migrated to the real Step 10AD contract, and the 12-suite
+browser matrix is green.
+
+### The rule is definitive (unchanged)
+
+```text
+Workshop  = 25 Material + 1 Water, one-off at placement
+Residence = 25 Material
+Farm      = 25 Material
+Well      = 25 Material
+Road      = 5 Material / cell
+INITIAL_CONSTRUCTION_MATERIAL = 100      (unchanged)
+INITIAL_WATER                 = 0        (unchanged)
+SAVE_VERSION                  = 7        (unchanged, no new migration)
+```
+
+No first-Workshop exemption, no test Material/Water credit, no bypass, no new
+economic or test system. `getPlacementAffordability` remains the single
+affordability predicate shared by the hover feedback and the authoritative
+dispatch gate; every migrated `placeAt` helper asserts on the UI `ready`
+state that predicate drives, so no test re-implements affordability.
+
+### Minimal setup the migration converged on
+
+```text
+Residence -> Road(s) -> Well -> Water buffer -> Workshop
+25        +  5 / cell + 25   + (2 produced - 1 consumed per tick) + 25
+```
+
+The Well must be staffed and road-connected to produce Water, and a workplace
+is staffed only while the colonist's Residence shares its road network (09K).
+The Water buffer is therefore a real, observable in-game sequence, not a
+fixture: the Well is the only workplace until the Workshop exists, so the
+colonist staffs it, Water accrues, and the Workshop is then placed legally.
+
+### Why the old setups exceeded the budget
+
+| suite | old bootstrap | cost | new bootstrap | cost |
+| --- | --- | --- | --- | --- |
+| jobs | 2 Residences + road + Well + Workshop | 105 | reduced per scenario (below) | 80–85 |
+| upkeep | Residence + road + Well + 2 Workshops | 130+ | single-Workshop scenarios | 85 |
+| transport | Residence + Farm + 2 Workshops | 100, no Water producer | Residence + Well + Workshop + labour-financed Farm | 90 + income |
+| road | Residence + 2 roads + Workshop + 4 road cells + 2nd Residence | 120 | Residence + 3 road cells + Well + roadless Workshop + connector | 95 |
+
+The blocked claim of 10AD-1 ("105 minimum") was correct for the *unchanged*
+scenarios; it was not a floor for the subjects themselves. Two in-game moves
+make the remaining subjects affordable with no economy change:
+
+1. **Placement order.** A Residence and a Well can exist before a Workshop;
+   two colonists can be admitted *before* any Well exists (the Water admission
+   gate only activates once an operational Well exists, Step 10P). Scenarios
+   that need "more colonists than jobs" therefore no longer need a Workshop.
+2. **Labour income.** A staffed Workshop stores +2/tick and pays 1 upkeep, so
+   the stock climbs at +1/tick to the capacity-25 crest (24 + this tick's
+   stored 1). That crest — the same Step 08G rule 10AD-1 surfaced — is enough
+   to fund the next 25-cost building. The historical second Workshop (capacity
+   50) is not needed and is no longer affordable.
+
+### Semantic equivalence per migrated suite
+
+**road** (`e2e/roadRun.mjs`) — subject: road placement, cost, access, and the
+production consequence. The roadless Workshop still exists and is still idle
+(no road access implies no mobility implies no worker, upkeep 0), the
+connector road is still a real canvas drag whose cost is asserted as
+`cells x 5 + upkeep`, and advancing still turns access into employment and
+production. The historical intermediate state "Workshop connected but
+Residence not" is the one assertion that is **not** affordable: it needs a
+separate Workshop-side road component plus a bridge road, which forces the
+Well to be a third road step away — 105 Material. It is documented as
+reduced, not silently dropped. Part H/I keep their subject (09M
+nearest-workplace preference through the real road UI and road-driven
+reassignment) using a Farm + Well workplace pair: the higher-id nearer Farm
+beats the lower-id farther Well, and a single shortcut road that touches both
+the Residence and the Well drops the Well to distance 0 and moves the worker.
+
+**transport** (`e2e/transportRun.mjs`) — subject: abstract orthogonal
+connectivity. The 4-building / 3-accessible contrast is preserved exactly:
+Residence -> adjacent Workshop -> adjacent Farm are accessible (3), while the
+operational, road-connected Well touches no building and stays inaccessible
+(3 of 4). The Farm is financed by real Workshop labour income, and the
+Workshop is placed only after the Well produced the Water that pays for it —
+the 10AD contract is exercised, not bypassed.
+
+**upkeep** (`e2e/upkeepRun.mjs`) — subject: operational upkeep semantics. All
+still-asserted contracts are proven: a vacant operational Workshop pays 0 and
+leaks nothing (capacity still counts), a staffed Workshop pays 1/tick, the
+08G stored-inflow gate lets a 24-Material colony build a 25-cost building,
+upkeep clamps without debt or deactivation, idle colonies leak nothing,
+starvation removes every worker, and excess colonists stay unemployed. The
+85-Material bootstrap leaves the stock *below* capacity, so the historical
+"above capacity implies stored 0 implies -1/tick drain" phase is replaced by
+the equivalent "below capacity implies +1/tick implies equilibrium 24". Both
+are the same storage/upkeep rule seen from the other side of the cap.
+
+**jobs** (`e2e/jobsRun.mjs`) — subject: the employment system. Housing ->
+road -> workplace -> employment -> output is unchanged; the Well is a
+workplace (Step 10P) so `jobs` counts it. The surplus/unemployment and
+vacancy scenarios use the affordable single-job setups (Well, or Well +
+Workshop) whose staffed/vacant semantics are type-blind per 09M/10E. The core
+loop still produces Material with a staffed Workshop, and the material flow is
+asserted exactly (+1/tick below the 25 cap, gross 2 per worker). Farm
+employment, forecast semantics and farm/Well competition are unchanged except
+that the Workshop competitor is a Well (the Workshop is not affordable in
+that scenario); 09M is type-blind, so the nearer Farm still wins.
+
+**Not reproducible without an economy change (documented, not forced):**
+
+* upkeep "2 workers -> 2 Workshops -> +4 production, 2 upkeep": 2 Residences +
+  2 Workshops + 1 Well = 125 Material, and at 2 served colonists Water
+  production (2) equals consumption (2), so no Water is available for a second
+  Workshop. The labour-income path also requires the Well to be staffed (for
+  the second admission) while the Workshop is staffed (for income) — one
+  colonist cannot do both without a second workplace, which is the very
+  building that is unaffordable.
+* jobs "second Workshop raises capacity to 50 then refills": the same
+  105-Material wall; the capacity-25 crest already lets labour fund the next
+  building, so the second Workshop is removed and the subject (labour-funded
+  construction) is kept.
+* road historical part F (Workshop connected, Residence not): 105 Material as
+  measured above.
+
+### Harness-only fixes (no gameplay rule touched)
+
+* `e2e/productionRun.mjs`: its console-error filter now ignores the browser's
+  automatic `/favicon.ico` 404 exactly like the other eleven suites (the
+  http-status filter already excluded it). This removed a pre-existing false
+  failure unrelated to Step 10AD.
+* The four migrated suites retry the palette-feedback assertion, because a
+  stray OS-level pointermove can overwrite the status line after the click in
+  headed mode. The authoritative `aria-pressed` state is still asserted where
+  it already was.
+
+### Verification (this commit)
+
+```text
+Vitest:          57 files, 1143 tests passed
+Typecheck:       passed
+Lint:            passed
+Build:           passed
+Browser:         12 / 12
+                 run, production, temporal, water, food, resource, reassign,
+                 crew, road, transport, jobs, upkeep — ALL PASS
+GPU:             e2e/gpuRun.mjs ALL PASS
+Determinism:     replay + canonical hash + insertion-order invariance
+                 (tests/determinism.test.ts), save/load (tests/persistence.test.ts)
+Save/load:       passed (canonical Water deduction only)
+Insertion order: passed
+
+SAVE_VERSION:    7 (unchanged)
+Migration:       none (Water was already canonical state)
+```
+
+### Final report
+
+```text
+STEP 10AD — FINAL
+
+Starting commit: 9836115 (Step 10AD-1)
+Final commit:    this commit
+
+Workshop rule:
+Workshop = 25 Material + 1 Water, one-off at placement. Residence/Farm/Well/Road
+unchanged. No operating Water consumption, no refund.
+
+Affordability predicate:
+getPlacementAffordability (src/application/queries/placement.ts) — one
+predicate shared by the hover feedback, the ready status and the authoritative
+dispatch gate; the tests assert on it instead of re-implementing it.
+
+Scenario migrations:
+jobs:      canonical Residence + 2 roads + Well + Workshop core loop (85);
+           labour-funded construction uses the cap-25 crest; surplus/unemployment
+           and vacancy use the affordable Well / Well+Workshop single-job
+           setups; farm tests unchanged (no Water needed).
+transport: Residence + 3 roads + Well (disconnected control) + Workshop
+           (accessible) + labour-financed Farm (multi-hop) -> 3 of 4 accessible.
+upkeep:    vacant-Workshop, staffed-Workshop, deficit/gate/recovery, idle,
+           starvation and excess-workers scenarios on the 85-Material chain;
+           the 2-worker/2-Workshop scenario is documented as not reproducible.
+road:      Residence + 3-cell road drag + Well + roadless Workshop + single-cell
+           connector; 09M preference/reassignment scenario uses a Farm + Well
+           pair. Historical "connected but not mobility-connected" nuance
+           documented as unaffordable (105).
+
+Browser:    12/12
+Vitest:     1143 passed (57 files)
+Typecheck:  passed
+Lint:       passed
+Build:      passed
+GPU:        ALL PASS
+Determinism: passed (replay/hash, insertion order)
+Save/load:  passed
+Insertion order: passed
+
+SAVE_VERSION: 7
+Migration:    none
+
+Global economy changed: NO
+
+Files changed:
+e2e/jobsRun.mjs, e2e/roadRun.mjs, e2e/transportRun.mjs, e2e/upkeepRun.mjs,
+e2e/productionRun.mjs (console filter only), docs/roadmap/Step10AD-2.md,
+docs/roadmap/Step10AD.md
+
+STATUS: COMPLETE
+```
