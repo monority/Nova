@@ -47,7 +47,7 @@ import {
   type SimulationCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, placeCatchUp } from './helpers.js'
+import { createTestState, placeCatchUp, withWorkshopWater } from './helpers.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -614,7 +614,7 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
         { x: 2, y: 1 },
       ],
     })
-    industry = placeCatchUp(industry, place(2, 0, 'workshop'))
+    industry = placeCatchUp(withWorkshopWater(industry), place(2, 0, 'workshop'))
     const series: Snapshot[] = []
     for (let t = 0; t < 8; t += 1) {
       industry = stepSimulation(industry)

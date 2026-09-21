@@ -127,7 +127,9 @@ const world = (spec: WorldSpec): SimulationState => {
   let state = withStocks(createState(), {
     food: spec.food ?? 20000,
     material: spec.material ?? 0,
-    water: spec.water ?? 0,
+    // Step 10AD: workshops placed through the command path need the one-off
+    // Water construction investment; these Material-audit fixtures seed it.
+    water: spec.water ?? 10,
   })
   const farms = spec.farms ?? 0
   const workshops = spec.workshops ?? 0
@@ -272,7 +274,9 @@ const drivePlan = (
   ticks: number,
   startMaterial = 300
 ): { placed: (number | null)[]; materialEnd: number; spent: number } => {
-  let state = withStocks(createState(), { food: 20000, material: startMaterial })
+  // Step 10AD: the plans place a Workshop, which needs the one-off Water
+  // construction investment. This Material-audit fixture seeds it.
+  let state = withStocks(createState(), { food: 20000, material: startMaterial, water: 10 })
   let index = 0
   const placed: (number | null)[] = plan.map(() => null)
   let spent = 0

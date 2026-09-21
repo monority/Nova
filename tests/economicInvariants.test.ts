@@ -25,7 +25,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, withRoadsForWorkshops, withStaffedFarms } from './helpers.js'
+import { createTestState, withRoadsForWorkshops, withStaffedFarms, withWorkshopWater } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -69,14 +69,14 @@ const colony = (n: number): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 0, 5)) // t3: stock 50
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3: stock 50
   state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // colonist-1 employed, stock 49
   if (n === 0) {
     return withStaffedFarms(state)
   }
-  state = stepSimulation(state, place('workshop', 1, 5))
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5))
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // second operational, cap 50
@@ -98,7 +98,7 @@ const colony = (n: number): SimulationState => {
     state = stepSimulation(state)
     if (i >= 2) {
       state = untilAffordable(state)
-      state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = stepSimulation(withWorkshopWater(state), place('workshop', i + 1, 5))
       state = withRoadsForWorkshops(state) // 09F: road for the new workshop
       state = stepSimulation(state) // Step 10Y: 1 construction tick left
       state = stepSimulation(state)
@@ -112,7 +112,7 @@ const workshopOnlyState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for production
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // operational, employed
@@ -216,7 +216,7 @@ describe('economic invariants (Step 08D)', () => {
 
   it('INV-03 — vacant operational Workshop pays 0', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('workshop', 1, 1)) // t1
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 1)) // t1
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state) // operational, nobody housed
     expect(state.buildings['building-1']?.status).toBe('operational')
@@ -226,9 +226,7 @@ describe('economic invariants (Step 08D)', () => {
   })
 
   it('INV-04 — under-construction Workshop pays 0', () => {
-    const constructing = stepSimulation(
-      createTestState(),
-      place('workshop', 1, 1)
+    const constructing = stepSimulation(withWorkshopWater(createTestState()), place('workshop', 1, 1)
     )
     expect(constructing.buildings['building-1']?.status).toBe(
       'underConstruction'
@@ -259,10 +257,10 @@ describe('economic invariants (Step 08D)', () => {
     let state = createTestState()
     state = stepSimulation(state, place('residence', 0, 0)) // t1
     state = stepSimulation(state) // t2: colonist-1
-    state = stepSimulation(state, place('workshop', 0, 5)) // t3
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t4: employed
-    state = stepSimulation(state, place('workshop', 1, 5)) // t5
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5)) // t5
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // t6: second operational, still 1 colonist
     const summary = getEmploymentSummary(state)
@@ -302,7 +300,7 @@ describe('economic invariants (Step 08D)', () => {
 
   it('INV-10 — zero workers: production 0, upkeep 0, stock frozen', () => {
     let state = createTestState()
-    state = stepSimulation(state, place('workshop', 1, 1)) // t1
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 1)) // t1
     state = stepSimulation(state) // t2: operational, vacant
     expect(getMaterialProductionPerTick(state)).toBe(0)
     expect(getMaterialUpkeepPerTick(state)).toBe(0)
@@ -334,7 +332,7 @@ describe('economic invariants (Step 08D)', () => {
   it('INV-13 — construction creates no hidden upkeep before operational', () => {
     let state = createTestState()
     const before = getResourceStock(state).construction
-    state = stepSimulation(state, place('workshop', 1, 1)) // t1
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 1)) // t1
     // Only the build cost left the stock; no upkeep on the placement tick.
     expect(getResourceStock(state).construction).toBe(before - 25)
     expect(materialUpkeepDueForTick(state)).toBe(0)
@@ -372,7 +370,7 @@ describe('economic invariants (Step 08D)', () => {
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1 admitted
     const stockBefore = getResourceStock(state).construction
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state) // operational + staffed; stored 0, upkeep −1

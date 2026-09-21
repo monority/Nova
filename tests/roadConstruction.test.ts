@@ -32,7 +32,7 @@ import {
   type SimulationState,
 } from '@/index'
 import { createGameController } from '@/app/gameController.js'
-import { createTestState } from './helpers.js'
+import { createTestState, withWorkshopWater } from './helpers.js'
 
 const roads = (
   cells: readonly { readonly x: number; readonly y: number }[]
@@ -76,7 +76,7 @@ const staffedWorkshopNoRoad = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
   state = stepSimulation(state) // t4: 1 construction tick left
   state = stepSimulation(state) // t5: operational + staffed
   return state

@@ -390,7 +390,8 @@ describe('§4 — build-vs-produce opportunity cost', () => {
 describe('§3 — expansion throughput', () => {
   it('Scenario 1/2 — sequential chain Well -> Farm -> Workshop: one tick saved per crew', () => {
     const chain = (crews: boolean): { ticks: number[]; readings: Reading } => {
-      let state = world({ residences: 1, colonists: 1, material: 100000, food: 50000 })
+      // Step 10AD: the chain places a Workshop, which needs the one-off Water.
+      let state = world({ residences: 1, colonists: 1, material: 100000, food: 50000, water: 10 })
       const ticks: number[] = []
       const sequence: readonly BuildingType[] = ['well', 'farm', 'workshop']
       for (let i = 0; i < sequence.length; i += 1) {

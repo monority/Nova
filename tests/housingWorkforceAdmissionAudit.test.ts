@@ -43,6 +43,7 @@ import {
   type SimulationConfig,
   type SimulationState,
 } from '@/index'
+import { withWorkshopWater } from './helpers.js'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -102,13 +103,13 @@ const addColonist = (
 
 const withStocks = (
   state: SimulationState,
-  stocks: { readonly food?: number; readonly material?: number }
+  stocks: { readonly food?: number; readonly material?: number; readonly water?: number }
 ): SimulationState => ({
   ...state,
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
-    water: state.resources.water,
+    water: stocks.water ?? state.resources.water,
   },
 })
 
@@ -127,6 +128,8 @@ const rowWorld = (spec: RowSpec): SimulationState => {
   let state = withStocks(createAuditState(), {
     food: spec.food ?? 2000,
     material: spec.material ?? 10,
+    // Step 10AD: seed the Workshop construction Water (see farmUpkeepStability).
+    water: 10,
   })
   const columns = Math.max(spec.residences, spec.farms + spec.workshops)
   const residenceIds: string[] = []
@@ -216,7 +219,8 @@ const drivePlan = (
   startMaterial = 100,
   startFood = 100
 ): DriveResult => {
-  let state = withStocks(createAuditState(), { material: startMaterial, food: startFood })
+  // Step 10AD: the plans place Workshops, which need the one-off Water.
+  let state = withStocks(createAuditState(), { material: startMaterial, food: startFood, water: 10 })
   let index = 0
   const placementTicks: (number | null)[] = plan.map(() => null)
   const snapshots: Snapshot[] = []
@@ -535,7 +539,7 @@ describe('8 — F,F,W,W recovery', () => {
   it('D/E — another Farm or Workshop does not add a worker', () => {
     const start = stuckState(30)
     const farm = stepSimulation(start, { type: 'placeBuilding', x: 9, y: 2, buildingType: 'farm' })
-    const shop = stepSimulation(start, { type: 'placeBuilding', x: 11, y: 2, buildingType: 'workshop' })
+    const shop = stepSimulation(withWorkshopWater(start), { type: 'placeBuilding', x: 11, y: 2, buildingType: 'workshop' })
     audit('RECOVERY_ADD_WORKPLACE', {
       afterFarm: { population: getPopulationCount(advance(farm, 6)), staffedWorkshops: countStaffedOperationalWorkshops(advance(farm, 6)) },
       afterWorkshop: { population: getPopulationCount(advance(shop, 6)), staffedWorkshops: countStaffedOperationalWorkshops(advance(shop, 6)) },

@@ -15,7 +15,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, withRoadsForWorkshops } from './helpers.js'
+import { createTestState, withRoadsForWorkshops, withWorkshopWater } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -36,7 +36,7 @@ const singleWorkshop = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
   // Step 09F: production requires road access — connect BEFORE production ticks.
   state = withRoadsForWorkshops(state)
   state = stepSimulation(state) // t4: operational + staffed
@@ -55,10 +55,10 @@ const twoWorkshopsTwoWorkers = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 0, 5)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: WS1 operational + staffed
-  state = stepSimulation(state, place('workshop', 1, 5)) // t5
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5)) // t5
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: WS2 operational, cap 50
   state = stepSimulation(state, place('residence', 1, 0)) // t7
@@ -72,10 +72,10 @@ const twoWorkshopsOneWorker = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 0, 5)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t4: WS1 operational + staffed
-  state = stepSimulation(state, place('workshop', 1, 5)) // t5
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5)) // t5
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t6: WS2 operational (vacant), cap 50
   return state
@@ -197,7 +197,7 @@ describe('construction material flow (Step 08G)', () => {
     })
 
     it('15 — workshop builds from the 24 equilibrium (no special case)', () => {
-      const after = stepSimulation(equilibrium24(), place('workshop', 0, 0))
+      const after = stepSimulation(withWorkshopWater(equilibrium24()), place('workshop', 0, 0))
       expect(after.buildings['building-3']?.type).toBe('workshop')
       expect(after.buildings['building-3']?.status).toBe('underConstruction')
       expect(getResourceStock(after).construction).toBe(0)

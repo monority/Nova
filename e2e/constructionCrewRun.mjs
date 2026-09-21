@@ -122,6 +122,29 @@ async function assignCrew(page, colonistId) {
   return stats(page);
 }
 
+/**
+ * Step 10AD: the UI's hover preview uses the strict rest-stock affordability
+ * check, while the authoritative dispatch gate also accepts a placement that
+ * this tick's stored Workshop inflow completes (24 + 1 = 25). A lone staffed
+ * Workshop equilibrates at 24, so `placeAtThroughGate` clicks, lets the domain
+ * decide, and waits on the real building count.
+ */
+async function stepUntilPlaceable(page, cost = 25, maxTicks = 60) {
+  for (let i = 0; i < maxTicks; i += 1) {
+    const s = await stats(page);
+    if (Number(s.construction) + Number(s.storedProduction) >= cost) return s;
+    await step(page);
+  }
+  throw new Error(`stock + stored never reached ${cost}: ${JSON.stringify(await stats(page))}`);
+}
+
+async function placeAtThroughGate(page, cell) {
+  const pt = await moveTo(page, cell);
+  const before = Number((await stats(page)).buildings);
+  await page.mouse.click(pt.x, pt.y);
+  await waitFor(async () => Number((await stats(page)).buildings) === before + 1, `placed at ${cell.x},${cell.y} through the gate`);
+}
+
 /** Step until the construction stock covers a 25-cost build. */
 async function stepUntilAffordable(page, cost = 25, maxTicks = 60) {
   for (let i = 0; i < maxTicks; i += 1) {
@@ -198,12 +221,29 @@ async function main() {
     await selectPalette(page, 'build-road', 'Road selected');
     await placeRoad(page, { x: 3, y: 2 });
     await step(page); // road operational
+    await selectPalette(page, 'build-road', 'Road selected');
+    await placeRoad(page, { x: 4, y: 2 });
+    await step(page); // second road cell
+    // Step 10AD: a Workshop now costs 25 Material + 1 Water, so the colony must
+    // own a staffed Well before the first Workshop. The Well is the only
+    // workplace at this point, so the colonist staffs it automatically.
+    await selectPalette(page, 'build-well', 'Well selected');
+    await placeAt(page, { x: 5, y: 2 });
+    await step(page); // 1 construction tick left
+    await step(page); // operational + staffed
+    // Accumulate a Water buffer: once the colonist moves to the Workshop the
+    // Well is vacant, so the stock only drains (one unit per served colonist).
+    for (let i = 0; i < 16 && Number((await stats(page)).water) < 8; i += 1) {
+      s = await step(page);
+    }
+    assert(Number(s.water) >= 8, `a Water buffer must accumulate, got ${s.water}`);
     await selectPalette(page, 'build-workshop', 'Workshop selected');
     await placeAt(page, { x: 3, y: 3 });
     await step(page); // 1 construction tick left
     await step(page); // operational + staffed
     await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 2 });
+    await stepUntilPlaceable(page);
+    await placeAtThroughGate(page, { x: 4, y: 3 });
     await step(page); // 1 construction tick left
     s = await step(page); // second Workshop operational (vacant)
     await stepUntilAffordable(page);
@@ -221,14 +261,14 @@ async function main() {
     await selectPalette(page, 'build-well', 'Well selected');
     await placeAt(page, { x: 7, y: 7 });
     s = await step(page); // 1 construction tick left
-    assert(s.operational === '3', `Well must still be under construction, got ${JSON.stringify(s)}`);
+    assert(s.operational === '4', `Well must still be under construction, got ${JSON.stringify(s)}`);
     await selectAt(page, { x: 7, y: 7 });
     let crew = await crewText(page);
     assert(crew === 'Crew — None · Speed normal', `uncrewed crew line bad: "${crew}"`);
     ok(`A: uncrewed Well at tick ${s.tick}, inspection "${crew}"`);
     await shot('01-uncrewed.png');
     s = await step(page);
-    assert(s.operational === '4', `uncrewed Well must complete on the second tick, got ${JSON.stringify(s)}`);
+    assert(s.operational === '5', `uncrewed Well must complete on the second tick, got ${JSON.stringify(s)}`);
     ok(`A: uncrewed 2-tick Well complete at tick ${s.tick}`);
 
     // ---------------------------------------------------------------------
@@ -248,7 +288,7 @@ async function main() {
 
     // Assign the crew: the Farm completes on THIS tick, the Workshop goes vacant.
     s = await assignCrew(page, 'colonist-1');
-    assert(s.operational === '5', `crewed Farm must complete on the assignment tick, got ${JSON.stringify(s)}`);
+    assert(s.operational === '6', `crewed Farm must complete on the assignment tick, got ${JSON.stringify(s)}`);
     assert(s.crewWorkerIds === '', `crew must be released on completion, got "${s.crewWorkerIds}"`);
     assert(s.staffedWorkshopIds === '', `crew member must not staff the Workshop that tick, got "${s.staffedWorkshopIds}"`);
     assert(s.materialProduction === '0', `crew member must produce nothing that tick, got ${s.materialProduction}`);

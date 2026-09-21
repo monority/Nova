@@ -1,5 +1,6 @@
 import {
   assignJobs,
+  getBuildingDefinition,
   countWorkersAt,
   createBuilding,
   createColonist,
@@ -23,6 +24,25 @@ export const testConfig: SimulationConfig = {
 }
 
 export const createTestState = () => createInitialState(testConfig)
+
+/**
+ * Step 10AD fixture migration.
+ *
+ * A Workshop placement now requires the one-off Water construction investment
+ * (`25 Material + 1 Water`). Historical fixtures predate that rule and were
+ * written with Water 0, so they must be given the Water the scenario assumes.
+ * This helper supplies exactly the missing amount at the placement site; it
+ * never invents a surplus and it does not touch a state that can already pay.
+ * Tests that intentionally measure a Water shortfall use `Water = 0` directly
+ * and are left untouched (they are now explicit rejection tests).
+ */
+export const withWorkshopWater = (state: SimulationState): SimulationState => {
+  const required = getBuildingDefinition('workshop').constructionWaterCost
+  if (required === 0 || state.resources.water >= required) {
+    return state
+  }
+  return { ...state, resources: { ...state.resources, water: required } }
+}
 
 /**
  * Step 10Y timing isolation for the historical audit fixtures.

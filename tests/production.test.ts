@@ -69,6 +69,8 @@ describe('farm catalog (Step 06B)', () => {
       constructionTicks: 2,
       housingCapacity: 0,
       constructionCost: 25,
+      // Step 10AD: Farms need no Water to build.
+      constructionWaterCost: 0,
     })
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
   })

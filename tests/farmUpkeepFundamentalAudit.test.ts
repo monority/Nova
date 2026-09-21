@@ -122,13 +122,13 @@ const addColonist = (
 
 const withStocks = (
   state: SimulationState,
-  stocks: { readonly food?: number; readonly material?: number }
+  stocks: { readonly food?: number; readonly material?: number; readonly water?: number }
 ): SimulationState => ({
   ...state,
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
-    water: state.resources.water,
+    water: stocks.water ?? state.resources.water,
   },
 })
 
@@ -145,6 +145,8 @@ const rowWorld = (spec: WorldSpec): SimulationState => {
   let state = withStocks(createAuditState(), {
     food: spec.food ?? 2000,
     material: spec.material ?? 10,
+    // Step 10AD: seed the Workshop construction Water (see farmUpkeepStability).
+    water: 10,
   })
   const columns = Math.max(spec.residences, spec.farms + spec.workshops)
   const residenceIds: string[] = []
@@ -948,7 +950,8 @@ describe('12 — counterfactual expansion strategies', () => {
 
   /** Two pre-built homes supply the two workers; the plan varies workplace order. */
   const baseColony = (): SimulationState => {
-    let state = withStocks(createAuditState(), { material: 100, food: 800 })
+    // Step 10AD: the plans place Workshops, which need the one-off Water.
+    let state = withStocks(createAuditState(), { material: 100, food: 800, water: 10 })
     state = op(state, 'residence', 1, 0)
     state = op(state, 'residence', 1, 2)
     state = opRoad(state, 2, 0)

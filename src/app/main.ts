@@ -427,6 +427,12 @@ if (ui.buildRoad !== null) {
   // Cost label from the domain constant, never a hardcoded duplicate.
   ui.buildRoad.textContent = `Road · ${ROAD_CONSTRUCTION_COST}`
 }
+if (ui.buildWorkshop !== null) {
+  // Step 10AD: the Workshop's construction contract comes from the catalog, so
+  // the palette label can never drift from the authoritative cost.
+  const workshop = getBuildingDefinition('workshop')
+  ui.buildWorkshop.textContent = `Workshop · ${workshop.constructionCost} + ${workshop.constructionWaterCost} Water`
+}
 refreshToolButtons()
 
 // Step 10M: the smallest player-facing control. The player selects the
@@ -824,15 +830,24 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     return ''
   }
   const placement = validatePlacement(controller.getState(), cell, tool.type)
+  const definition = getBuildingDefinition(tool.type)
+  const waterSuffix =
+    definition.constructionWaterCost === 0 ? '' : ` · water ${definition.constructionWaterCost}`
   if (placement.valid) {
-    const cost = getBuildingDefinition(tool.type).constructionCost
-    return `cell ${cell.x},${cell.y} — ready · material ${cost}`
+    const cost = definition.constructionCost
+    return `cell ${cell.x},${cell.y} — ready · material ${cost}${waterSuffix}`
   }
   if (placement.reason === 'insufficientResources') {
     // Explainable failure (Step 4 §13): values come from real queries.
-    const required = getBuildingDefinition(tool.type).constructionCost
+    const required = definition.constructionCost
     const available = getResourceStock(controller.getState()).construction
     return `cell ${cell.x},${cell.y} — insufficient material (${available}/${required})`
+  }
+  if (placement.reason === 'insufficientWater') {
+    // Step 10AD: the Water construction investment is its own causal reason.
+    const required = definition.constructionWaterCost
+    const available = getResourceStock(controller.getState()).water
+    return `cell ${cell.x},${cell.y} — insufficient water (${available}/${required})`
   }
   return `cell ${cell.x},${cell.y} — ${
     placement.reason === 'cellOccupied' ? 'occupied' : 'out of bounds'
@@ -999,6 +1014,13 @@ canvas.addEventListener('pointerup', (event) => {
       const available = getResourceStock(controller.getState()).construction
       setStatus(
         `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — insufficient material (${available}/${required})`
+      )
+    } else if (attempt.reason === 'insufficientWater') {
+      // Step 10AD: Water is never covered by stored Material production.
+      const required = getBuildingDefinition(buildingType).constructionWaterCost
+      const available = getResourceStock(controller.getState()).water
+      setStatus(
+        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — requires ${required} water (${available} available)`
       )
     } else {
       setStatus(`placement rejected at ${cell.x},${cell.y}`)

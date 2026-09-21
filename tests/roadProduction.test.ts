@@ -24,7 +24,7 @@ import {
   type PlaceRoadsCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, withRoadsForWorkshops } from './helpers.js'
+import { createTestState, withRoadsForWorkshops, withWorkshopWater } from './helpers.js'
 
 const place = (
   buildingType: 'residence' | 'workshop' | 'farm',
@@ -45,7 +45,7 @@ const staffedWorkshopNoRoad = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
   state = stepSimulation(state) // t4: 1 construction tick left
   state = stepSimulation(state) // t5: operational + staffed, roadless
   return state
@@ -115,7 +115,7 @@ describe('road access production constraint (Step 09F)', () => {
     state = stepSimulation(state) // t2: colonist-1
     // Road first (operational), then the workshop placed this tick.
     const roaded = withRoadsForWorkshops(
-      stepSimulation(state, place('workshop', 4, 4))
+      stepSimulation(withWorkshopWater(state), place('workshop', 4, 4))
     )
     // Workshop is under construction (placed this tick, catch-up leaves 1).
     const workshop = roaded.buildings['building-2']!

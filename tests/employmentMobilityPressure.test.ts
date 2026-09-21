@@ -45,7 +45,7 @@ import {
   type BuildingType,
   type SimulationState,
 } from '@/index'
-import { createTestState } from './helpers.js'
+import { createTestState, withWorkshopWater } from './helpers.js'
 
 type Cell = { readonly x: number; readonly y: number }
 
@@ -1138,7 +1138,7 @@ describe('experiment J — construction transition through the real tick lifecyc
     let state = createTestState()
     state = stepSimulation(state, place('residence', 1, 1))
     state = stepSimulation(state) // colonist admitted
-    state = stepSimulation(state, place('workshop', 1, 3))
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 3))
     // Road placed this tick: under construction.
     state = stepSimulation(state, roads([{ x: 1, y: 2 }]))
     expect(state.roads['road-1']?.status).toBe('underConstruction')

@@ -131,13 +131,13 @@ const addColonist = (
 
 const withStocks = (
   state: SimulationState,
-  stocks: { readonly food?: number; readonly material?: number }
+  stocks: { readonly food?: number; readonly material?: number; readonly water?: number }
 ): SimulationState => ({
   ...state,
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
-    water: state.resources.water,
+    water: stocks.water ?? state.resources.water,
   },
 })
 
@@ -161,6 +161,10 @@ const rowWorld = (spec: WorldSpec): SimulationState => {
   let state = withStocks(createAuditState(), {
     food: spec.food ?? 1000,
     material: spec.material ?? 10,
+    // Step 10AD: a Workshop placement now costs the one-off Water construction
+    // investment; these audit fixtures measure the Material/Food economy and so
+    // seed the Water the scenario assumes.
+    water: 10,
   })
   const columns = Math.max(spec.residences, spec.farms + spec.workshops)
   const residenceIds: string[] = []
@@ -819,7 +823,7 @@ const BOOTSTRAP_SEQUENCE: readonly BootstrapStep[] = [
 ]
 
 const bootstrapTrace = (farmUpkeep: boolean): Trace => {
-  const start = withStocks(createAuditState(), { material: 100, food: 100 })
+  const start = withStocks(createAuditState(), { material: 100, food: 100, water: 10 })
   return runCommands(start, farmUpkeep, BOOTSTRAP_SEQUENCE.map((s) => s.command))
 }
 
@@ -885,7 +889,7 @@ describe('§8 — bootstrap experiment', () => {
       { type: 'placeBuilding', x: 3, y: 2, buildingType: 'workshop' },
       ...Array.from({ length: 40 }, () => null),
     ]
-    const start = withStocks(createAuditState(), { material: 100, food: 100 })
+    const start = withStocks(createAuditState(), { material: 100, food: 100, water: 10 })
     const trace = runCommands(start, true, commands)
     audit('BOOTSTRAP_TWO_WORKSHOPS', {
       tickAfterBuild3: trace.records[4]!.material,

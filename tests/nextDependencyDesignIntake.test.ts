@@ -79,13 +79,13 @@ const opRoad = (
 
 const withStocks = (
   state: SimulationState,
-  stocks: { readonly food?: number; readonly material?: number }
+  stocks: { readonly food?: number; readonly material?: number; readonly water?: number }
 ): SimulationState => ({
   ...state,
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
-    water: state.resources.water,
+    water: stocks.water ?? state.resources.water,
   },
 })
 

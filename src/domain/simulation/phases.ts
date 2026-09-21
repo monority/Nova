@@ -81,10 +81,12 @@ import { iterateRoads } from '../road/road.js'
 import {
   deductFood,
   deductResources,
+  deductWater,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
   hasSufficientFood,
   hasSufficientResources,
+  hasSufficientWater,
   MATERIAL_PER_WORKER_PER_TICK,
   MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
@@ -154,7 +156,15 @@ export interface CommandApplicationResult {
  */
 export type PlacementValidation =
   | { readonly valid: true }
-  | { readonly valid: false; readonly reason: 'unknownBuildingType' | 'outOfBounds' | 'cellOccupied' | 'insufficientResources' }
+  | {
+      readonly valid: false
+      readonly reason:
+        | 'unknownBuildingType'
+        | 'outOfBounds'
+        | 'cellOccupied'
+        | 'insufficientResources'
+        | 'insufficientWater'
+    }
 
 export const validatePlacement = (
   state: SimulationState,
@@ -173,6 +183,12 @@ export const validatePlacement = (
   }
   if (!hasSufficientResources(state.resources, definition.constructionCost)) {
     return { valid: false, reason: 'insufficientResources' }
+  }
+  // Step 10AD: the Workshop's one-off Water construction investment. Checked
+  // here, in the single authoritative placement validator, so the simulation
+  // and every query (hover indicator, affordability feedback) agree.
+  if (!hasSufficientWater(state.resources, definition.constructionWaterCost)) {
+    return { valid: false, reason: 'insufficientWater' }
   }
   return { valid: true }
 }
@@ -426,8 +442,15 @@ export const applyCommand = (
         definition.constructionTicks
       )
       const deducted = deductResources(created.state.resources, definition.constructionCost)
+      // Step 10AD: the Workshop's one-off Water investment is deducted in the
+      // SAME atomic transaction (validated above), so a rejected placement can
+      // never leave a partial mutation. Zero for every other building.
+      const paid =
+        definition.constructionWaterCost === 0
+          ? deducted
+          : deductWater(deducted, definition.constructionWaterCost)
       return {
-        state: { ...created.state, resources: deducted },
+        state: { ...created.state, resources: paid },
         accepted: true,
         reason: null,
         placedBuildingId: created.buildingId,

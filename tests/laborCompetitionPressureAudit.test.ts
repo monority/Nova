@@ -60,7 +60,7 @@ import {
   type BuildingType,
   type SimulationState,
 } from '@/index'
-import { createTestState, placeCatchUp } from './helpers.js'
+import { createTestState, placeCatchUp, withWorkshopWater } from './helpers.js'
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -114,13 +114,13 @@ const addColonist = (
 
 const withStocks = (
   state: SimulationState,
-  stocks: { readonly food?: number; readonly material?: number }
+  stocks: { readonly food?: number; readonly material?: number; readonly water?: number }
 ): SimulationState => ({
   ...state,
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
-    water: state.resources.water,
+    water: stocks.water ?? state.resources.water,
   },
 })
 
@@ -617,7 +617,7 @@ describe('§7 — bootstrap trajectory', () => {
       state = stepSimulation(state)
       record('step')
     }
-    state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
     record('place W')
     for (let i = 0; i < 3; i += 1) {
       state = stepSimulation(state)
@@ -972,7 +972,7 @@ describe('§11 — construction feedback loops', () => {
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }] })
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: 'farm' })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 1, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 2, y: 1, buildingType: 'workshop' })
     state = advance(state, 6)
     const r = read(state)
     const materialBefore = r.material
@@ -1007,8 +1007,8 @@ describe('§11 — construction feedback loops', () => {
     let state = createTestState()
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }] })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: 'workshop' })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 1, y: 2, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
     state = advance(state, 2)
     const built = read(state)
     audit('LOOP_B_BOOTSTRAP', {
@@ -1074,7 +1074,7 @@ describe('§11 — construction feedback loops', () => {
     let state = createTestState()
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }] })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 1, y: 2, buildingType: 'workshop' })
     state = advance(state, 40)
     const r = read(state)
     audit('LOOP_B_ONE_WORKSHOP', {
@@ -1094,8 +1094,8 @@ describe('§11 — construction feedback loops', () => {
     let state = createTestState()
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }] })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: 'workshop' })
-    state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 0, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 1, y: 2, buildingType: 'workshop' })
+    state = stepSimulation(withWorkshopWater(state), { type: 'placeBuilding', x: 2, y: 0, buildingType: 'workshop' })
     state = advance(state, 2)
     state = withStocks(state, { material: 5, food: 200 })
     let ticks = 0
@@ -1198,7 +1198,11 @@ describe('§15 — Farm vs Workshop production timing', () => {
     let state = createTestState()
     state = placeCatchUp(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }] })
-    state = placeCatchUp(state, { type: 'placeBuilding', x: 1, y: 2, buildingType: type })
+    // Step 10AD: only the Workshop arm needs the Water construction investment.
+    state = placeCatchUp(
+      type === 'workshop' ? withWorkshopWater(state) : state,
+      { type: 'placeBuilding', x: 1, y: 2, buildingType: type }
+    )
     return state
   }
 

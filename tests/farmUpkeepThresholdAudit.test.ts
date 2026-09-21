@@ -129,13 +129,13 @@ const addColonist = (
 
 const withStocks = (
   state: SimulationState,
-  stocks: { readonly food?: number; readonly material?: number }
+  stocks: { readonly food?: number; readonly material?: number; readonly water?: number }
 ): SimulationState => ({
   ...state,
   resources: {
     construction: stocks.material ?? state.resources.construction,
     food: stocks.food ?? state.resources.food,
-    water: state.resources.water,
+    water: stocks.water ?? state.resources.water,
   },
 })
 
@@ -157,6 +157,8 @@ const rowWorld = (spec: WorldSpec): SimulationState => {
   let state = withStocks(createAuditState(), {
     food: spec.food ?? 1000,
     material: spec.material ?? 10,
+    // Step 10AD: seed the Workshop construction Water (see farmUpkeepStability).
+    water: 10,
   })
   const columns = Math.max(spec.residences, spec.farms + spec.workshops)
   const residenceIds: string[] = []
@@ -592,7 +594,7 @@ const BOOTSTRAP: readonly BootstrapStep[] = [
 describe('§6 — bootstrap experiment (real command chain)', () => {
   const bootstrapTrace = (mode: UpkeepMode): Trace =>
     runCommands(
-      withStocks(createAuditState(), { material: 100, food: 100 }),
+      withStocks(createAuditState(), { material: 100, food: 100, water: 10 }),
       mode,
       BOOTSTRAP.map((s) => s.command)
     )
@@ -645,7 +647,7 @@ describe('§6 — bootstrap experiment (real command chain)', () => {
       ...Array.from({ length: 40 }, () => null),
     ]
     const trace = runCommands(
-      withStocks(createAuditState(), { material: 100, food: 100 }),
+      withStocks(createAuditState(), { material: 100, food: 100, water: 10 }),
       'candidate',
       commands
     )

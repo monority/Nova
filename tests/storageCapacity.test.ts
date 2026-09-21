@@ -22,7 +22,7 @@ import {
   type PlaceBuildingCommand,
   type SimulationState,
 } from '@/index'
-import { createTestState, withRoadsForWorkshops } from './helpers.js'
+import { createTestState, withRoadsForWorkshops, withWorkshopWater } from './helpers.js'
 
 const place = (
   buildingType: PlaceBuildingCommand['buildingType'],
@@ -66,7 +66,7 @@ const untilAffordable = (state: SimulationState): SimulationState => {
 const vacantWorkshops = (n: number): SimulationState => {
   let state = createTestState()
   for (let i = 0; i < n; i++) {
-    state = stepSimulation(state, place('workshop', i, 5))
+    state = stepSimulation(withWorkshopWater(state), place('workshop', i, 5))
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state)
   }
@@ -78,7 +78,7 @@ const singleWorkshop = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 4, 4)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for production
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // operational + staffed, stock 49
@@ -95,11 +95,11 @@ const staffedLadder = (n: number): SimulationState => {
   let state = withFoodBuffer(createTestState())
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
-  state = stepSimulation(state, place('workshop', 0, 5)) // t3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3
   state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // employed, stock 49
-  state = stepSimulation(state, place('workshop', 1, 5))
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5))
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // cap 50
@@ -111,7 +111,7 @@ const staffedLadder = (n: number): SimulationState => {
     state = stepSimulation(state)
     if (i >= 2) {
       state = untilAffordable(state)
-      state = stepSimulation(state, place('workshop', i + 1, 5))
+      state = stepSimulation(withWorkshopWater(state), place('workshop', i + 1, 5))
       state = withRoadsForWorkshops(state) // 09F: road for the new workshop
       state = stepSimulation(state) // Step 10Y: 1 construction tick left
       state = stepSimulation(state)
@@ -148,9 +148,7 @@ describe('material storage capacity (Step 08F)', () => {
   })
 
   it('6 — under-construction workshop contributes zero capacity', () => {
-    const constructing = stepSimulation(
-      createTestState(),
-      place('workshop', 1, 1)
+    const constructing = stepSimulation(withWorkshopWater(createTestState()), place('workshop', 1, 1)
     )
     expect(constructing.buildings['building-1']?.status).toBe(
       'underConstruction'
@@ -163,7 +161,7 @@ describe('material storage capacity (Step 08F)', () => {
     let state = createTestState()
     state = stepSimulation(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2
-    state = stepSimulation(state, place('workshop', 4, 4)) // t3
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
     expect(getMaterialStorageCapacity(state)).toBe(0)
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // Step 10Y: 1 construction tick left

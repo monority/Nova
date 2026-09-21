@@ -180,23 +180,29 @@ async function main() {
     await placeRoad(page, { x: 3, y: 3 });
     s = await step(page);
 
+    // Step 10AD note: a Workshop placement now costs the one-off Water
+    // construction investment, and a fresh 100-Material colony cannot fund a
+    // Well plus two workplaces (4 buildings + a road = 105). The control under
+    // test is unchanged — one colonist, two workplaces, a manual move and the
+    // reverse move — so this suite now uses two FARMS (no Water cost) and Food
+    // as the economic signal. Workshop employment/production is covered by the
+    // jobs E2E and the Water cost by tests/workshopWaterConstruction.test.ts.
     await selectPalette(page, 'build-farm', 'Farm selected');
     await placeAt(page, { x: 4, y: 2 });
     await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
     assert(s.staffedFarmIds !== '', `Farm should be automatically staffed, got "${s.staffedFarmIds}"`);
 
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 4, y: 3 });
+    await selectPalette(page, 'build-farm', 'Farm selected');
+    await placeAt(page, { x: 3, y: 1 });
     await step(page); // Step 10Y: 1 construction tick left
     s = await step(page);
 
-    // Automatic allocation: the nearer Farm wins; the Workshop is vacant.
+    // Automatic allocation: the first (lowest-id) Farm wins; the second is vacant.
     assert(s.staffedFarmIds === 'building-2', `automatic Farm expected, got farms "${s.staffedFarmIds}"`);
-    assert(s.staffedWorkshopIds === '', `Workshop must be vacant automatically, got "${s.staffedWorkshopIds}"`);
-    assert(s.materialProduction === '0', `vacant Workshop must produce 0, got ${s.materialProduction}`);
+    assert(s.foodForecast === 'sustainable', `one staffed Farm must sustain one colonist, got ${s.foodForecast}`);
     assert(s.manualWorkerIds === '', `no manual worker expected yet, got "${s.manualWorkerIds}"`);
-    ok(`automatic allocation: farms "${s.staffedFarmIds}", workshops "${s.staffedWorkshopIds}", material ${s.construction}`);
+    ok(`automatic allocation: farms "${s.staffedFarmIds}", food ${s.food}, material ${s.construction}`);
     await shot('01-automatic.png');
 
     // ---------------------------------------------------------------------
@@ -207,44 +213,43 @@ async function main() {
     const disabled = await disabledTargets(page);
     assert(disabled.some((o) => o.label.includes('current')), `current workplace must be disabled: ${JSON.stringify(disabled)}`);
     const targets = await enabledTargets(page);
-    assert(targets.length === 1, `exactly one eligible Workshop expected, got ${JSON.stringify(targets)}`);
-    const workshopId = targets[0].value;
-    assert(targets[0].label.includes('Workshop') && targets[0].label.includes('workers 0/1'), `target label bad: "${targets[0].label}"`);
+    assert(targets.length === 1, `exactly one eligible Farm expected, got ${JSON.stringify(targets)}`);
+    const secondFarmId = targets[0].value;
+    assert(targets[0].label.includes('Farm') && targets[0].label.includes('workers 0/1'), `target label bad: "${targets[0].label}"`);
     ok(`inspector options: current disabled "${disabled[0].label}", eligible "${targets[0].label}"`);
     await shot('02-options.png');
 
-    s = await moveWorker(page, workshopId);
+    s = await moveWorker(page, secondFarmId);
     assert(s.manualWorkerIds === 'colonist-1', `manual override expected, got "${s.manualWorkerIds}"`);
-    assert(s.staffedWorkshopIds === workshopId, `Workshop should now be staffed, got "${s.staffedWorkshopIds}"`);
-    assert(s.staffedFarmIds === '', `Farm should be released, got "${s.staffedFarmIds}"`);
+    assert(s.staffedFarmIds === secondFarmId, `second Farm should now be staffed, got "${s.staffedFarmIds}"`);
     assert(s.status.includes('manual override'), `reassignment feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`manual move: workshops "${s.staffedWorkshopIds}", farms "${s.staffedFarmIds}", status "${s.status}"`);
+    ok(`manual move: farms "${s.staffedFarmIds}", status "${s.status}"`);
     await shot('03-manual.png');
 
-    // Sticky across ticks + Material now flows.
-    const materialAtMove = Number(s.construction);
+    // Sticky across ticks + Food now flows from the newly staffed Farm.
+    const foodAtMove = Number(s.food);
     for (let i = 0; i < 4; i += 1) {
       s = await step(page);
     }
     assert(s.manualWorkerIds === 'colonist-1', `manual override must stick, got "${s.manualWorkerIds}"`);
-    assert(s.staffedWorkshopIds === workshopId, `manual Workshop must stay staffed, got "${s.staffedWorkshopIds}"`);
-    assert(s.materialProduction === '2', `manual Workshop must produce 2, got ${s.materialProduction}`);
-    assert(Number(s.construction) > materialAtMove, `Material must grow after the manual move: ${materialAtMove} -> ${s.construction}`);
-    ok(`sticky manual: material ${materialAtMove} -> ${s.construction}, production ${s.materialProduction}, manual "${s.manualWorkerIds}"`);
-    await shot('04-material-recovery.png');
+    assert(s.staffedFarmIds === secondFarmId, `manual Farm must stay staffed, got "${s.staffedFarmIds}"`);
+    assert(s.foodForecast === 'sustainable', `the manual Farm must sustain the colony, got ${s.foodForecast}`);
+    assert(Number(s.food) >= foodAtMove, `Food must not fall after the manual move: ${foodAtMove} -> ${s.food}`);
+    ok(`sticky manual: food ${foodAtMove} -> ${s.food}, farms "${s.staffedFarmIds}", manual "${s.manualWorkerIds}"`);
+    await shot('04-food-recovery.png');
 
     // ---------------------------------------------------------------------
-    // Reverse move (Food priority) through the same control
+    // Reverse move through the same control
     // ---------------------------------------------------------------------
-    await selectAt(page, { x: 4, y: 3 });
+    await selectAt(page, { x: 3, y: 1 });
     assert((await workerText(page)) === 'Worker — manual override', `manual worker line bad: "${await workerText(page)}"`);
     const reverseTargets = await enabledTargets(page);
     assert(reverseTargets.length === 1, `exactly one eligible Farm expected, got ${JSON.stringify(reverseTargets)}`);
+    assert(reverseTargets[0].value === 'building-2', `reverse target should be the first Farm, got "${reverseTargets[0].value}"`);
     s = await moveWorker(page, reverseTargets[0].value);
-    assert(s.staffedFarmIds !== '', `reverse move must staff the Farm, got "${s.staffedFarmIds}"`);
-    assert(s.staffedWorkshopIds === '', `reverse move must release the Workshop, got "${s.staffedWorkshopIds}"`);
+    assert(s.staffedFarmIds === 'building-2', `reverse move must staff the first Farm, got "${s.staffedFarmIds}"`);
     assert(s.manualWorkerIds === 'colonist-1', `reverse move must still be manual, got "${s.manualWorkerIds}"`);
-    ok(`reverse move: farms "${s.staffedFarmIds}", workshops "${s.staffedWorkshopIds}", manual "${s.manualWorkerIds}"`);
+    ok(`reverse move: farms "${s.staffedFarmIds}", manual "${s.manualWorkerIds}"`);
     await shot('05-reverse.png');
 
     const realErrors = errors.filter((e) => !e.includes('favicon'));
