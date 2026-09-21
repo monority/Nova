@@ -62,9 +62,29 @@ async function pointAt(page, cell) {
   return pt;
 }
 
-/** Real canvas click placing the currently selected tool. */
+/** Real canvas click placing the currently selected tool.
+ *
+ * Step 10AO: the hover status is written by the canvas pointermove, and in
+ * HEADED mode a stray OS-level pointermove can overwrite it before the read,
+ * which made this suite flake ("timeout: valid preview at 6,1"). The hover is
+ * therefore retried; the placement gate itself is unchanged (the UI `ready`
+ * status still comes from the shared affordability predicate).
+ */
 async function clickCell(page, cell) {
   const pt = await pointAt(page, cell);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await waitFor(
+        async () => (await stats(page)).status.includes('ready'),
+        `valid preview at ${cell.x},${cell.y}`,
+        1000
+      );
+      break;
+    } catch {
+      await page.mouse.move(pt.x, pt.y - 2);
+      await page.mouse.move(pt.x, pt.y);
+    }
+  }
   await waitFor(async () => (await stats(page)).status.includes('ready'), `valid preview at ${cell.x},${cell.y}`);
   await page.mouse.click(pt.x, pt.y);
 }
