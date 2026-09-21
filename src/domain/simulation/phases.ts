@@ -716,13 +716,24 @@ export const consumeWater = (
 // ---------------------------------------------------------------------------
 
 /**
- * Water admission gate (Step 10P). `shortage` blocks admission for the tick;
- * `servedResidenceIds` limits admission to Water-served Residences. Absent =>
- * the historical Food+housing rule (unit tests of the pre-10P rule).
+ * Water admission gate (Step 10P, growth headroom Step 10S). `shortage` blocks
+ * admission for the tick; `servedResidenceIds` limits admission to Water-served
+ * Residences; `productionCapacity` and `servedNeed` add the Step 10S headroom
+ * invariant: a new colonist may only be admitted while the colony's Water
+ * production capacity can sustain the resulting served population. The last two
+ * are optional for historical audit harnesses; when omitted the pre-10S
+ * behaviour applies. Absent gate => the historical Food+housing rule.
  */
 export interface WaterAdmissionGate {
   readonly shortage: boolean
   readonly servedResidenceIds: ReadonlySet<string>
+  /**
+   * Water production capacity this tick: staffed operational road-accessible
+   * Wells x WATER_PER_WELL_PER_TICK. Derived, never persisted.
+   */
+  readonly productionCapacity?: number
+  /** Water need of the currently served population this tick. */
+  readonly servedNeed?: number
 }
 
 /**
@@ -734,6 +745,16 @@ export interface WaterAdmissionGate {
  * Step 10P: when a Water gate is supplied, the Residence must also be
  * Water-served and the colony must not be in Water shortage. Water NEVER
  * causes population loss here — only Food starvation does.
+ *
+ * Step 10S: when the gate also carries `productionCapacity` and `servedNeed`,
+ * a served colonist may only be admitted while
+ *
+ *   productionCapacity >= servedNeed + admissionsThisTick + 1
+ *
+ * so the served population cannot settle above the colony's Water production.
+ * `admissionsThisTick` is a transient local counter, never persisted. A colony
+ * with zero colonists is explicitly exempt (the first colonist is needed to
+ * staff the very Well that would produce the capacity).
  *
  * Shortage consequence: when the tick was NOT fed, the entire colony
  * starves in the same tick — every colonist leaves, freeing all residences
@@ -750,6 +771,7 @@ export const updatePopulation = (
   if (water !== undefined && water.shortage) {
     return nextState
   }
+  let admissionsThisTick = 0
   while (nextState.resources.food > 0) {
     const pendingCapacity = availableResidenceIds(nextState)
     if (pendingCapacity.length === 0) {
@@ -762,7 +784,21 @@ export const updatePopulation = (
     if (residenceId === undefined) {
       break
     }
+    if (
+      water !== undefined &&
+      water.productionCapacity !== undefined &&
+      water.servedNeed !== undefined
+    ) {
+      const bootstrap = Object.keys(nextState.colonists).length === 0
+      const hasHeadroom =
+        water.productionCapacity >=
+        water.servedNeed + admissionsThisTick + 1
+      if (!bootstrap && !hasHeadroom) {
+        break
+      }
+    }
     nextState = createColonist(nextState, residenceId).state
+    admissionsThisTick += 1
   }
   return nextState
 }

@@ -290,11 +290,14 @@ const overshootWorld = (water = 0): SimulationState =>
 // ---------------------------------------------------------------------------
 
 describe('§2/§3 — current admission model and 10Q overshoot', () => {
-  it('the candidate harness is byte-identical to stepSimulation for the current model', () => {
+  it('the candidate harness is byte-identical to stepSimulation when the Water gate is inactive', () => {
+    // Fixtures without a Well keep the gate inactive, so the Step 10S
+    // production-headroom rule does not participate and the harness must
+    // still mirror stepSimulation exactly.
     for (const start of [
-      waterWorld({ residences: 3, wells: 1, colonists: 1, water: 5 }),
-      waterWorld({ residences: 6, wells: 2, colonists: 2, water: 0 }),
-      waterWorld({ residences: 2, farms: 1, wells: 1, colonists: 1, water: 3 }),
+      waterWorld({ residences: 3, farms: 1, workshops: 1, colonists: 1 }),
+      waterWorld({ residences: 6, farms: 2, workshops: 2, colonists: 2 }),
+      waterWorld({ residences: 2, farms: 1, colonists: 1 }),
     ]) {
       let harness = start
       let production = start

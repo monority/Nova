@@ -25,7 +25,7 @@ import {
   updatePopulation,
   upkeepBuildings,
 } from './phases.js'
-import { getWaterCoverage, hasOperationalWell } from '../water/water.js'
+import { getWaterCoverage, hasOperationalWell, waterProductionForTick } from '../water/water.js'
 import { WATER_PER_COLONIST_PER_TICK } from '../resource/resource.js'
 import type { SimulationState } from './state.js'
 
@@ -54,14 +54,19 @@ export const stepSimulation = (
   // before the first admission.
   const waterActive = hasOperationalWell(consumed.state)
   const coverage = waterActive ? getWaterCoverage(consumed.state) : null
-  const requiredWater =
+  const servedNeed =
     coverage === null
       ? 0
       : coverage.servedColonistIds.length * WATER_PER_COLONIST_PER_TICK
+  // Step 10S: the growth gate is Water production CAPACITY, not stock. The
+  // capacity is derived once per tick from the same coverage the admission
+  // gate uses; the stock stays the consumable resource.
+  const productionCapacity =
+    coverage === null ? 0 : waterProductionForTick(consumed.state)
   const waterConsumed =
     coverage === null
       ? { state: consumed.state, shortage: false }
-      : consumeWater(consumed.state, requiredWater)
+      : consumeWater(consumed.state, servedNeed)
   // Phase 6: population — starvation (when the tick was not fed) then
   // food-and-water-gated admission. The fed/starved decision is passed
   // explicitly; Water only restricts admission.
@@ -73,6 +78,8 @@ export const stepSimulation = (
       : {
           shortage: waterConsumed.shortage,
           servedResidenceIds: new Set(coverage.servedResidenceIds),
+          productionCapacity,
+          servedNeed,
         }
   )
   // Phase 7: deterministic employment. Runs after population so a colonist

@@ -362,26 +362,25 @@ describe('4 — admission gate', () => {
     expect(getPopulationCount(after)).toBe(1)
   })
 
-  it('blocks admission during a Water shortage and resumes once stock is sufficient', () => {
-    // 3 served colonists, 4 served residences, 1 Well: production 2 < need 3
-    // -> shortage, so the 4th Residence cannot be filled.
+  it('blocks admission beyond production headroom; stock alone cannot resume growth', () => {
+    // 3 served colonists, 4 served residences, 1 Well: production 2 < need 3.
     let state = waterWorld({ residences: 4, wells: 1, colonists: 3, water: 0, food: 1000 })
     const blocked = advance(state, 5)
     const populationBlocked = getPopulationCount(blocked)
     const shortage = getWaterStatus(blocked).shortage
-    // Add a Water reserve: no shortage -> admission resumes into the free
-    // served Residence.
+    // Step 10S: a large stock does NOT resume growth; production capacity is
+    // the gate.
     state = withStocks(blocked, { water: 100 })
-    const resumed = advance(state, 2)
+    const stillBlocked = advance(state, 2)
     audit('ADMIT_SHORTAGE', {
       populationBlocked,
       shortageDuringBlock: shortage,
-      populationResumed: getPopulationCount(resumed),
-      waterAfterResume: resumed.resources.water,
+      populationAfterStock: getPopulationCount(stillBlocked),
+      waterAfterStock: stillBlocked.resources.water,
     })
     expect(populationBlocked).toBe(3)
     expect(shortage).toBe(true)
-    expect(getPopulationCount(resumed)).toBe(4)
+    expect(getPopulationCount(stillBlocked)).toBe(3)
   })
 
   it('keeps the historical bootstrap when no Well exists (Step 10P bootstrap rule)', () => {

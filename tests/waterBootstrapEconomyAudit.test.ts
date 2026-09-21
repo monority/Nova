@@ -399,10 +399,11 @@ describe('§6 — coverage vs stock matrix', () => {
     }
     // Covered + vacant + stock 0: no production -> shortage -> blocked.
     expect(rows.find((r) => r.coverage && r.stock === 0 && !r.requested)!.admitted).toBe(1)
-    // Covered + staffed: production covers the new need -> admitted.
+    // Covered + staffed: production 2 vs served need 1 -> one admission.
     expect(rows.find((r) => r.coverage && r.stock === 0 && r.requested)!.admitted).toBe(2)
-    // Covered + reserve: admitted even with a vacant Well.
-    expect(rows.find((r) => r.coverage && r.stock === 5 && !r.requested)!.admitted).toBe(2)
+    // Step 10S: headroom uses production capacity, not stock, so a vacant Well
+    // cannot fund growth even with a reserve.
+    expect(rows.find((r) => r.coverage && r.stock === 5 && !r.requested)!.admitted).toBe(1)
     expect(rows.find((r) => r.coverage && r.stock === 5 && r.requested)!.admitted).toBe(2)
   })
 })
@@ -485,35 +486,30 @@ describe('§8 — multi-colonist consumption', () => {
 // ---------------------------------------------------------------------------
 
 describe('§9 — admission order boundary', () => {
-  it('measures the pre/post-admission Water boundary', () => {
-    const build = (stock: number): SimulationState => {
-      // 1 served colonist (occupied R1), 1 free served R2, Well vacant.
-      const state = waterWorld({ residences: 2, farms: 1, wells: 1, colonists: 1, food: 1000, water: stock })
-      return state
-    }
-    const rows = [0, 1, 2].map((stock) => {
-      const after = advance(build(stock), 1)
-      return { stock, population: getPopulationCount(after), water: after.resources.water }
+  it('measures the production-headroom admission boundary', () => {
+    // Step 10S: one staffed Well (production 2) sustains 2 served colonists.
+    const build = (population: number): SimulationState =>
+      waterWorld({ residences: population + 1, wells: 1, colonists: population, food: 1000, water: 0 })
+    const rows = [1, 2, 3].map((population) => {
+      const after = advance(build(population), 1)
+      return { population, after: getPopulationCount(after), water: after.resources.water }
     })
     audit('ADMISSION_BOUNDARY', rows)
-    // Vacant Well -> production 0; stock 0 -> shortage -> blocked; stock >= 1
-    // -> no shortage -> admitted (post-admission consumption, no reservation).
-    expect(rows[0]!.population).toBe(1)
-    expect(rows[1]!.population).toBe(2)
-    expect(rows[2]!.population).toBe(2)
+    expect(rows[0]!.after).toBe(2)
+    expect(rows[1]!.after).toBe(2)
+    expect(rows[2]!.after).toBe(3)
   })
 
-  it('scales with the number of free served Residences', () => {
+  it('admits multiple colonists per tick when production capacity allows', () => {
+    // 2 staffed Wells (2 colonists) -> production 4, served need 2.
     const rows = [1, 2, 3].map((free) => {
-      const state = waterWorld({ residences: free + 1, farms: 1, wells: 1, colonists: 1, food: 1000, water: 5 })
+      const state = waterWorld({ residences: 2 + free, wells: 2, colonists: 2, food: 1000, water: 0 })
       const after = advance(state, 1)
       return { free, population: getPopulationCount(after), water: after.resources.water }
     })
     audit('ADMISSION_RESIDENCES', rows)
-    // The admission loop fills every served free Residence while the colony is
-    // not in deficit; Water is consumed AFTER admission.
-    expect(rows[0]!.population).toBe(2)
-    expect(rows[1]!.population).toBe(3)
+    expect(rows[0]!.population).toBe(3)
+    expect(rows[1]!.population).toBe(4)
     expect(rows[2]!.population).toBe(4)
   })
 })
@@ -648,7 +644,7 @@ describe('§13 — vacant Well cannot sustain growth', () => {
     expect(getPopulationCount(after)).toBe(1)
   })
 
-  it('a large Water reserve lets a vacant Well admit only until the reserve is spent', () => {
+  it('a large Water reserve cannot fund growth without production capacity', () => {
     const state = waterWorld({ residences: 6, farms: 1, wells: 1, colonists: 1, food: 5000, water: 5 })
     const after = advance(state, 60)
     audit('VACANT_WELL_RESERVE', {
@@ -656,9 +652,9 @@ describe('§13 — vacant Well cannot sustain growth', () => {
       water: after.resources.water,
       staffedWells: countStaffedOperationalWells(after),
     })
-    // With a reserve, admission proceeds until served need exceeds the stock.
-    expect(getPopulationCount(after)).toBeGreaterThan(1)
-    expect(getPopulationCount(after)).toBeLessThanOrEqual(6)
+    // Step 10S: headroom uses production capacity, so a vacant Well (production
+    // 0) cannot admit beyond the bootstrap colonist whatever the stock.
+    expect(getPopulationCount(after)).toBe(1)
   })
 })
 
@@ -728,12 +724,12 @@ describe('§14/§15/§16 — long-run economy', () => {
         net: waterProductionForTick(current) - getWaterStatus(current).needPerTick,
       })
     }    audit('POPULATION_FEEDBACK', trace.filter((_, i) => i % 5 === 0 || i < 8))
-    // Admission fills every served free Residence in ONE tick (existing
-    // admission loop, need computed before admission), so one Well produces a
-    // one-tick overshoot to the housing cap and then a permanent deficit —
-    // not a gradual self-limiting slowdown.
-    expect(getPopulationCount(current)).toBe(6)
-    expect(getWaterStatus(current).shortage).toBe(true)
+    // Step 10S: production headroom caps the served population at the Well
+    // capacity (2 for one staffed Well) and production equals need at
+    // equilibrium. (The residual stock after consumption can still be below
+    // the need; that is a buffer, not a deficit.)
+    expect(getPopulationCount(current)).toBe(2)
+    expect(waterProductionForTick(current)).toBe(getWaterStatus(current).needPerTick)
   })
 })
 
