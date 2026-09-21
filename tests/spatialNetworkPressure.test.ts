@@ -852,6 +852,6 @@ describe('persistence and determinism of topologies (Step 09J §20)', () => {
     expect(pairFacts(loaded, residenceId, workshopId, colonistId)).toEqual(
       pairFacts(state, residenceId, workshopId, colonistId)
     )
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 })

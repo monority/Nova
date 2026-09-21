@@ -154,7 +154,7 @@ const matrixFixture = (workers: number, staffed: number): SimulationState => {
     // every colonist stays unemployed.
     const workplaceId =
       staffed === 0 ? null : `building-${(c % staffed) + 1}`
-    colonists[id] = { id, residenceId: 'building-99', workplaceId }
+    colonists[id] = { id, residenceId: 'building-99', workplaceId, workplaceAssignmentMode: 'automatic' }
   }
   return withRoadsForWorkshops({
     ...base,
@@ -463,7 +463,7 @@ describe('economic invariants (Step 08D)', () => {
   })
 
   it('save/hash (§8) — SAVE_VERSION 4, round-trip stable, no upkeep fields', () => {
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
     const state = stepSimulation(colony(2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('upkeep')

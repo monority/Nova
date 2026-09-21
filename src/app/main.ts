@@ -21,6 +21,8 @@ import {
   getBuildingDefinition,
   getBuildingIdAtCell,
   getBuildingInspection,
+  getColonistInspection,
+  getReassignmentOptions,
   getAccessibleBuildingCount,
   getEmploymentSummary,
   getFoodTicksRemaining,
@@ -96,6 +98,10 @@ const ui = {
   insStatus: document.querySelector<HTMLElement>('#ins-status'),
   insConstruction: document.querySelector<HTMLElement>('#ins-construction'),
   insHousing: document.querySelector<HTMLElement>('#ins-housing'),
+  insWorker: document.querySelector<HTMLElement>('#ins-worker'),
+  reassignRow: document.querySelector<HTMLElement>('#reassign-row'),
+  reassignTarget: document.querySelector<HTMLSelectElement>('#reassign-target'),
+  reassignConfirm: document.querySelector<HTMLButtonElement>('#btn-reassign'),
 }
 
 const BUILDING_LABELS: Readonly<Record<string, string>> = {
@@ -121,6 +127,19 @@ const setStatus = (message: string): void => {
 // --- Building selection + causal inspection panel (Step 3) ------------------
 
 let selectedBuildingId: string | null = null
+
+/** Colonist currently offered for reassignment (Step 10M). Derived per inspection refresh. */
+let currentWorkerColonistId: string | null = null
+
+const REASSIGN_REASON_LABELS: Readonly<Record<string, string>> = {
+  unknownColonist: 'unknown worker',
+  noResidence: 'no residence',
+  unknownWorkplace: 'missing',
+  notWorkplace: 'not a workplace',
+  notOperational: 'not operational',
+  workplaceOccupied: 'occupied',
+  notConnected: 'no road access',
+}
 
 const refreshInspection = (): void => {
   const building =
@@ -166,6 +185,82 @@ const refreshInspection = (): void => {
       ui.insHousing.textContent = `Jobs — Capacity ${capacity} · Workers ${workers}/${capacity} · ${upkeep}`
     } else {
       ui.insHousing.textContent = `Housing — Capacity ${building.housingCapacity} · Residents ${building.occupiedHousing}`
+    }
+  }
+
+  // Step 10M: which colonist works here, and the explicit reassignment
+  // control. Eligibility comes from the domain query, never re-derived here.
+  const state = controller.getState()
+  const workplace =
+    selectedBuildingId === null ? undefined : state.buildings[selectedBuildingId]
+  const isWorkplace =
+    workplace !== undefined &&
+    (workplace.type === 'farm' || workplace.type === 'workshop')
+  let workerId: string | null = null
+  if (isWorkplace && workplace?.status === 'operational') {
+    const workers = Object.values(state.colonists)
+      .filter((colonist) => colonist.workplaceId === workplace.id)
+      .map((colonist) => colonist.id)
+      .sort()
+    workerId = workers[0] ?? null
+  }
+  currentWorkerColonistId = workerId
+  if (ui.insWorker !== null) {
+    if (!isWorkplace) {
+      ui.insWorker.textContent = ''
+    } else if (workerId === null) {
+      ui.insWorker.textContent = 'Worker — none (vacant)'
+    } else {
+      const colonist = getColonistInspection(state, workerId)
+      const mode =
+        colonist?.workplaceAssignmentMode === 'manual'
+          ? 'manual override'
+          : 'automatic assignment'
+      ui.insWorker.textContent = `Worker — ${mode}`
+    }
+  }
+  if (ui.reassignRow !== null && ui.reassignTarget !== null) {
+    if (workerId === null) {
+      ui.reassignRow.style.display = 'none'
+      ui.reassignTarget.replaceChildren()
+    } else {
+      ui.reassignRow.style.display = 'flex'
+      const options = getReassignmentOptions(state, workerId)
+      const ordinals = new Map<string, number>()
+      let farmCount = 0
+      let workshopCount = 0
+      for (const option of options) {
+        if (option.type === 'farm') {
+          farmCount += 1
+          ordinals.set(option.workplaceId, farmCount)
+        } else {
+          workshopCount += 1
+          ordinals.set(option.workplaceId, workshopCount)
+        }
+      }
+      const select = ui.reassignTarget
+      select.replaceChildren()
+      for (const option of options) {
+        const element = document.createElement('option')
+        element.value = option.workplaceId
+        const typeLabel = BUILDING_LABELS[option.type] ?? option.type
+        const ordinal = ordinals.get(option.workplaceId) ?? 0
+        if (option.isCurrent) {
+          element.textContent = `${typeLabel} ${ordinal} — current`
+          element.disabled = true
+        } else if (!option.eligible) {
+          const reason =
+            REASSIGN_REASON_LABELS[option.reason ?? ''] ?? option.reason
+          element.textContent = `${typeLabel} ${ordinal} — ${reason}`
+          element.disabled = true
+        } else {
+          const distance = option.distance ?? 0
+          element.textContent = `${typeLabel} ${ordinal} · ${distance} step${distance === 1 ? '' : 's'} · workers ${option.workers}/${option.capacity}`
+        }
+        select.appendChild(element)
+      }
+      const hasEligible = options.some((option) => option.eligible)
+      ui.reassignConfirm?.toggleAttribute('disabled', !hasEligible)
     }
   }
 }
@@ -227,6 +322,46 @@ if (ui.buildRoad !== null) {
   ui.buildRoad.textContent = `Road · ${ROAD_CONSTRUCTION_COST}`
 }
 refreshToolButtons()
+
+// Step 10M: the smallest player-facing control. The player selects the
+// building where a colonist currently works, chooses a valid target from the
+// domain-provided options, and dispatches `reassignColonist`. Validation and
+// persistence stay in the domain/application layers; the UI never mutates
+// canonical state directly.
+const confirmReassign = (): void => {
+  if (currentWorkerColonistId === null || ui.reassignTarget === null) {
+    return
+  }
+  const targetId = ui.reassignTarget.value
+  if (targetId === '') {
+    return
+  }
+  const before = controller.getState()
+  const target = before.buildings[targetId]
+  const targetLabel =
+    target === undefined
+      ? targetId
+      : (BUILDING_LABELS[target.type] ?? target.type)
+  const colonistId = currentWorkerColonistId
+  controller.dispatch({
+    type: 'reassignColonist',
+    colonistId,
+    workplaceId: targetId,
+  })
+  const after = controller.getState()
+  const updated = after.colonists[colonistId]
+  if (
+    updated !== undefined &&
+    updated.workplaceId === targetId &&
+    updated.workplaceAssignmentMode === 'manual'
+  ) {
+    setStatus(`Worker reassigned to ${targetLabel} — manual override`)
+  } else {
+    setStatus('Reassignment rejected')
+  }
+  refreshInspection()
+}
+ui.reassignConfirm?.addEventListener('click', confirmReassign)
 
 // --- Render + UI update on canonical state change ----------------------------
 
@@ -722,7 +857,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly status: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -835,6 +970,13 @@ window.__nova = {
         .sort()
         .join(','),
       vacantOperationalFarms: String(getVacantOperationalFarmCount(state)),
+      // Step 10M: which colonists are under an explicit manual override
+      // (diagnostic only; never persisted beyond workplaceAssignmentMode).
+      manualWorkerIds: Object.values(state.colonists)
+        .filter((colonist) => colonist.workplaceAssignmentMode === 'manual')
+        .map((colonist) => colonist.id)
+        .sort()
+        .join(','),
       colonists: ui.colonists?.textContent ?? '',
       jobs: ui.jobs?.textContent ?? '',
       employed: String(employment.employed),

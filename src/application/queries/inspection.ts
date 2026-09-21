@@ -7,6 +7,12 @@ import type { BuildingStatus, BuildingType } from '../../domain/building/buildin
 import { getBuildingDefinition } from '../../domain/building/building.js'
 import type { HousingSummary } from '../../domain/housing/housing.js'
 import { getHousingSummary, iterateBuildings, iterateColonists } from '../../domain/housing/housing.js'
+import { countWorkersAt, jobCapacityOf } from '../../domain/jobs/jobs.js'
+import type { WorkplaceAssignmentMode } from '../../domain/population/colonist.js'
+import {
+  validateReassignment,
+  type ReassignmentReason,
+} from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 export interface InspectionSummary {
@@ -105,4 +111,85 @@ export const getBuildingIdAtCell = (
     }
   }
   return null
+}
+
+// ---------------------------------------------------------------------------
+// Manual workforce reassignment queries (Step 10M)
+// ---------------------------------------------------------------------------
+
+/** Player-facing view of one colonist's employment (Step 10M). */
+export interface ColonistInspection {
+  readonly id: string
+  readonly residenceId: string | null
+  readonly workplaceId: string | null
+  readonly workplaceAssignmentMode: WorkplaceAssignmentMode
+}
+
+export const getColonistInspection = (
+  state: SimulationState,
+  colonistId: string
+): ColonistInspection | null => {
+  const colonist = state.colonists[colonistId]
+  if (colonist === undefined) {
+    return null
+  }
+  return {
+    id: colonist.id,
+    residenceId: colonist.residenceId,
+    workplaceId: colonist.workplaceId,
+    workplaceAssignmentMode: colonist.workplaceAssignmentMode,
+  }
+}
+
+/**
+ * One possible reassignment target for a colonist. `eligible` is the exact
+ * domain validation result (never re-derived in the UI); `reason` carries the
+ * deterministic rejection cause for invalid targets; `isCurrent` marks the
+ * colonist's present workplace (a deterministic no-op if re-selected).
+ */
+export interface ReassignmentOption {
+  readonly workplaceId: string
+  readonly type: BuildingType
+  readonly status: BuildingStatus
+  readonly distance: number | null
+  readonly workers: number
+  readonly capacity: number
+  readonly eligible: boolean
+  readonly reason: ReassignmentReason | null
+  readonly isCurrent: boolean
+}
+
+/**
+ * All Farm/Workshop targets for one colonist, in ascending building-id order.
+ * `validateReassignment` is the single source of truth for eligibility, so the
+ * UI never duplicates mobility, capacity or operational rules.
+ */
+export const getReassignmentOptions = (
+  state: SimulationState,
+  colonistId: string
+): readonly ReassignmentOption[] => {
+  const colonist = state.colonists[colonistId]
+  if (colonist === undefined) {
+    return []
+  }
+  const options: ReassignmentOption[] = []
+  for (const building of iterateBuildings(state)) {
+    if (building.type !== 'farm' && building.type !== 'workshop') {
+      continue
+    }
+    const validation = validateReassignment(state, colonistId, building.id)
+    const isCurrent = colonist.workplaceId === building.id
+    options.push({
+      workplaceId: building.id,
+      type: building.type,
+      status: building.status,
+      distance: validation.valid ? validation.distance : null,
+      workers: countWorkersAt(state, building.id),
+      capacity: jobCapacityOf(building),
+      eligible: validation.valid && !isCurrent,
+      reason: validation.valid ? null : validation.reason,
+      isCurrent,
+    })
+  }
+  return options
 }

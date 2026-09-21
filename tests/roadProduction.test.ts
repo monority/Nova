@@ -204,7 +204,7 @@ describe('road access production constraint (Step 09F)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getBuildingRoadAccess(loaded, 'building-2')).toEqual(before)
     expect(materialProductionForTick(loaded)).toBe(productionBefore)
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 
   it('M — determinism: identical runs produce identical states and production', () => {

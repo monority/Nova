@@ -422,7 +422,7 @@ describe('road projection, persistence and determinism (Step 09H)', () => {
     const raw = serializeSave(state)
     expect(raw.includes('connections')).toBe(false)
     expect(raw.includes('orientation')).toBe(false)
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 
   it('T — deterministic replay: same gestures, same state and hash', () => {

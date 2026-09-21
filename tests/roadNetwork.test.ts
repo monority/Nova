@@ -283,6 +283,6 @@ describe('road network connectivity (Step 09D)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getRoadNetworks(loaded)).toEqual(before)
     // No network cache persisted: SAVE_VERSION unchanged.
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 })

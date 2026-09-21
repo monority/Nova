@@ -247,6 +247,6 @@ describe('operational upkeep (Step 08C)', () => {
     expect(getResourceStock(state).construction).toBe(
       getResourceStock(after).construction + 1
     )
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 })

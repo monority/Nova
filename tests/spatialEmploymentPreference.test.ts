@@ -769,7 +769,7 @@ describe('M-R / M-S — no persistence, stable hash', () => {
   }
 
   it('M-R — SAVE_VERSION 4, and the distance is absent from the save', () => {
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
     const state = scenario()
     const raw = serializeSave(state)
     for (const fragment of ['distance', 'roadDistance', 'preference']) {

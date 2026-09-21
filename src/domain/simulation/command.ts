@@ -26,4 +26,20 @@ export interface PlaceRoadsCommand {
   readonly cells: readonly CellCoordinate[]
 }
 
-export type SimulationCommand = PlaceBuildingCommand | PlaceRoadsCommand
+/**
+ * Explicit player reassignment of one existing colonist (Step 10M). The
+ * smallest workforce control: `assignJobs` keeps owning the automatic
+ * default, while this command pins one colonist to a workplace it has chosen
+ * manually. Validated by the domain against the existing employment,
+ * mobility and capacity predicates — it never bypasses them.
+ */
+export interface ReassignColonistCommand {
+  readonly type: 'reassignColonist'
+  readonly colonistId: string
+  readonly workplaceId: string
+}
+
+export type SimulationCommand =
+  | PlaceBuildingCommand
+  | PlaceRoadsCommand
+  | ReassignColonistCommand

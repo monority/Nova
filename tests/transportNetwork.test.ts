@@ -309,6 +309,6 @@ describe('transport network connectivity (Step 09A)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getAccessibleBuildingIds(loaded)).toEqual(before)
     // No accessibility state persisted: SAVE_VERSION unchanged.
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 })

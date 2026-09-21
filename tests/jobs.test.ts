@@ -556,7 +556,7 @@ describe('employment render projection (Step 07C §13)', () => {
 
 describe('jobs persistence (Step 07C §10)', () => {
   it('bumps the save version to 4', () => {
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 
   it('round-trips employment state with hash and behavioral equivalence', () => {

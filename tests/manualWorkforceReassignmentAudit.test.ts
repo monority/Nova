@@ -344,11 +344,11 @@ describe('3/4 — current workforce model and hypothetical contract', () => {
     audit('HOOK_FIDELITY', { identical: true })
   })
 
-  it('documents that workplaceId is already the only canonical employment state', () => {
+  it('documents the canonical employment state (workplaceId + assignment mode since Step 10M)', () => {
     const state = rowWorld({ residences: 2, farms: 1, workshops: 1 })
     const keys = Object.keys(Object.values(state.colonists)[0]!).sort()
-    audit('COLONIST_STATE', { keys, note: 'reassignment is a workplaceId value change, not new state' })
-    expect(keys).toEqual(['id', 'residenceId', 'workplaceId'])
+    audit('COLONIST_STATE', { keys, note: 'reassignment is a workplaceId + workplaceAssignmentMode value change, not new state' })
+    expect(keys).toEqual(['id', 'residenceId', 'workplaceAssignmentMode', 'workplaceId'])
   })
 
   it('documents the hypothetical validation contract', () => {
@@ -827,7 +827,7 @@ describe('16/17 — persistence and invalid-control audit', () => {
     expect(restored.colonists['colonist-2']!.workplaceId).toBe('building-5')
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(manual))
     audit('PERSISTENCE', { saveVersion: SAVE_VERSION, newStateFields: 0, workplaceId: restored.colonists['colonist-2']!.workplaceId })
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
   })
 
   it('one colonist can never hold two workplaces and capacity is one per workplace', () => {

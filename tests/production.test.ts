@@ -238,7 +238,7 @@ describe('farm persistence (Step 06B §14)', () => {
   it('round-trips a state containing farms (SAVE_VERSION 4 since Step 07C)', () => {
     // Step 07C added ColonistState.workplaceId, bumping the save version from
     // 3 to 4. Farm behavior itself is unchanged and still round-trips.
-    expect(SAVE_VERSION).toBe(4)
+    expect(SAVE_VERSION).toBe(5)
     let state = stepSimulation(createTestState(), placeFarm(1, 1))
     state = stepSimulation(state)
     const restored = loadSave(serializeSave(state))

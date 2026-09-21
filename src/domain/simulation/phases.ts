@@ -206,6 +206,85 @@ export const validateRoadsPlacement = (
   return { valid: true, cells: normalized, totalCost }
 }
 
+// ---------------------------------------------------------------------------
+// Manual workforce reassignment (Step 10M)
+// ---------------------------------------------------------------------------
+
+/** Deterministic rejection reasons for `reassignColonist`. */
+export type ReassignmentReason =
+  | 'unknownColonist'
+  | 'noResidence'
+  | 'unknownWorkplace'
+  | 'notWorkplace'
+  | 'notOperational'
+  | 'workplaceOccupied'
+  | 'notConnected'
+
+export type ReassignmentValidation =
+  | { readonly valid: true; readonly distance: number }
+  | { readonly valid: false; readonly reason: ReassignmentReason }
+
+/**
+ * Validation for an explicit player reassignment (Step 10M). Single source
+ * of truth shared by `applyCommand` and the `getReassignmentOptions` query.
+ * Reuses the EXISTING employment, mobility and capacity predicates — it adds
+ * no new eligibility semantics and never bypasses a simulation rule.
+ *
+ * Deterministic validation order:
+ *   1. colonist exists
+ *   2. colonist has a residence
+ *   3. target building exists
+ *   4. target is a Farm or Workshop
+ *   5. target is operational
+ *   6. target has free capacity (the colonist's own workplace is never
+ *      counted against itself, so a no-op re-selection stays valid)
+ *   7. residence and target are mobility-connected (09K)
+ */
+export const validateReassignment = (
+  state: SimulationState,
+  colonistId: string,
+  workplaceId: string
+): ReassignmentValidation => {
+  const colonist = state.colonists[colonistId]
+  if (colonist === undefined) {
+    return { valid: false, reason: 'unknownColonist' }
+  }
+  const residenceId = colonist.residenceId
+  if (residenceId === null) {
+    return { valid: false, reason: 'noResidence' }
+  }
+  const workplace = state.buildings[workplaceId]
+  if (workplace === undefined) {
+    return { valid: false, reason: 'unknownWorkplace' }
+  }
+  if (workplace.type !== 'farm' && workplace.type !== 'workshop') {
+    return { valid: false, reason: 'notWorkplace' }
+  }
+  if (!isOperationalWorkplace(workplace)) {
+    return { valid: false, reason: 'notOperational' }
+  }
+  if (
+    workplaceId !== colonist.workplaceId &&
+    countWorkersAt(state, workplaceId) > 0
+  ) {
+    return { valid: false, reason: 'workplaceOccupied' }
+  }
+  const residenceAccess = getBuildingRoadAccess(state, residenceId)
+  const workplaceAccess = getBuildingRoadAccess(state, workplaceId)
+  if (!areAccessesConnected(residenceAccess, workplaceAccess)) {
+    return { valid: false, reason: 'notConnected' }
+  }
+  const distance = getDistanceBetweenAccesses(
+    state,
+    residenceAccess,
+    workplaceAccess
+  )
+  if (distance === null) {
+    return { valid: false, reason: 'notConnected' }
+  }
+  return { valid: true, distance }
+}
+
 /**
  * Valid placement: known type, inside bounds, free cell, affordable against
  * the stock of the state this runs on. Invalid command = explicit no-op
@@ -267,6 +346,50 @@ export const applyCommand = (
         reason: null,
         placedBuildingId: null,
         placedRoadIds: created.roadIds,
+      }
+    }
+    case 'reassignColonist': {
+      // Deterministic no-op when the colonist already works there: the
+      // player's intent is already satisfied and nothing changes.
+      const current = state.colonists[command.colonistId]
+      if (current !== undefined && current.workplaceId === command.workplaceId) {
+        return { state, accepted: true, reason: null, placedBuildingId: null, placedRoadIds: [] }
+      }
+      const validation = validateReassignment(
+        state,
+        command.colonistId,
+        command.workplaceId
+      )
+      if (!validation.valid) {
+        return {
+          state,
+          accepted: false,
+          reason: validation.reason,
+          placedBuildingId: null,
+          placedRoadIds: [],
+        }
+      }
+      const colonist = state.colonists[command.colonistId]
+      if (colonist === undefined) {
+        // Defensive: validateReassignment already rejected this.
+        return { state, accepted: false, reason: 'unknownColonist', placedBuildingId: null, placedRoadIds: [] }
+      }
+      return {
+        state: {
+          ...state,
+          colonists: {
+            ...state.colonists,
+            [command.colonistId]: {
+              ...colonist,
+              workplaceId: command.workplaceId,
+              workplaceAssignmentMode: 'manual',
+            },
+          },
+        },
+        accepted: true,
+        reason: null,
+        placedBuildingId: null,
+        placedRoadIds: [],
       }
     }
   }
@@ -623,10 +746,52 @@ export const assignJobs = (state: SimulationState): SimulationState => {
     return access
   }
 
+  // Step 10M: manual reservations are resolved FIRST, so an automatic
+  // colonist can never take a workplace that a manual colonist still validly
+  // holds, and so an invalid manual assignment is cleared before the
+  // automatic pass (recovery to normal behavior).
+  const manualValid = new Set<string>()
+  for (const colonist of colonists) {
+    if (colonist.workplaceAssignmentMode !== 'manual') {
+      continue
+    }
+    const workplaceId = colonist.workplaceId
+    const residenceId = colonist.residenceId
+    if (workplaceId === null || residenceId === null) {
+      continue
+    }
+    if (takenWorkplaceIds.has(workplaceId)) {
+      continue
+    }
+    const workplace = state.buildings[workplaceId]
+    if (workplace === undefined || !isOperationalWorkplace(workplace)) {
+      continue
+    }
+    const residenceAccess = accessOf(residenceId)
+    const workplaceAccess = accessOf(workplaceId)
+    if (!areAccessesConnected(residenceAccess, workplaceAccess)) {
+      continue
+    }
+    if (
+      getDistanceBetweenAccesses(state, residenceAccess, workplaceAccess) ===
+      null
+    ) {
+      continue
+    }
+    takenWorkplaceIds.add(workplaceId)
+    manualValid.add(colonist.id)
+  }
+
   const nextColonists: Record<string, ColonistState> = {}
   let changed = false
 
   for (const colonist of colonists) {
+    // A still-valid manual choice is preserved verbatim: the player's
+    // decision is never overwritten by the nearest-workplace preference.
+    if (manualValid.has(colonist.id)) {
+      nextColonists[colonist.id] = colonist
+      continue
+    }
     const residenceId = colonist.residenceId
     let selected: string | null = null
 
@@ -680,10 +845,17 @@ export const assignJobs = (state: SimulationState): SimulationState => {
       }
     }
 
-    if (selected === colonist.workplaceId) {
+    const wasManual = colonist.workplaceAssignmentMode === 'manual'
+    if (selected === colonist.workplaceId && !wasManual) {
       nextColonists[colonist.id] = colonist
     } else {
-      nextColonists[colonist.id] = { ...colonist, workplaceId: selected }
+      // Clear an invalid manual choice back to automatic behavior, or apply
+      // the automatic selection. The colonist is never left stale.
+      nextColonists[colonist.id] = {
+        ...colonist,
+        workplaceId: selected,
+        workplaceAssignmentMode: 'automatic',
+      }
       changed = true
     }
   }

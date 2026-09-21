@@ -109,8 +109,14 @@ export const createColonist = (
 ): { state: SimulationState; colonistId: string } => {
   const id = makeColonistId(state.counters.nextColonistId)
   // New colonists start unemployed: employment is granted only by the
-  // deterministic assignJobs phase (Step 07C §4).
-  const colonist: ColonistState = { id, residenceId, workplaceId: null }
+  // deterministic assignJobs phase (Step 07C §4). Step 10M: the initial
+  // assignment mode is `automatic`, so pre-10M behavior is unchanged.
+  const colonist: ColonistState = {
+    id,
+    residenceId,
+    workplaceId: null,
+    workplaceAssignmentMode: 'automatic',
+  }
   return {
     colonistId: id,
     state: {
