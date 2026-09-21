@@ -23,7 +23,8 @@
     "test:e2e:road": "node e2e/roadRun.mjs",
     "test:e2e:reassign": "node e2e/reassignRun.mjs",
     "test:e2e:water": "node e2e/waterRun.mjs",
-    "test:e2e:crew": "node e2e/constructionCrewRun.mjs"
+    "test:e2e:crew": "node e2e/constructionCrewRun.mjs",
+    "test:e2e:progression": "node e2e/progressionRun.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

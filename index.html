@@ -84,6 +84,35 @@
         max-width: 320px;
         line-height: 1.35;
       }
+      #progression {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-width: 320px;
+        padding-top: 6px;
+        border-top: 1px solid #2a3140;
+      }
+      #progression .stats {
+        font-size: 12px;
+      }
+      #ui-objective {
+        font-size: 11px;
+        color: #d9a441;
+        line-height: 1.35;
+      }
+      #ui-progress,
+      #ui-blocked {
+        font-size: 11px;
+        color: #9aa4b5;
+        line-height: 1.35;
+        white-space: pre-line;
+      }
+      #ui-blocked {
+        color: #d98f8f;
+      }
+      #scenario {
+        max-width: 190px;
+      }
       #selected-building {
         font-size: 12px;
         color: #9aa4b5;
@@ -132,6 +161,18 @@
       </div>
       <div class="row" role="group" aria-label="mobility selection">
         <button id="btn-build-road" type="button" data-testid="build-road" aria-pressed="false">Road · 5</button>
+      </div>
+      <div class="row">
+        <select id="scenario" data-testid="scenario-select" aria-label="scenario" title="scenario"></select>
+      </div>
+      <div id="progression" data-testid="progression">
+        <div class="stats">
+          <div>Stage:</div><span id="ui-stage" data-testid="progression-stage">Wilderness</span>
+          <div>Next:</div><span id="ui-next-stage" data-testid="progression-next">Settlement</span>
+        </div>
+        <div id="ui-objective" data-testid="progression-objective"></div>
+        <div id="ui-progress" data-testid="progression-progress"></div>
+        <div id="ui-blocked" data-testid="progression-blocked"></div>
       </div>
       <div class="stats">
         <div>Tick:</div><span id="ui-tick" data-testid="stat-tick">0</span>

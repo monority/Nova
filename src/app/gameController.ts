@@ -18,6 +18,12 @@ export interface GameController {
   getSnapshot: () => RenderSnapshot
   /** Apply an optional player command as one simulation tick. */
   dispatch: (command?: SimulationCommand) => void
+  /**
+   * Replace the canonical state (Step 10AL: scenario loading). The caller
+   * supplies a valid canonical state built from scenario data; the
+   * controller never transforms it and no simulation rule runs here.
+   */
+  load: (state: SimulationState) => void
   /** Subscribe to canonical state changes (renderer + UI). */
   subscribe: (listener: (state: SimulationState) => void) => () => void
 }
@@ -43,6 +49,10 @@ export const createGameController = (
         state = next
         notify()
       }
+    },
+    load: (nextState) => {
+      state = nextState
+      notify()
     },
     subscribe: (listener) => {
       listeners.add(listener)

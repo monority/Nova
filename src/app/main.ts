@@ -12,11 +12,14 @@
  * advancement goes exclusively through the SimulationClock.
  */
 
-import type { BuildingInspection, BuildingType, SimulationConfig, SimulationState } from '../index.js'
+import type { BuildingInspection, BuildingType, ProgressionStatus, SimulationConfig, SimulationState } from '../index.js'
 import {
   countStaffedOperationalWorkshops,
   countWorkersAt,
+  createDefaultState,
   createInitialState,
+  createScenarioState,
+  findScenario,
   FOOD_PER_FARM_PER_TICK,
   getBuildingDefinition,
   getBuildingIdAtCell,
@@ -24,7 +27,9 @@ import {
   getColonistInspection,
   getConstructionCrewId,
   getConstructionCrewOptions,
+  getProgression,
   getReassignmentOptions,
+  SCENARIOS,
   serializeSave,
   getAccessibleBuildingCount,
   getEmploymentSummary,
@@ -107,6 +112,12 @@ const ui = {
   colonists: document.querySelector<HTMLSpanElement>('#ui-colonists'),
   jobs: document.querySelector<HTMLSpanElement>('#ui-jobs'),
   roads: document.querySelector<HTMLSpanElement>('#ui-roads'),
+  scenario: document.querySelector<HTMLSelectElement>('#scenario'),
+  stage: document.querySelector<HTMLSpanElement>('#ui-stage'),
+  nextStage: document.querySelector<HTMLSpanElement>('#ui-next-stage'),
+  objective: document.querySelector<HTMLElement>('#ui-objective'),
+  progress: document.querySelector<HTMLElement>('#ui-progress'),
+  blocked: document.querySelector<HTMLElement>('#ui-blocked'),
   status: document.querySelector<HTMLDivElement>('#ui-status'),
   insType: document.querySelector<HTMLElement>('#ins-type'),
   insStatus: document.querySelector<HTMLElement>('#ins-status'),
@@ -557,6 +568,81 @@ let previousConstruction = INITIAL_CONSTRUCTION_MATERIAL
 let previousBuildingCount = 0
 let tickCausalMessage = false
 
+// Step 10AL: scenario framing. Pure UI state, never part of the simulation.
+let currentScenarioId = 'default'
+let currentScenarioObjective = ''
+
+/**
+ * Step 10AL: progression framing, derived from existing state only. The
+ * checklist shows the next stage's conditions (or the current one once
+ * progression is deferred); the objective label comes from the scenario.
+ */
+const renderProgression = (): void => {
+  const status = getProgression(controller.getState())
+  if (ui.stage !== null) {
+    ui.stage.textContent = status.stageLabel
+  }
+  if (ui.nextStage !== null) {
+    ui.nextStage.textContent = status.nextStageLabel ?? 'not yet defined'
+  }
+  if (ui.objective !== null) {
+    ui.objective.textContent =
+      currentScenarioObjective === '' ? '' : `Objective — ${currentScenarioObjective}`
+  }
+  const checklist =
+    status.nextConditions.length > 0 ? status.nextConditions : status.conditions
+  if (ui.progress !== null) {
+    ui.progress.textContent = checklist
+      .map(
+        (condition) =>
+          `${condition.met ? '✓' : '✗'} ${condition.label} — ${condition.detail}`
+      )
+      .join('\n')
+  }
+  if (ui.blocked !== null) {
+    ui.blocked.textContent =
+      status.blockers.length === 0
+        ? ''
+        : `Blocked by — ${status.blockers.join(', ')}`
+  }
+}
+
+/**
+ * Step 10AL: load a scenario (or the unchanged default game). The state is
+ * assembled once from scenario data and handed to the controller; no
+ * simulation rule runs here and no rule differs between scenarios.
+ */
+const applyScenario = (id: string): void => {
+  const definition = findScenario(id) ?? null
+  const next =
+    definition === null
+      ? createDefaultState(WORLD_CONFIG)
+      : createScenarioState(WORLD_CONFIG, definition)
+  clock.pause()
+  selectedBuildingId = null
+  selectedTool = { kind: 'building', type: 'residence' }
+  currentScenarioId = definition === null ? 'default' : definition.id
+  currentScenarioObjective = definition === null ? '' : definition.objective
+  // Reset transition tracking so the new state's first frame is not read as a
+  // per-tick delta by the causal status messages.
+  previousColonistCount = Object.keys(next.colonists).length
+  previousFood = next.resources.food
+  previousEmployed = getEmploymentSummary(next).employed
+  previousConstruction = next.resources.construction
+  previousBuildingCount = Object.keys(next.buildings).length
+  starved = false
+  tickCausalMessage = false
+  controller.load(next)
+  refreshToolButtons()
+  setStatus(
+    definition === null
+      ? 'Free play — no scenario objective'
+      : `Scenario — ${definition.name}: ${definition.objective}`
+  )
+  refreshUi()
+  refreshInspection()
+}
+
 const pluralize = (count: number, singular: string): string =>
   `${count} ${singular}${count === 1 ? '' : 's'}`
 
@@ -767,6 +853,7 @@ const refreshUi = (): void => {
       tickCausalMessage = true
     }
   }
+  renderProgression()
 }
 
 controller.subscribe(() => {
@@ -779,6 +866,27 @@ controller.subscribe(() => {
 novaRenderer.render(controller.getSnapshot())
 refreshUi()
 refreshInspection()
+
+// --- Scenario selection (Step 10AL) ------------------------------------------
+
+if (ui.scenario !== null) {
+  const options: HTMLOptionElement[] = []
+  const freePlay = document.createElement('option')
+  freePlay.value = 'default'
+  freePlay.textContent = 'Free play'
+  options.push(freePlay)
+  for (const scenario of SCENARIOS) {
+    const option = document.createElement('option')
+    option.value = scenario.id
+    option.textContent = scenario.name
+    options.push(option)
+  }
+  ui.scenario.replaceChildren(...options)
+  ui.scenario.value = currentScenarioId
+  ui.scenario.addEventListener('change', () => {
+    applyScenario(ui.scenario?.value ?? 'default')
+  })
+}
 
 // --- Simulation controls -----------------------------------------------------
 
@@ -1078,6 +1186,8 @@ declare global {
       context: () => WebGLDiagnostic
       selectedBuilding: () => BuildingInspection | null
       readonly serialize: () => string
+      progression: () => ProgressionStatus
+      scenario: () => { readonly id: string; readonly objective: string }
       buildingAt: (cell: { readonly x: number; readonly y: number }) => BuildingInspection | null
     }
   }
@@ -1276,6 +1386,8 @@ window.__nova = {
   // browser E2E to prove constructionAssignmentId is part of canonical save
   // state (the app itself has no save/load UI).
   serialize: () => serializeSave(controller.getState()),
+  progression: () => getProgression(controller.getState()),
+  scenario: () => ({ id: currentScenarioId, objective: currentScenarioObjective }),
   buildingAt: (cell) => {
     const buildingId = getBuildingIdAtCell(controller.getState(), cell)
     return buildingId === null
