@@ -27,6 +27,7 @@ import {
 } from '../domain/simulation/state.js'
 import { assignJobs } from '../domain/simulation/phases.js'
 import type { SimulationConfig } from '../domain/simulation/state.js'
+import type { ObjectiveDefinition } from './queries/objective.js'
 
 export interface ScenarioResources {
   readonly material: number
@@ -56,8 +57,8 @@ export interface ScenarioDefinition {
   readonly id: string
   readonly name: string
   readonly description: string
-  /** Objective label shown by the progression framing. Pure data. */
-  readonly objective: string
+  /** Evaluatable success condition plus framing. Pure data. */
+  readonly objective: ObjectiveDefinition
   readonly resources: ScenarioResources
   readonly buildings: readonly ScenarioBuilding[]
   readonly roads: readonly ScenarioCell[]
@@ -159,7 +160,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     name: 'First settlement',
     description:
       'The canonical opening: three buildings and one road cell stand between a wilderness and a first sustainable settlement.',
-    objective: 'Reach Settlement.',
+    objective: {
+      label: 'Reach Settlement.',
+      description: 'A first sustainable settlement: a colonist, a Food-producing Farm and a road network.',
+      constraint: 'Material 100 funds a Residence, a road and a Farm with 45 to spare.',
+      requirements: [{ kind: 'stage', stage: 'settlement' }],
+      // Starts empty: population 0 is the opening, not a collapse.
+      failsWithoutColonists: false,
+    },
     resources: { material: 100, food: 100, water: 0 },
     buildings: [],
     roads: [],
@@ -170,7 +178,13 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     name: 'Water constraint',
     description:
       'A working Farm and two colonists are already in place, but no Well exists: Food is stable and growth is blocked by Water capacity alone.',
-    objective: 'Reach Village: restore Water capacity without losing the Food balance.',
+    objective: {
+      label: 'Reach Village.',
+      description: 'Restore Water capacity without losing the Food balance: the single blocker is one staffed Well.',
+      constraint: 'Two colonists already live here; the Farm holds one of them.',
+      requirements: [{ kind: 'stage', stage: 'village' }],
+      failsWithoutColonists: true,
+    },
     resources: { material: 100, food: 50, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
@@ -185,7 +199,17 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     name: 'Industrial expansion',
     description:
       'A Village with Water and Food already balanced; Material income is the missing piece and one worker is the price of industry.',
-    objective: 'Reach Village and build a Workshop: industry costs Water and a worker.',
+    objective: {
+      label: 'Reach Village and build a Workshop.',
+      description:
+        'Industry costs 25 Material, 1 Water and a worker. A Workshop can be built here; running it needs a fourth pair of hands this colony does not have.',
+      constraint: 'The Water admission gate caps this colony at its current capacity.',
+      requirements: [
+        { kind: 'stage', stage: 'village' },
+        { kind: 'building', buildingType: 'workshop', atLeast: 1 },
+      ],
+      failsWithoutColonists: true,
+    },
     resources: { material: 100, food: 50, water: 10 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
@@ -201,7 +225,13 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     name: 'Spatial efficiency',
     description:
       'Exactly enough Material for one Residence, one road cell and one Farm: the road budget is the whole margin.',
-    objective: 'Reach Settlement on a 55-Material budget (Residence + road + Farm).',
+    objective: {
+      label: 'Reach Settlement.',
+      description: 'Exactly enough Material for one Residence, one road cell and one Farm: the road budget is the whole margin.',
+      constraint: 'Material 55 = Residence (25) + road (5) + Farm (25).',
+      requirements: [{ kind: 'stage', stage: 'settlement' }],
+      failsWithoutColonists: false,
+    },
     resources: { material: 55, food: 100, water: 0 },
     buildings: [],
     roads: [],
@@ -212,7 +242,17 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     name: 'Population expansion',
     description:
       'Housing for three, Food for two: growth is planned ahead of the Water capacity that would support it.',
-    objective: 'Grow the settlement to 4 colonists with Water capacity 4 and Food balanced.',
+    objective: {
+      label: 'Grow to 4 colonists with Water capacity 4 and Food balanced.',
+      description: 'Two Wells support four colonists and two Farms feed them: the objective costs the whole budget.',
+      constraint: 'Material 100 = two Wells (50) plus two Farms (50).',
+      requirements: [
+        { kind: 'population', atLeast: 4 },
+        { kind: 'waterCapacity', atLeast: 4 },
+        { kind: 'foodBalance' },
+      ],
+      failsWithoutColonists: true,
+    },
     resources: { material: 100, food: 100, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
@@ -237,7 +277,13 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     name: 'Recovery',
     description:
       'The Farm stands one road cell beyond the network, so it is staffed by nobody and produces nothing: the settlement is starving on its reserve.',
-    objective: 'Reach Settlement by connecting the stranded Farm to the network.',
+    objective: {
+      label: 'Reach Settlement by reconnecting the stranded Farm.',
+      description: 'The Farm stands one road cell outside the network, so nobody staffs it and the reserve is draining.',
+      constraint: 'Material 30 and Food 30: the reserve is finite.',
+      requirements: [{ kind: 'stage', stage: 'settlement' }],
+      failsWithoutColonists: true,
+    },
     resources: { material: 30, food: 30, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },

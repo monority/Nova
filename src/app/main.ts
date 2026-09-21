@@ -27,9 +27,12 @@ import {
   getColonistInspection,
   getConstructionCrewId,
   getConstructionCrewOptions,
+  getObjectiveStatus,
   getProgression,
   getReassignmentOptions,
   SCENARIOS,
+  type ObjectiveDefinition,
+  type ObjectiveStatus,
   serializeSave,
   getAccessibleBuildingCount,
   getEmploymentSummary,
@@ -116,6 +119,7 @@ const ui = {
   stage: document.querySelector<HTMLSpanElement>('#ui-stage'),
   nextStage: document.querySelector<HTMLSpanElement>('#ui-next-stage'),
   objective: document.querySelector<HTMLElement>('#ui-objective'),
+  objectiveStatus: document.querySelector<HTMLElement>('#ui-objective-status'),
   progress: document.querySelector<HTMLElement>('#ui-progress'),
   blocked: document.querySelector<HTMLElement>('#ui-blocked'),
   status: document.querySelector<HTMLDivElement>('#ui-status'),
@@ -570,7 +574,7 @@ let tickCausalMessage = false
 
 // Step 10AL: scenario framing. Pure UI state, never part of the simulation.
 let currentScenarioId = 'default'
-let currentScenarioObjective = ''
+let currentScenarioObjective: ObjectiveDefinition | null = null
 /** Step 10AM: skip the per-tick causal status for one scenario-load frame. */
 let suppressCausalMessage = false
 
@@ -587,9 +591,34 @@ const renderProgression = (): void => {
   if (ui.nextStage !== null) {
     ui.nextStage.textContent = status.nextStageLabel ?? 'not yet defined'
   }
+  const objectiveStatus: ObjectiveStatus | null =
+    currentScenarioObjective === null
+      ? null
+      : getObjectiveStatus(controller.getState(), currentScenarioObjective)
   if (ui.objective !== null) {
     ui.objective.textContent =
-      currentScenarioObjective === '' ? '' : `Objective — ${currentScenarioObjective}`
+      currentScenarioObjective === null
+        ? ''
+        : `Objective — ${currentScenarioObjective.label}
+Constraint — ${currentScenarioObjective.constraint}`
+  }
+  if (ui.objectiveStatus !== null) {
+    if (objectiveStatus === null) {
+      ui.objectiveStatus.textContent = ''
+    } else {
+      const met = objectiveStatus.requirements.filter((entry) => entry.met).length
+      const total = objectiveStatus.requirements.length
+      const pending =
+        objectiveStatus.blockers.length === 0
+          ? ''
+          : ` (${objectiveStatus.blockers.join(', ')})`
+      ui.objectiveStatus.textContent =
+        objectiveStatus.state === 'completed'
+          ? 'Objective complete'
+          : objectiveStatus.state === 'failed'
+            ? 'Objective failed — the colony is gone'
+            : `Objective in progress — ${met} / ${total}${pending}`
+    }
   }
   const checklist =
     status.nextConditions.length > 0 ? status.nextConditions : status.conditions
@@ -624,7 +653,7 @@ const applyScenario = (id: string): void => {
   selectedBuildingId = null
   selectedTool = { kind: 'building', type: 'residence' }
   currentScenarioId = definition === null ? 'default' : definition.id
-  currentScenarioObjective = definition === null ? '' : definition.objective
+  currentScenarioObjective = definition === null ? null : definition.objective
   // Reset transition tracking so the new state's first frame is not read as a
   // per-tick delta by the causal status messages.
   previousColonistCount = Object.keys(next.colonists).length
@@ -642,7 +671,7 @@ const applyScenario = (id: string): void => {
   setStatus(
     definition === null
       ? 'Free play — no scenario objective'
-      : `Scenario — ${definition.name}: ${definition.objective}`
+      : `Scenario — ${definition.name}: ${definition.objective.label}`
   )
   refreshInspection()
 }
@@ -1202,6 +1231,7 @@ declare global {
       selectedBuilding: () => BuildingInspection | null
       readonly serialize: () => string
       progression: () => ProgressionStatus
+      objective: () => ObjectiveStatus | null
       scenario: () => { readonly id: string; readonly objective: string }
       buildingAt: (cell: { readonly x: number; readonly y: number }) => BuildingInspection | null
     }
@@ -1402,7 +1432,11 @@ window.__nova = {
   // state (the app itself has no save/load UI).
   serialize: () => serializeSave(controller.getState()),
   progression: () => getProgression(controller.getState()),
-  scenario: () => ({ id: currentScenarioId, objective: currentScenarioObjective }),
+  objective: () =>
+    currentScenarioObjective === null
+      ? null
+      : getObjectiveStatus(controller.getState(), currentScenarioObjective),
+  scenario: () => ({ id: currentScenarioId, objective: currentScenarioObjective?.label ?? '' }),
   buildingAt: (cell) => {
     const buildingId = getBuildingIdAtCell(controller.getState(), cell)
     return buildingId === null

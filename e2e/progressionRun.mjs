@@ -55,6 +55,7 @@ async function waitFor(fn, label, timeoutMs = 8000) {
 const stats = (page) => page.evaluate(() => window.__nova.stats());
 const progression = (page) => page.evaluate(() => window.__nova.progression());
 const scenario = (page) => page.evaluate(() => window.__nova.scenario());
+const objective = (page) => page.evaluate(() => window.__nova.objective());
 
 async function step(page) {
   const before = Number((await stats(page)).tick);
@@ -185,6 +186,7 @@ async function main() {
       assert(info.id === expectation.id, `scenario id expected ${expectation.id}, got ${info.id}`);
       assert(info.objective.length > 0, `scenario ${expectation.id} has no objective label`);
       assert(text.objective.includes('Objective —'), `objective not displayed for ${expectation.id}: "${text.objective}"`);
+      assert(text.objective.includes('Constraint —'), `objective constraint not displayed for ${expectation.id}: "${text.objective}"`);
       assert(text.stage === expectation.stage, `scenario ${expectation.id} stage expected ${expectation.stage}, got ${text.stage}`);
       assert(s.buildings === expectation.buildings, `scenario ${expectation.id} buildings expected ${expectation.buildings}, got ${s.buildings}`);
       ok(`scenario ${expectation.id}: ${text.stage}, objective "${info.objective}", ${s.buildings} buildings`);
@@ -256,8 +258,27 @@ async function main() {
     assert(village.deferred === true, 'village must report deferred progression');
     assert(village.blockers.length === 0, `village must have no blockers, got ${JSON.stringify(village.blockers)}`);
     assert(text.blocked === '', `village blockers line must be empty, got "${text.blocked}"`);
-    ok('Settlement -> Village on a real Well placement; further progression deferred');
+    const villageObjective = await objective(page);
+    const villageObjectiveText = await page.locator('[data-testid="progression-objective-status"]').textContent();
+    assert(villageObjective?.state === 'completed', `water-constraint objective expected completed, got ${JSON.stringify(villageObjective)}`);
+    assert(villageObjectiveText.includes('Objective complete'), `objective status line expected complete, got "${villageObjectiveText}"`);
+    ok('Settlement -> Village on a real Well placement; further progression deferred; objective complete');
     await shot('04-village.png');
+
+    // --- Objective evaluation: Industrial expansion completes by building ---
+    await loadScenario(page, 'industrial-expansion');
+    let industrial = await objective(page);
+    let industrialText = await page.locator('[data-testid="progression-objective-status"]').textContent();
+    assert(industrial?.state === 'in_progress', `industrial objective expected in_progress, got ${JSON.stringify(industrial)}`);
+    assert(industrialText.includes('Workshop built'), `industrial blockers expected, got "${industrialText}"`);
+    await selectPalette(page, 'build-workshop', 'Workshop selected');
+    await placeAt(page, { x: 2, y: 2 });
+    for (let i = 0; i < 3; i += 1) await step(page);
+    industrial = await objective(page);
+    industrialText = await page.locator('[data-testid="progression-objective-status"]').textContent();
+    assert(industrial?.state === 'completed', `industrial objective expected completed after the Workshop, got ${JSON.stringify(industrial)}`);
+    assert(industrialText.includes('Objective complete'), `industrial objective line expected complete, got "${industrialText}"`);
+    ok('objective evaluation: Industrial expansion completes when the Workshop is built (in progress -> complete)');
 
     // --- Reproducibility: progression is recomputed, never stored ----------
     const first = JSON.stringify(await progression(page));
