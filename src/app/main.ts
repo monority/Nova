@@ -571,6 +571,8 @@ let tickCausalMessage = false
 // Step 10AL: scenario framing. Pure UI state, never part of the simulation.
 let currentScenarioId = 'default'
 let currentScenarioObjective = ''
+/** Step 10AM: skip the per-tick causal status for one scenario-load frame. */
+let suppressCausalMessage = false
 
 /**
  * Step 10AL: progression framing, derived from existing state only. The
@@ -632,14 +634,16 @@ const applyScenario = (id: string): void => {
   previousBuildingCount = Object.keys(next.buildings).length
   starved = false
   tickCausalMessage = false
+  suppressCausalMessage = true
   controller.load(next)
   refreshToolButtons()
+  // The scenario status is written last so it is the frame's status line; the
+  // load refresh already updated the stats and the progression panel.
   setStatus(
     definition === null
       ? 'Free play — no scenario objective'
       : `Scenario — ${definition.name}: ${definition.objective}`
   )
-  refreshUi()
   refreshInspection()
 }
 
@@ -735,7 +739,18 @@ const refreshUi = (): void => {
 
   // Causal message from the state transition, highest priority first.
   // Steady while its condition holds; never a per-tick event queue.
+  //
+  // Step 10AM: a scenario load replaces the canonical state without a
+  // simulation tick, so the per-tick delta arithmetic below would invent a
+  // production message ("0.5 farms produced 1 food"). The load path sets
+  // this flag for exactly one refresh; the scenario status wins that frame.
   tickCausalMessage = false
+  if (suppressCausalMessage) {
+    suppressCausalMessage = false
+    tickCausalMessage = true
+    renderProgression()
+    return
+  }
   if (prevColonists > 0 && colonists === 0) {
     // Whole colony starved this tick: the reserve was exhausted (consumeFood)
     // and updatePopulation removed everyone in the same tick.

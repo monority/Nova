@@ -191,6 +191,24 @@ async function main() {
     }
     await shot('02-scenario-recovery.png');
 
+    // --- Readability: the scenario framing wins the load frame (Step 10AM) --
+    // Regression: before the fix a scenario load produced a per-tick causal
+    // message ("0.5 farms produced 1 food") instead of the scenario framing.
+    const loadStatus = await page.locator('[data-testid="ui-status"]').textContent();
+    assert(
+      loadStatus.startsWith('Scenario — '),
+      `scenario load must show its framing status, got "${loadStatus}"`
+    );
+    await step(page);
+    const tickStatus = await page.locator('[data-testid="ui-status"]').textContent();
+    assert(
+      tickStatus.includes('consumed') || tickStatus.includes('produced') || tickStatus.includes('No '),
+      `a real tick must show a causal status, got "${tickStatus}"`
+    );
+    const panelLines = (await progressionText(page)).progress.split('\n');
+    assert(panelLines.length === 3, `non-village checklist must have 3 lines, got ${panelLines.length}`);
+    ok(`readability: scenario framing on load, causal status after a tick, ${panelLines.length}-line checklist`);
+
     // --- Failure case: the Recovery scenario stays Wilderness --------------
     const recoveryStart = await progression(page);
     assert(recoveryStart.stage === 'wilderness', 'recovery must start in Wilderness');
