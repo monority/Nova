@@ -34,6 +34,7 @@ import {
   getMaterialProductionPerTick,
   getMaterialStorageCapacity,
   getMaterialStoredProductionPerTick,
+  getPlacementAffordability,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getVacantOperationalFarmCount,
@@ -396,9 +397,15 @@ const refreshToolButtons = (): void => {
 const selectBuildingType = (type: BuildingType): void => {
   selectedTool = { kind: 'building', type }
   refreshToolButtons()
-  const cost = getBuildingDefinition(type).constructionCost
+  // Step 10AD: the selection feedback states the FULL construction contract,
+  // including the Workshop's one-off Water investment, straight from the
+  // catalog (no second affordability rule, no hardcoded duplicate).
+  const definition = getBuildingDefinition(type)
+  const water = definition.constructionWaterCost
   setStatus(
-    `${BUILDING_LABELS[type] ?? type} selected — material ${cost} per building`
+    `${BUILDING_LABELS[type] ?? type} selected — material ${definition.constructionCost}${
+      water === 0 ? '' : ` + ${water} water`
+    } per building`
   )
 }
 
@@ -428,10 +435,16 @@ if (ui.buildRoad !== null) {
   ui.buildRoad.textContent = `Road · ${ROAD_CONSTRUCTION_COST}`
 }
 if (ui.buildWorkshop !== null) {
-  // Step 10AD: the Workshop's construction contract comes from the catalog, so
-  // the palette label can never drift from the authoritative cost.
+  // Step 10AD: the Workshop's construction contract (25 Material + 1 Water)
+  // comes from the catalog. It is carried by the ACCESSIBLE NAME and the
+  // tooltip, never by a wider palette label: the palette row width is part of
+  // the layout the canvas hit-testing geometry assumes, so a longer label
+  // reflows the row and breaks pointer/cell alignment. The visible cost is in
+  // the hover status and the selection/rejection feedback below.
   const workshop = getBuildingDefinition('workshop')
-  ui.buildWorkshop.textContent = `Workshop · ${workshop.constructionCost} + ${workshop.constructionWaterCost} Water`
+  const cost = `${workshop.constructionCost} Material + ${workshop.constructionWaterCost} Water`
+  ui.buildWorkshop.title = `Workshop — costs ${cost}`
+  ui.buildWorkshop.setAttribute('aria-label', `Workshop — costs ${cost}`)
 }
 refreshToolButtons()
 
@@ -829,28 +842,32 @@ const describeCellStatus = (cell: CellCoordinate): string => {
   if (tool.kind !== 'building') {
     return ''
   }
-  const placement = validatePlacement(controller.getState(), cell, tool.type)
+  // Step 10AD-1: the preview and the dispatch gate share ONE affordability
+  // predicate (getPlacementAffordability), so the hover can never claim
+  // "insufficient material" for a placement the domain would accept.
+  const affordability = getPlacementAffordability(controller.getState(), cell, tool.type)
   const definition = getBuildingDefinition(tool.type)
   const waterSuffix =
     definition.constructionWaterCost === 0 ? '' : ` · water ${definition.constructionWaterCost}`
-  if (placement.valid) {
+  if (affordability.affordable) {
     const cost = definition.constructionCost
-    return `cell ${cell.x},${cell.y} — ready · material ${cost}${waterSuffix}`
+    const storedSuffix = affordability.coveredByStoredProduction
+      ? ` (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored this tick)`
+      : ''
+    return `cell ${cell.x},${cell.y} — ready · material ${cost}${storedSuffix}${waterSuffix}`
   }
-  if (placement.reason === 'insufficientResources') {
+  const placement = affordability.placement
+  if (!placement.valid && placement.reason === 'insufficientResources') {
     // Explainable failure (Step 4 §13): values come from real queries.
-    const required = definition.constructionCost
-    const available = getResourceStock(controller.getState()).construction
-    return `cell ${cell.x},${cell.y} — insufficient material (${available}/${required})`
+    return `cell ${cell.x},${cell.y} — insufficient material (${affordability.materialAvailable}/${affordability.materialRequired})`
   }
-  if (placement.reason === 'insufficientWater') {
-    // Step 10AD: the Water construction investment is its own causal reason.
-    const required = definition.constructionWaterCost
-    const available = getResourceStock(controller.getState()).water
-    return `cell ${cell.x},${cell.y} — insufficient water (${available}/${required})`
+  if (!placement.valid && placement.reason === 'insufficientWater') {
+    // Step 10AD: the Water construction investment is its own causal reason,
+    // and stored Material production never covers it.
+    return `cell ${cell.x},${cell.y} — insufficient water (${affordability.waterAvailable}/${affordability.waterRequired})`
   }
   return `cell ${cell.x},${cell.y} — ${
-    placement.reason === 'cellOccupied' ? 'occupied' : 'out of bounds'
+    !placement.valid && placement.reason === 'cellOccupied' ? 'occupied' : 'out of bounds'
   }`
 }
 
@@ -993,32 +1010,21 @@ canvas.addEventListener('pointerup', (event) => {
     return
   }
   const buildingType = selectedTool.type
-  const attempt = validatePlacement(controller.getState(), cell, buildingType)
-  // Step 08G §5: the construction transaction executes mid-tick, after this
-  // tick's STORED production is authoritative and before upkeep drains it.
-  // A click at 24 with +1 stored this tick therefore succeeds: the domain
-  // (applyCommand) re-validates mid-tick and stays authoritative. This gate
-  // only mirrors that check so a reachable construction is still dispatched.
-  // It never predicts future ticks: stored production is this tick's clamped
-  // 08F inflow, and any other failure reason still refuses without ticking.
-  const coveredSameTick =
-    attempt.valid ||
-    (attempt.reason === 'insufficientResources' &&
-      getResourceStock(controller.getState()).construction +
-        getMaterialStoredProductionPerTick(controller.getState()) >=
-        getBuildingDefinition(buildingType).constructionCost)
-  if (!coveredSameTick) {
-    if (attempt.reason === 'insufficientResources') {
+  // Step 08G §5 + Step 10AD-1: the same shared predicate the hover feedback
+  // uses decides whether this click is worth dispatching. The domain
+  // (applyCommand) still re-validates mid-tick and stays authoritative.
+  const affordability = getPlacementAffordability(controller.getState(), cell, buildingType)
+  const attempt = affordability.placement
+  if (!affordability.affordable) {
+    if (!attempt.valid && attempt.reason === 'insufficientResources') {
       // Explainable failure (Step 4 §13): explicit reason and real values.
-      const required = getBuildingDefinition(buildingType).constructionCost
-      const available = getResourceStock(controller.getState()).construction
       setStatus(
-        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — insufficient material (${available}/${required})`
+        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — insufficient material (${affordability.materialAvailable}/${affordability.materialRequired})`
       )
-    } else if (attempt.reason === 'insufficientWater') {
+    } else if (!attempt.valid && attempt.reason === 'insufficientWater') {
       // Step 10AD: Water is never covered by stored Material production.
-      const required = getBuildingDefinition(buildingType).constructionWaterCost
-      const available = getResourceStock(controller.getState()).water
+      const required = affordability.waterRequired
+      const available = affordability.waterAvailable
       setStatus(
         `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — requires ${required} water (${available} available)`
       )
