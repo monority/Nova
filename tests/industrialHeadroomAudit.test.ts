@@ -891,7 +891,10 @@ describe('9-10. Town implication and content candidates', { timeout: 30000 }, ()
       candidates,
       note: 'candidates are validated as inline data only; none is added to SCENARIOS in this step',
     })
-    expect(existing).toHaveLength(6)
+    // Step 10AQ added a seventh scenario (water-reserve-industry); the
+    // per-scenario measurement below is generic, so it covers the catalogue as
+    // it stands.
+    expect(existing).toHaveLength(7)
     expect(candidates).toHaveLength(3)
     for (const candidate of candidates) {
       expect(candidate.valid).toBe(true)

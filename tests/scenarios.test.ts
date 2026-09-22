@@ -44,7 +44,7 @@ describe('scenarios — data-only definitions', () => {
       expect(Array.isArray(scenario.roads)).toBe(true)
       expect(Array.isArray(scenario.colonists)).toBe(true)
     }
-    expect(SCENARIOS).toHaveLength(6)
+    expect(SCENARIOS).toHaveLength(7)
     expect(new Set(SCENARIOS.map((s) => s.id)).size).toBe(SCENARIOS.length)
   })
 
@@ -121,6 +121,7 @@ describe('scenarios — starting states and progression framing', () => {
       'first-settlement': { stage: 'wilderness', blockers: ['Population 1', 'Food balance', 'Road network'] },
       'water-constraint': { stage: 'settlement', blockers: ['Water capacity 2'] },
       'industrial-expansion': { stage: 'village', blockers: [] },
+      'water-reserve-industry': { stage: 'village', blockers: [] },
       'spatial-efficiency': { stage: 'wilderness', blockers: ['Population 1', 'Food balance', 'Road network'] },
       'population-expansion': { stage: 'settlement', blockers: ['Water capacity 2'] },
       recovery: { stage: 'wilderness', blockers: ['Food balance'] },

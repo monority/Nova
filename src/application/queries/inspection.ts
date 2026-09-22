@@ -182,9 +182,16 @@ export interface ReassignmentOption {
 }
 
 /**
- * All Farm/Workshop targets for one colonist, in ascending building-id order.
- * `validateReassignment` is the single source of truth for eligibility, so the
- * UI never duplicates mobility, capacity or operational rules.
+ * All workplace targets (Farm, Workshop, Well) for one colonist, in ascending
+ * building-id order. `validateReassignment` is the single source of truth for
+ * eligibility, so the UI never duplicates mobility, capacity or operational
+ * rules.
+ *
+ * Step 10AQ: Wells became workplaces in Step 10P, and `validateReassignment` /
+ * `applyCommand` have accepted them since — this list filtered them out, so the
+ * inspector could move a colonist OFF a Well but never back onto one. The
+ * filter now covers every workplace type the command accepts; the options list
+ * and the command share the same predicate again.
  */
 export const getReassignmentOptions = (
   state: SimulationState,
@@ -196,7 +203,11 @@ export const getReassignmentOptions = (
   }
   const options: ReassignmentOption[] = []
   for (const building of iterateBuildings(state)) {
-    if (building.type !== 'farm' && building.type !== 'workshop') {
+    if (
+      building.type !== 'farm' &&
+      building.type !== 'workshop' &&
+      building.type !== 'well'
+    ) {
       continue
     }
     const validation = validateReassignment(state, colonistId, building.id)

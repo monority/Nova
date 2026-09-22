@@ -198,11 +198,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     id: 'industrial-expansion',
     name: 'Industrial expansion',
     description:
-      'A Village with Water and Food already balanced; Material income is the missing piece and one worker is the price of industry.',
+      'A Village with Water and Food already balanced; the Workshop is buildable here, but running it is a burst that costs Water — not a permanent job.',
     objective: {
       label: 'Reach Village and build a Workshop.',
       description:
-        'Industry costs 25 Material, 1 Water and a worker. A Workshop can be built here; running it needs a fourth pair of hands this colony does not have.',
+        'Industry costs 25 Material, 1 Water and a worker. A Workshop can be built here; running it needs a fourth pair of hands this colony does not have, so its output is a reserve-funded burst, never a permanent income.',
       constraint: 'The Water admission gate caps this colony at its current capacity.',
       requirements: [
         { kind: 'stage', stage: 'village' },
@@ -218,6 +218,44 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       { type: 'well', x: 3, y: 2, operational: true },
     ],
     roads: RESIDENCE_FARM_WELL_ROADS,
+    colonists: [{ residence: { x: 1, y: 0 } }, { residence: { x: 3, y: 0 } }],
+  },
+  {
+    // Step 10AQ: the industrial CONVERSION archetype. Material 25 is exactly
+    // the Workshop, so the only way to pay for the second Well is the burst:
+    // 50 Water (25 ticks x 2 Water/tick) becomes 24-25 Material, which the
+    // 25-per-Workshop storage permits and the placement query accepts on the
+    // tick whose production crests the cap. Water 51 = 25 x 2 + the Workshop's
+    // 1 construction Water. Every number is derived from the canonical rates.
+    id: 'water-reserve-industry',
+    name: 'Water reserve industry',
+    description:
+      'A Village whose Water reserve is the only construction budget left: the Workshop turns Water into Material.',
+    objective: {
+      label: 'Reach Village, build a Workshop and a second Well.',
+      description:
+        'Material 25 buys the Workshop and nothing else. The second Well must be paid for by the Workshop itself: run it on the Water reserve, then build.',
+      constraint: 'Material 25, Water 51: the Workshop first, then the reserve buys the Well.',
+      requirements: [
+        { kind: 'stage', stage: 'village' },
+        { kind: 'building', buildingType: 'workshop', atLeast: 1 },
+        { kind: 'building', buildingType: 'well', atLeast: 2 },
+      ],
+      failsWithoutColonists: true,
+    },
+    resources: { material: 25, food: 50, water: 51 },
+    buildings: [
+      { type: 'residence', x: 1, y: 0, operational: true },
+      { type: 'residence', x: 3, y: 0, operational: true },
+      { type: 'farm', x: 1, y: 2, operational: true },
+      { type: 'well', x: 3, y: 2, operational: true },
+    ],
+    roads: [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 4, y: 1 },
+    ],
     colonists: [{ residence: { x: 1, y: 0 } }, { residence: { x: 3, y: 0 } }],
   },
   {

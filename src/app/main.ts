@@ -287,17 +287,14 @@ const refreshInspection = (): void => {
     } else {
       ui.reassignRow.style.display = 'flex'
       const options = getReassignmentOptions(state, workerId)
+      // One ordinal per building TYPE (Farm 1, Workshop 1, Well 1, ...), so a
+      // mixed list never relabels a Well as a Workshop (Step 10AQ).
       const ordinals = new Map<string, number>()
-      let farmCount = 0
-      let workshopCount = 0
+      const counts = new Map<BuildingType, number>()
       for (const option of options) {
-        if (option.type === 'farm') {
-          farmCount += 1
-          ordinals.set(option.workplaceId, farmCount)
-        } else {
-          workshopCount += 1
-          ordinals.set(option.workplaceId, workshopCount)
-        }
+        const next = (counts.get(option.type) ?? 0) + 1
+        counts.set(option.type, next)
+        ordinals.set(option.workplaceId, next)
       }
       const select = ui.reassignTarget
       select.replaceChildren()

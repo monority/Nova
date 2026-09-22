@@ -175,6 +175,7 @@ async function main() {
       { id: 'first-settlement', stage: 'Wilderness', buildings: '0' },
       { id: 'water-constraint', stage: 'Settlement', buildings: '3' },
       { id: 'industrial-expansion', stage: 'Village', buildings: '4' },
+      { id: 'water-reserve-industry', stage: 'Village', buildings: '4' },
       { id: 'spatial-efficiency', stage: 'Wilderness', buildings: '0' },
       { id: 'population-expansion', stage: 'Settlement', buildings: '5' },
       { id: 'recovery', stage: 'Wilderness', buildings: '2' },
