@@ -25,7 +25,8 @@
     "test:e2e:water": "node e2e/waterRun.mjs",
     "test:e2e:crew": "node e2e/constructionCrewRun.mjs",
     "test:e2e:progression": "node e2e/progressionRun.mjs",
-    "test:e2e:industrial": "node e2e/industrialRun.mjs"
+    "test:e2e:industrial": "node e2e/industrialRun.mjs",
+    "test:e2e:readability": "node e2e/readabilityAudit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

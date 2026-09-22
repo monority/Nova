@@ -56,6 +56,8 @@ import {
   getWaterSupplyStatus,
   getWaterCoverage,
   hasOperationalWell,
+  MATERIAL_PER_WORKER_PER_TICK,
+  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   isWaterSupplySustainable,
   WATER_PER_WELL_PER_TICK,
   expandRoadDrag,
@@ -223,13 +225,18 @@ const refreshInspection = (): void => {
       // Step 07C §12: job capacity is a Workshop property (1 once
       // operational); workers are derived from colonist assignments.
       // Step 08C §7: upkeep cause — 1/tick when staffed, 0 when vacant.
+      // Step 10AT: the same "X production — …" language the Farm and the Well
+      // use, plus the 25-per-Workshop storage that bounds industry, so a player
+      // can tell stock, storage, production and upkeep apart at one glance.
       const capacity = jobCapacityOf(building)
       const workers = countWorkersAt(controller.getState(), building.id)
-      const upkeep =
-        building.status === 'operational' && workers > 0
-          ? 'upkeep 1/tick'
-          : 'upkeep 0 (vacant)'
-      ui.insHousing.textContent = `Jobs — Capacity ${capacity} · Workers ${workers}/${capacity} · ${upkeep}`
+      const storage = MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP
+      ui.insHousing.textContent =
+        building.status !== 'operational'
+          ? `Material production — not operational yet · jobs 0/0`
+          : workers > 0
+            ? `Material production — producing +${MATERIAL_PER_WORKER_PER_TICK}/tick (staffed) · jobs ${workers}/${capacity} · upkeep 1/tick · storage ${storage}`
+            : `Material production — vacant, producing +0/tick · jobs 0/${capacity} · upkeep 0 (vacant) · storage ${storage}`
     } else if (building.type === 'well') {
       // Step 10P: the concrete Water production contract.
       const workers = countWorkersAt(controller.getState(), building.id)
@@ -603,7 +610,8 @@ const renderProgression = (): void => {
     ui.stage.textContent = status.stageLabel
   }
   if (ui.nextStage !== null) {
-    ui.nextStage.textContent = status.nextStageLabel ?? 'not yet defined'
+    ui.nextStage.textContent =
+      status.nextStageLabel ?? 'not yet defined (this is the current final stage)'
   }
   const objectiveStatus: ObjectiveStatus | null =
     currentScenarioObjective === null
@@ -712,6 +720,12 @@ const foodStatusLabel = (state: SimulationState): string => {
  * HUD (numeric Food stays in its own element; this is only the suffix).
  */
 const foodForecastLabel = (state: SimulationState): string => {
+  // Step 10AT: a collapse is a STATE, not only a one-frame status message. The
+  // Food row keeps saying so until the game is reloaded, the same way the Water
+  // and Material rows name their own states.
+  if (starved) {
+    return ' · starved'
+  }
   const remaining = getFoodTicksRemaining(state)
   if (remaining !== null) {
     return ` · ~${remaining} ticks`

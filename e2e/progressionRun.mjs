@@ -296,7 +296,7 @@ async function main() {
     const village = await progression(page);
     text = await progressionText(page);
     assert(village.stage === 'village', `Well must reach Village, got ${village.stage}`);
-    assert(text.next === 'not yet defined', `deferred next label expected, got "${text.next}"`);
+    assert(text.next.startsWith('not yet defined') && text.next.includes('final stage'), `deferred next label expected, got "${text.next}"`);
     assert(village.deferred === true, 'village must report deferred progression');
     assert(village.blockers.length === 0, `village must have no blockers, got ${JSON.stringify(village.blockers)}`);
     assert(text.blocked === '', `village blockers line must be empty, got "${text.blocked}"`);

@@ -37,6 +37,12 @@
         border-radius: 8px;
         min-width: 210px;
         user-select: none;
+        /* Step 10AT: at 360x640 the panel's content exactly fills the viewport
+           (measured), so a shorter window would clip the last line. Scroll the
+           overlay instead of clipping it. */
+        box-sizing: border-box;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
       }
       #nova-ui h1 {
         margin: 0;
@@ -122,6 +128,12 @@
       #selected-building {
         font-size: 12px;
         color: #9aa4b5;
+        /* Step 10AT: the inspection lines can be long ("Material production —
+           producing +2/tick (staffed) · jobs 1/1 · upkeep 1/tick ·
+           storage 25"). Without a cap the overlay widens and covers the
+           top-left board cells, which are real click targets; wrap instead. */
+        max-width: 320px;
+        overflow-wrap: anywhere;
       }
       #selected-building b {
         color: #d9a441;

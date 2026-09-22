@@ -275,7 +275,7 @@ async function main() {
     assert(s.jobCapacity === '1', `only the Well job should be open, got ${s.jobCapacity}`);
     await selectAt(page, BOOT.workshop);
     const underConstruction = await inspectionHousingText(page);
-    assert(underConstruction === 'Jobs — Capacity 0 · Workers 0/0 · upkeep 0 (vacant)', `under-construction workshop inspection bad: "${underConstruction}"`);
+    assert(underConstruction === 'Material production — not operational yet · jobs 0/0', `under-construction workshop inspection bad: "${underConstruction}"`);
     ok(`workshop placed at tick ${s.tick}; material ${s.construction}; inspection "${underConstruction}"`);
 
     s = await stepUntil(page, (v) => v.storageCapacity === '25', 'workshop operational', 10);
@@ -288,7 +288,7 @@ async function main() {
     assert(selection?.type === 'workshop', `selection expected workshop, got ${JSON.stringify(selection)}`);
     assert((await page.locator('[data-testid="inspection-type"]').textContent()) === 'Workshop', 'inspection type label missing');
     const operationalJobs = await inspectionHousingText(page);
-    assert(operationalJobs === 'Jobs — Capacity 1 · Workers 1/1 · upkeep 1/tick', `workshop inspection bad: "${operationalJobs}"`);
+    assert(operationalJobs === 'Material production — producing +2/tick (staffed) · jobs 1/1 · upkeep 1/tick · storage 25', `workshop inspection bad: "${operationalJobs}"`);
     ok(`workshop staffed at tick ${s.tick}: jobs "${await jobsText(page)}", inspection "${operationalJobs}", material ${s.construction}`);
     await shot('03-employed-workshop.png');
 
@@ -384,7 +384,7 @@ async function main() {
     const staffed = await inspectionHousingText(page);
     await selectAt(page, BOOT.well);
     const vacant = await inspectionHousingText(page);
-    assert(staffed === 'Jobs — Capacity 1 · Workers 1/1 · upkeep 1/tick', `staffed workshop inspection bad: "${staffed}"`);
+    assert(staffed === 'Material production — producing +2/tick (staffed) · jobs 1/1 · upkeep 1/tick · storage 25', `staffed workshop inspection bad: "${staffed}"`);
     assert(vacant === 'Water production — vacant, producing +0/tick', `vacant Well inspection bad: "${vacant}"`);
     assert(s.waterProduction === '0', `vacant Well must produce no Water, got ${s.waterProduction}`);
     const vacancyMaterial = Number(s.construction);
@@ -436,7 +436,7 @@ async function main() {
     assert(s.materialProduction === '0', `starvation must stop material production, got ${s.materialProduction}`);
     await selectAt(page, BOOT.workshop);
     const starvedInspection = await inspectionHousingText(page);
-    assert(starvedInspection === 'Jobs — Capacity 1 · Workers 0/1 · upkeep 0 (vacant)', `starved workshop inspection bad: "${starvedInspection}"`);
+    assert(starvedInspection === 'Material production — vacant, producing +0/tick · jobs 0/1 · upkeep 0 (vacant) · storage 25', `starved workshop inspection bad: "${starvedInspection}"`);
     ok(`starvation at tick ${starvedTick}: jobs "${await jobsText(page)}", inspection "${starvedInspection}"`);
     await shot('08-starvation.png');
 
