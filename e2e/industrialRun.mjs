@@ -188,6 +188,8 @@ async function main() {
     assert(s.buildings === '4' && s.operational === '4', `initial buildings wrong: ${JSON.stringify(s)}`);
     assert(s.roads === '4' && s.operationalRoads === '4', `initial roads wrong: ${s.roads}/${s.operationalRoads}`);
     assert(s.colonists === '2' && s.jobs === '2 / 2', `workforce wrong: ${s.colonists}, ${s.jobs}`);
+    // Step 10AR: the reserve covers the need and the flow is balanced.
+    assert(s.waterSupply === 'supplied', `supply expected supplied at the start, got ${s.waterSupply}`);
     let objectiveState = await objective(page);
     assert(objectiveState?.state === 'in_progress', `objective expected in_progress, got ${JSON.stringify(objectiveState)}`);
     assert(
@@ -226,6 +228,9 @@ async function main() {
     s = await moveWorker(page, workshopTarget.value);
     assert(s.manualWorkerIds !== '', `manual override expected, got "${s.manualWorkerIds}"`);
     assert(s.staffedWorkshopIds !== '', `the Workshop must be staffed, got "${s.staffedWorkshopIds}"`);
+    // Step 10AR: the Well is unstaffed so the WATER FLOW stops while the
+    // reserve still covers the need: "draining", not yet a shortage.
+    assert(s.waterSupply === 'draining', `supply expected draining, got ${s.waterSupply}`);
     assert(s.waterProduction === '0', `the Well must be vacated (no production), got ${s.waterProduction}`);
     assert(s.status.includes('manual override'), `reassignment feedback missing: ${JSON.stringify(s.status)}`);
     ok(`burst started manually: workshop ${s.staffedWorkshopIds}, well "${s.staffedWellIds}", "${s.status}"`);
@@ -255,6 +260,8 @@ async function main() {
     assert(Number(s.construction) < 25, `the second Well must spend the burst Material: ${s.construction}`);
     for (let i = 0; i < 3; i += 1) s = await step(page);
     assert(s.buildings === '6' && s.operational === '6', `the second Well must be operational: ${JSON.stringify(s)}`);
+    // Step 10AR: still no serving Well (the burst worker holds the Workshop).
+    assert(s.waterSupply === 'shortage', `supply expected shortage while the reserve is spent, got ${s.waterSupply}`);
     objectiveState = await objective(page);
     assert(
       JSON.stringify(objectiveState.blockers) === JSON.stringify(['Reach Village']),
@@ -278,6 +285,13 @@ async function main() {
     // reports Water "not sustainable" (stock-based label) while the objective's
     // Village condition (capacity-based) is met.
     assert(s.water === '0' && s.waterSustainable === 'false', `the spent reserve must read 0: ${JSON.stringify(s)}`);
+    // Step 10AR: the recovered colony has production == need with an empty
+    // reserve: `noReserve` (a named cause), not the conflated "shortage" word.
+    assert(s.waterSupply === 'noReserve', `supply expected noReserve after recovery, got ${s.waterSupply}`);
+    assert(
+      (await page.locator('[data-testid="stat-water-status"]').textContent()).includes('reserve 0'),
+      'the HUD must name the empty reserve after recovery'
+    );
     text = await progressionText(page);
     assert(text.stage === 'Village', `recovery must restore Village: "${text.stage}"`);
     const finalObjective = await objective(page);

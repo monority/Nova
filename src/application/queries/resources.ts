@@ -11,6 +11,7 @@ import {
   type ResourceStock,
 } from '../../domain/resource/resource.js'
 import { countEmployedWorkers } from '../../domain/jobs/jobs.js'
+import { iterateBuildings } from '../../domain/housing/housing.js'
 import {
   countOperationalFarms,
   countStaffedOperationalFarms,
@@ -20,7 +21,9 @@ import {
   materialStoredProductionForTick,
 } from '../../domain/simulation/phases.js'
 import {
+  getWaterCoverage,
   getWaterStatus,
+  hasOperationalWell,
   waterProductionForTick,
   waterNeedForTick,
 } from '../../domain/water/water.js'
@@ -190,8 +193,105 @@ export const getWaterShortage = (state: SimulationState): boolean =>
 /**
  * True when no served colonist is short of water: either nobody needs water
  * (no coverage) or the stock covers every served colonist this tick.
+ *
+ * Step 10AR note: this is a STOCK-COVERAGE test, not a balance test. A colony
+ * with production == need and an empty reserve answers `false` here while its
+ * Water flow is perfectly balanced — `getWaterSupplyStatus` is the precise
+ * derived status that names the difference.
  */
 export const isWaterSupplySustainable = (state: SimulationState): boolean => {
   const status = getWaterStatus(state)
   return status.servedColonistCount === 0 || status.stock >= status.needPerTick
+}
+
+/**
+ * The precise Water supply state (Step 10AR). ONE derived value built only
+ * from existing queries, so the UI can never conflate the five concepts the
+ * Water rules actually use:
+ *
+ *   capacity  - Water a staffed, road-accessible Well can sustain per tick
+ *   need      - Water the currently SERVED colonists consume per tick
+ *   balance   - capacity - need (the flow)
+ *   reserve   - the canonical stock
+ *   service   - whether Residences share a covered road network
+ *   shortage  - whether the stock cannot cover this tick's need
+ *
+ *   inactive  - no operational Well: the Water gate is inactive (bootstrap)
+ *   noService - a Well exists but no Residence is served by it
+ *   noReserve - production >= need but the reserve is empty (the 10AQ case:
+ *               a balanced flow with nothing stored)
+ *   supplied  - production >= need and the reserve covers this tick
+ *   draining  - production < need, the stock still covers this tick
+ *   shortage  - production < need and the stock cannot cover this tick
+ *
+ * The FLOW is evaluated before the RESERVE, so an empty reserve with a
+ * sufficient flow reads `noReserve` ("nothing stored") instead of `shortage`
+ * ("cannot supply"). The domain's tick-coverage rule is unchanged and is still
+ * exposed as `shortage`: with production == need and an empty reserve the
+ * admission gate still blocks growth this tick.
+ *
+ * Derived only: never stored, persisted or hashed. Pure.
+ */
+export type WaterSupplyState =
+  | 'inactive'
+  | 'noService'
+  | 'noReserve'
+  | 'supplied'
+  | 'draining'
+  | 'shortage'
+
+export interface WaterSupplyStatus {
+  readonly state: WaterSupplyState
+  /** Staffed, road-accessible Wells x WATER_PER_WELL_PER_TICK. */
+  readonly capacity: number
+  /** Served colonists x WATER_PER_COLONIST_PER_TICK. */
+  readonly need: number
+  /** `capacity - need`: positive is a growing reserve. */
+  readonly balance: number
+  /** The canonical Water stock. */
+  readonly reserve: number
+  /** Operational Residences sharing a covered network. */
+  readonly servedResidences: number
+  /** Operational Residences in total (the service ratio denominator). */
+  readonly residences: number
+  /** Colonists whose Residence is served. */
+  readonly servedColonists: number
+  /** The existing stock-shortage rule, unchanged. */
+  readonly shortage: boolean
+}
+
+export const getWaterSupplyStatus = (
+  state: SimulationState
+): WaterSupplyStatus => {
+  const status = getWaterStatus(state)
+  const active = hasOperationalWell(state)
+  const service = getWaterCoverage(state)
+  const residences = [...iterateBuildings(state)].filter(
+    (building) => building.type === 'residence' && building.status === 'operational'
+  ).length
+  const capacity = status.productionPerTick
+  const need = status.needPerTick
+  const reserve = status.stock
+  const state0: WaterSupplyState = !active
+    ? 'inactive'
+    : status.servedColonistCount === 0
+      ? 'noService'
+      : capacity >= need
+        ? reserve >= need
+          ? 'supplied'
+          : 'noReserve'
+        : reserve >= need
+          ? 'draining'
+          : 'shortage'
+  return {
+    state: state0,
+    capacity,
+    need,
+    balance: capacity - need,
+    reserve,
+    servedResidences: service.servedResidenceIds.length,
+    residences,
+    servedColonists: status.servedColonistCount,
+    shortage: status.shortage,
+  }
 }

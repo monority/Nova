@@ -101,6 +101,9 @@ async function selectPalette(page, testid, expectedLabel) {
 const inspectionHousingText = (page) =>
   page.locator('[data-testid="inspection-housing"]').textContent();
 const waterText = (page) => page.locator('[data-testid="stat-water"]').textContent();
+/* Step 10AR: the precise Water supply state and its HUD vocabulary. */
+const waterStatusText = (page) =>
+  page.locator('[data-testid="stat-water-status"]').textContent();
 
 async function fresh(page) {
   await page.goto(URL, { waitUntil: 'load' });
@@ -156,7 +159,11 @@ async function main() {
     s = await step(page);
     assert(s.colonists === '1', `bootstrap colonist expected, got ${s.colonists}`);
     assert(s.hasOperationalWell === 'false', `no Well expected yet, got ${s.hasOperationalWell}`);
-    ok(`bootstrap: 1 colonist admitted without Water (no Well exists), water ${s.water}`);
+    // Step 10AR: no operational Well -> the gate is inactive and the HUD says
+    // nothing about supply (there is nothing to supply yet).
+    assert(s.waterSupply === 'inactive', `supply expected inactive, got ${s.waterSupply}`);
+    assert((await waterStatusText(page)) === '', `HUD must stay silent with no Well, got "${await waterStatusText(page)}"`);
+    ok(`bootstrap: 1 colonist admitted without Water (no Well exists), water ${s.water}, supply "${s.waterSupply}"`);
 
     await selectPalette(page, 'build-road', 'Road selected');
     await placeRoad(page, { x: 3, y: 2 });
@@ -171,6 +178,9 @@ async function main() {
     s = await step(page); // operational
     assert(s.hasOperationalWell === 'true', `Well should be operational, got ${s.hasOperationalWell}`);
     assert(s.waterServedResidences === '0', `roadless Well must serve nothing, got ${s.waterServedResidences}`);
+    // Step 10AR: a Well that serves nothing is "no service", not "shortage".
+    assert(s.waterSupply === 'noService', `supply expected noService, got ${s.waterSupply}`);
+    assert((await waterStatusText(page)).includes('no service'), `HUD expected "no service", got "${await waterStatusText(page)}"`);
     // Add a second Residence on the main network (no Well on it yet).
     await selectPalette(page, 'build-road', 'Road selected');
     await placeRoad(page, { x: 3, y: 3 });
@@ -182,6 +192,14 @@ async function main() {
     s = await step(page);
     assert(s.colonists === '1', `unserved Residence must block admission, got ${s.colonists}`);
     assert(s.status.includes('No water service'), `admission block feedback missing: ${JSON.stringify(s.status)}`);
+    // Step 10AR: the Residence inspector names WHICH residence is unserved.
+    await selectAt(page, { x: 2, y: 3 });
+    const unservedResidence = await inspectionHousingText(page);
+    assert(
+      unservedResidence.includes('Water not served'),
+      `unserved Residence inspection bad: "${unservedResidence}"`
+    );
+    ok(`unserved Residence inspection: "${unservedResidence}"`);
     ok(`roadless Well: waterServedResidences ${s.waterServedResidences}, population stays ${s.colonists} ("${s.status}")`);
     await shot('01-blocked.png');
 
@@ -197,7 +215,24 @@ async function main() {
     assert(s.hasOperationalWell === 'true', `Well operational expected, got ${s.hasOperationalWell}`);
     assert(Number(s.water) > 0, `Water production expected, got ${s.water}`);
     assert(s.colonists === '2', `admission should resume after service, got ${s.colonists}`);
-    ok(`connected Well: water ${s.water}, production ${s.waterProduction}, population ${s.colonists}`);
+    // Step 10AR: service is restored and the flow is balanced (production 2 ==
+    // need 2), but nothing is STORED yet: that is `noReserve`, NOT `shortage`.
+    // The HUD names the cause instead of crying shortage on a balanced colony.
+    assert(s.waterSupply === 'noReserve', `supply expected noReserve, got ${s.waterSupply}`);
+    assert(
+      (await waterStatusText(page)).includes('reserve 0'),
+      `HUD expected "reserve 0", got "${await waterStatusText(page)}"`
+    );
+    const servedResidence = await (async () => {
+      await selectAt(page, { x: 2, y: 3 });
+      return inspectionHousingText(page);
+    })();
+    assert(
+      servedResidence.includes('Water served'),
+      `served Residence inspection bad: "${servedResidence}"`
+    );
+    ok(`connected Well: water ${s.water}, production ${s.waterProduction}, population ${s.colonists}, supply "${s.waterSupply}"`);
+    ok(`served Residence inspection: "${servedResidence}"`);
     await shot('02-water-flowing.png');
 
     // ---------------------------------------------------------------------
