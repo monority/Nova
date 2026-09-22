@@ -198,12 +198,13 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     id: 'industrial-expansion',
     name: 'Industrial expansion',
     description:
-      'A Village with Water and Food already balanced; the Workshop is buildable here, but running it is a burst that costs Water — not a permanent job.',
+      'A Village whose stores are already larger than a Workshop can hold: the Workshop can be built, but it cannot add to them until they are spent.',
     objective: {
       label: 'Reach Village and build a Workshop.',
       description:
-        'Industry costs 25 Material, 1 Water and a worker. A Workshop can be built here; running it needs a fourth pair of hands this colony does not have, so its output is a reserve-funded burst, never a permanent income.',
-      constraint: 'The Water admission gate caps this colony at its current capacity.',
+        'Industry costs 25 Material, 1 Water and a worker. A Workshop stores only 25 Material, so the 100 this colony already holds cannot be added to until it is spent, and running the Workshop needs a fourth pair of hands the colony does not have.',
+      constraint:
+        'Two limits: the Water admission gate caps the population at its current capacity, and one Workshop stores 25 Material — less than the stores this colony already holds.',
       requirements: [
         { kind: 'stage', stage: 'village' },
         { kind: 'building', buildingType: 'workshop', atLeast: 1 },

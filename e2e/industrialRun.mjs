@@ -244,6 +244,13 @@ async function main() {
     assert(s.storageCapacity === '25', `one Workshop stores 25: ${s.storageCapacity}`);
     assert(s.materialProduction === '2' && s.materialUpkeep === '1', `production/upkeep wrong: ${s.materialProduction}/${s.materialUpkeep}`);
     assert(s.staffedWorkshopIds !== '', `the Workshop must still be staffed: "${s.staffedWorkshopIds}"`);
+    // Step 10AS: at the cap the Material row names the storage and the discard,
+    // so "2 produced, 1 stored" is readable instead of looking like nothing.
+    const materialNote = await page.locator('[data-testid="stat-material-status"]').textContent();
+    assert(
+      materialNote.includes('storage 25') && materialNote.includes('full'),
+      `Material row expected "storage 25 · full", got "${materialNote}"`
+    );
     text = await progressionText(page);
     {
       const st = await objective(page);

@@ -108,6 +108,7 @@ const ui = {
   speed: document.querySelector<HTMLSelectElement>('#speed'),
   tick: document.querySelector<HTMLSpanElement>('#ui-tick'),
   construction: document.querySelector<HTMLSpanElement>('#ui-construction'),
+  materialStatus: document.querySelector<HTMLSpanElement>('#ui-material-status'),
   food: document.querySelector<HTMLSpanElement>('#ui-food'),
   foodForecast: document.querySelector<HTMLSpanElement>('#ui-food-forecast'),
   water: document.querySelector<HTMLSpanElement>('#ui-water'),
@@ -739,6 +740,20 @@ const refreshUi = (): void => {
   }
   if (ui.construction !== null) {
     ui.construction.textContent = String(getResourceStock(s).construction)
+  }
+  // Step 10AS: the storage cap bounds PRODUCTION only, so it is shown exactly
+  // when a producer exists (an operational Workshop). Without it, a stock above
+  // the cap is inexplicable: the Workshop's output is discarded and only its
+  // upkeep moves the number. `full` names the discard precisely (gross output
+  // above what was actually stored, 08F).
+  if (ui.materialStatus !== null) {
+    const storage = getMaterialStorageCapacity(s)
+    if (storage === 0) {
+      ui.materialStatus.textContent = ''
+    } else {
+      const discarded = getMaterialProductionPerTick(s) > getMaterialStoredProductionPerTick(s)
+      ui.materialStatus.textContent = ` · storage ${storage}${discarded ? ' · full' : ''}`
+    }
   }
   if (ui.food !== null) {
     ui.food.textContent = String(food)

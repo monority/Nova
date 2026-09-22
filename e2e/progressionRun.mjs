@@ -91,6 +91,17 @@ async function dragRoads(page, start, end) {
   await waitFor(async () => Number((await stats(page)).roads) > before, 'road gesture committed');
 }
 
+async function placeRoad(page, cell) {
+  const pt = await moveTo(page, cell);
+  await waitFor(async () => (await stats(page)).status.includes('ready'), `road preview at ${cell.x},${cell.y}`);
+  const before = Number((await stats(page)).roads);
+  await page.mouse.click(pt.x, pt.y);
+  await waitFor(async () => Number((await stats(page)).roads) === before + 1, `road at ${cell.x},${cell.y}`);
+}
+
+const materialStatusText = (page) =>
+  page.locator('[data-testid="stat-material-status"]').textContent();
+
 async function selectPalette(page, testid, expectedLabel) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await page.click(`[data-testid="${testid}"]`);
@@ -169,6 +180,36 @@ async function main() {
     assert(dflt.construction === '100' && dflt.food === '100', `default resources changed: ${JSON.stringify(dflt)}`);
     ok(`default start: Wilderness -> Settlement, blockers ${JSON.stringify(status.blockers)}`);
     await shot('01-free-play-wilderness.png');
+
+    // --- Step 10AS: the 100 -> 105 opening boundary -------------------------
+    // Four purchases spend 80 of the 100; the minimum Village package needs one
+    // more building (a Well, 25) and the stock is exactly 5 short. The hover
+    // must say so, and the Material row must NOT claim a storage cap while no
+    // Workshop exists.
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await placeAt(page, { x: 1, y: 0 });
+    await selectPalette(page, 'build-road', 'Road selected');
+    await placeRoad(page, { x: 1, y: 1 });
+    await selectPalette(page, 'build-farm', 'Farm selected');
+    await placeAt(page, { x: 0, y: 1 });
+    await selectPalette(page, 'build-residence', 'Residence selected');
+    await placeAt(page, { x: 1, y: 2 });
+    for (let i = 0; i < 3; i += 1) await step(page);
+    const opening = await stats(page);
+    assert(opening.construction === '20', `opening stock expected 20 after four purchases, got ${opening.construction}`);
+    await moveTo(page, { x: 2, y: 1 });
+    await waitFor(
+      async () => (await stats(page)).status.includes('insufficient material (20/25)'),
+      'the Well must be reported 5 Material short'
+    );
+    const shortStatus = (await stats(page)).status;
+    assert(
+      (await materialStatusText(page)) === '',
+      `no Workshop means no storage claim, got "${await materialStatusText(page)}"`
+    );
+    ok(`opening boundary: Material ${opening.construction}, Well rejected with "${shortStatus}", no storage claim`);
+    await shot('01b-opening-boundary.png');
+    await loadScenario(page, 'default');
 
     // --- Scenario starts: stage + objective + state ------------------------
     const expectations = [
@@ -279,6 +320,14 @@ async function main() {
     industrialText = await page.locator('[data-testid="progression-objective-status"]').textContent();
     assert(industrial?.state === 'completed', `industrial objective expected completed after the Workshop, got ${JSON.stringify(industrial)}`);
     assert(industrialText.includes('Objective complete'), `industrial objective line expected complete, got "${industrialText}"`);
+    // Step 10AS: the Workshop makes the storage cap visible, and the 75-Material
+    // stock is above it — the reason a staffed Workshop cannot add to it.
+    const industrialStats = await stats(page);
+    assert(industrialStats.storageCapacity === '25', `Workshop storage expected 25, got ${industrialStats.storageCapacity}`);
+    assert(Number(industrialStats.construction) > 25, `the stock must exceed the cap: ${industrialStats.construction}`);
+    const storageNote = await materialStatusText(page);
+    assert(storageNote.includes('storage 25'), `Material row must name the cap, got "${storageNote}"`);
+    ok(`industrial storage display: Material ${industrialStats.construction}, "${storageNote}"`);
     ok('objective evaluation: Industrial expansion completes when the Workshop is built (in progress -> complete)');
 
     // --- Reproducibility: progression is recomputed, never stored ----------
