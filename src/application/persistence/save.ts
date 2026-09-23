@@ -14,6 +14,12 @@ import type { ColonistState } from '../../domain/population/colonist.js'
 import type { ResourceStock } from '../../domain/resource/resource.js'
 import { type RoadState } from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
+import {
+  isInBounds,
+  normalizeBlockedCells,
+  parseBlockedCell,
+  type WorldConfig,
+} from '../../domain/world/grid.js'
 
 export const SAVE_FORMAT = 'nova-save'
 /** v2: SimulationState gained a `resources` field (Step 4). */
@@ -39,6 +45,14 @@ export const SAVE_FORMAT = 'nova-save'
  * (and any older save chained through v6) is migrated deterministically by
  * adding `constructionAssignmentId: null` to every colonist — historical
  * colonists are never retroactively interpreted as construction crew.
+ */
+/**
+ * Step 10AV: terrain (`config.world.blockedCells`) is an OPTIONAL field that
+ * is omitted whenever the world has no blocked cell, so a terrain-free world
+ * — every save written before this step — keeps exactly its historical
+ * canonical bytes and hash, and an old save loads with NO terrain. Only a
+ * world that actually owns blocked cells carries the field. No migration and
+ * therefore NO version bump: SAVE_VERSION stays 7.
  */
 export const SAVE_VERSION = 7
 /** The single previous version this build knows how to migrate (v4/v5 chain through it). */
@@ -209,6 +223,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   assertString(world['seed'], 'config.world.seed')
   assertFiniteInt(world['width'], 'config.world.width')
   assertFiniteInt(world['height'], 'config.world.height')
+  const blockedCells = validateBlockedCells(world)
   assertFiniteInt(time['tick'], 'time.tick')
   assertFiniteInt(counters['nextBuildingId'], 'counters.nextBuildingId')
   assertFiniteInt(counters['nextColonistId'], 'counters.nextColonistId')
@@ -306,6 +321,9 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
         seed: world['seed'] as string,
         width: world['width'] as number,
         height: world['height'] as number,
+        // Step 10AV: present ONLY when the world owns blocked cells, so the
+        // canonical form of a terrain-free save is byte-identical.
+        ...(blockedCells === undefined ? {} : { blockedCells }),
       },
     },
     time: { tick: time['tick'] as number },
@@ -320,9 +338,88 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     },
   }
   // Round-trip consistency: re-serializing the validated state must match,
-  // otherwise the save contained fields the validator dropped.
-  if (canonicalJson(state) !== canonicalJson(raw)) {
+  // otherwise the save contained fields the validator dropped. An explicitly
+  // EMPTY blockedCells list is the one tolerated spelling difference (Step
+  // 10AV): it normalizes to "no terrain", whose canonical form omits the key.
+  if (canonicalJson(state) !== canonicalJson(withoutEmptyBlockedCells(raw))) {
     throw new SaveValidationError('Malformed save: state contains unexpected fields')
   }
   return state
+}
+
+/**
+ * Step 10AV: validate `config.world.blockedCells` and return its canonical
+ * form, or undefined when the world has no terrain. The list must already be
+ * canonical (sorted, unique) because saves are canonical state; a save that
+ * carries a non-canonical list is rejected rather than silently rewritten.
+ */
+const validateBlockedCells = (
+  world: Record<string, unknown>
+): readonly string[] | undefined => {
+  const raw = world['blockedCells']
+  if (raw === undefined) {
+    return undefined
+  }
+  if (!Array.isArray(raw) || raw.some((key) => typeof key !== 'string')) {
+    throw new SaveValidationError('Malformed save: config.world.blockedCells')
+  }
+  const keys = raw as string[]
+  const width = world['width']
+  const height = world['height']
+  let canonical: string[]
+  try {
+    canonical = normalizeBlockedCells(keys)
+  } catch {
+    throw new SaveValidationError('Malformed save: config.world.blockedCells')
+  }
+  if (canonical.length !== keys.length) {
+    throw new SaveValidationError(
+      'Malformed save: config.world.blockedCells must not contain duplicates'
+    )
+  }
+  for (let index = 0; index < keys.length; index += 1) {
+    if (canonical[index] !== keys[index]) {
+      throw new SaveValidationError(
+        'Malformed save: config.world.blockedCells must be sorted'
+      )
+    }
+  }
+  const bounds: WorldConfig = {
+    seed: '',
+    width: typeof width === 'number' ? width : 0,
+    height: typeof height === 'number' ? height : 0,
+  }
+  for (const key of canonical) {
+    if (!isInBounds(bounds, parseBlockedCell(key))) {
+      throw new SaveValidationError(
+        `Malformed save: config.world.blockedCells out of bounds (${key})`
+      )
+    }
+  }
+  return canonical.length === 0 ? undefined : canonical
+}
+
+/** The same save with an explicitly empty blockedCells list removed (Step 10AV). */
+const withoutEmptyBlockedCells = (
+  raw: Record<string, unknown>
+): Record<string, unknown> => {
+  const config = raw['config']
+  if (!isRecord(config)) {
+    return raw
+  }
+  const world = config['world']
+  if (!isRecord(world)) {
+    return raw
+  }
+  const blocked = world['blockedCells']
+  if (!Array.isArray(blocked) || blocked.length > 0) {
+    return raw
+  }
+  const restWorld: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(world)) {
+    if (key !== 'blockedCells') {
+      restWorld[key] = value
+    }
+  }
+  return { ...raw, config: { ...config, world: restWorld } }
 }

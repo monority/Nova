@@ -92,7 +92,7 @@ import {
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
 } from '../resource/resource.js'
 import type { CellCoordinate } from '../world/grid.js'
-import { isInBounds } from '../world/grid.js'
+import { isInBounds, isTerrainBlocked } from '../world/grid.js'
 import { waterProductionForTick } from '../water/water.js'
 import type { SimulationCommand } from './command.js'
 import {
@@ -161,6 +161,7 @@ export type PlacementValidation =
       readonly reason:
         | 'unknownBuildingType'
         | 'outOfBounds'
+        | 'terrainBlocked'
         | 'cellOccupied'
         | 'insufficientResources'
         | 'insufficientWater'
@@ -177,6 +178,11 @@ export const validatePlacement = (
   }
   if (!isInBounds(state.config.world, cell)) {
     return { valid: false, reason: 'outOfBounds' }
+  }
+  // Step 10AV: terrain is checked after bounds and BEFORE occupancy and
+  // affordability — a blocked cell is not a cost problem.
+  if (isTerrainBlocked(state.config.world, cell)) {
+    return { valid: false, reason: 'terrainBlocked' }
   }
   if (isCellBlocked(state, cell)) {
     return { valid: false, reason: 'cellOccupied' }
@@ -197,13 +203,15 @@ export const validatePlacement = (
  * Road placement validation (Step 09C Phase C/G). The input list is
  * normalized first (dedupe + deterministic (x, y) order), then the ENTIRE
  * set is validated before anything mutates: empty set, out-of-bounds cell,
- * building collision, road collision, then total-cost affordability. The
- * first failing cell in deterministic order decides the spatial reason, so
- * the result never depends on drag direction or input order.
+ * terrain-blocked cell (Step 10AV), building collision, road collision, then
+ * total-cost affordability. The first failing cell in deterministic order
+ * decides the spatial reason, so the result never depends on drag direction
+ * or input order — and a road command is ATOMIC: one blocked cell refuses the
+ * whole command, with no partial road and no Material spent.
  */
 export type RoadPlacementValidation =
   | { readonly valid: true; readonly cells: CellCoordinate[]; readonly totalCost: number }
-  | { readonly valid: false; readonly reason: 'emptyCells' | 'outOfBounds' | 'cellOccupiedByBuilding' | 'cellOccupiedByRoad' | 'insufficientResources' }
+  | { readonly valid: false; readonly reason: 'emptyCells' | 'outOfBounds' | 'terrainBlocked' | 'cellOccupiedByBuilding' | 'cellOccupiedByRoad' | 'insufficientResources' }
 
 export const validateRoadsPlacement = (
   state: SimulationState,
@@ -216,6 +224,11 @@ export const validateRoadsPlacement = (
   for (const cell of normalized) {
     if (!isInBounds(state.config.world, cell)) {
       return { valid: false, reason: 'outOfBounds' }
+    }
+  }
+  for (const cell of normalized) {
+    if (isTerrainBlocked(state.config.world, cell)) {
+      return { valid: false, reason: 'terrainBlocked' }
     }
   }
   for (const cell of normalized) {

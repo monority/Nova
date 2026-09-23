@@ -63,6 +63,14 @@ export interface ScenarioDefinition {
   readonly buildings: readonly ScenarioBuilding[]
   readonly roads: readonly ScenarioCell[]
   readonly colonists: readonly ScenarioColonist[]
+  /**
+   * Step 10AV: terrain as declarative data. Canonical `"x,y"` keys of cells
+   * that can never hold a building or a road. Absent means no terrain; the
+   * list is normalized by the shared assembler exactly like roads are, so no
+   * scenario owns a rule. Declaring terrain here has no economic effect: the
+   * ONLY consequence is that a placement on a blocked cell is refused.
+   */
+  readonly blockedCells?: readonly string[]
 }
 
 const cellKey = (cell: ScenarioCell): string => `${cell.x},${cell.y}`
@@ -77,7 +85,14 @@ export const createScenarioState = (
   config: SimulationConfig,
   scenario: ScenarioDefinition
 ): SimulationState => {
-  let state = createInitialState(config)
+  // Step 10AV: scenario terrain is written into the world config exactly once,
+  // through the same constructor every other state uses (normalization and
+  // bounds validation included). No scenario-only rule is introduced.
+  const scenarioConfig: SimulationConfig =
+    scenario.blockedCells === undefined
+      ? config
+      : { world: { ...config.world, blockedCells: scenario.blockedCells } }
+  let state = createInitialState(scenarioConfig)
   state = {
     ...state,
     resources: {
@@ -335,6 +350,105 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
 export const findScenario = (id: string): ScenarioDefinition | undefined =>
   SCENARIOS.find((scenario) => scenario.id === id)
+
+// ---------------------------------------------------------------------------
+// Step 10AV fixtures. NOT part of the curated catalogue: a fixture is
+// evidence for a step, it is never offered as product content. It is still
+// plain declarative scenario data assembled by `createScenarioState`, so it
+// runs on the untouched engine. The browser E2E reaches it through an
+// explicit `?scenario=<id>` deep link; the scenario select lists SCENARIOS
+// only, so the player-facing catalogue is unchanged (still 7).
+// ---------------------------------------------------------------------------
+
+/**
+ * `terrain-chokepoint` — variant C of the Step 10AU contract, built on the
+ * coordinates 10AU measured:
+ *
+ *   west region (x <= 1)              east region (x >= 3)
+ *   Residence (1,0)                   Residence (5,0)
+ *   Farm      (1,2)                   Well      (5,2)  <- the only Water
+ *   road      (1,1)                   Farm      (4,2)  <- vacant workplace
+ *                                     roads (3,1) (4,1) (5,1)
+ *
+ * A rock ridge occupies the whole column x = 2 EXCEPT the connector cell
+ * (2,1), so the two regions can only ever be joined through that one cell
+ * (10AU measured the ridge as rows 1..5 with an emulated blocker; the fixture
+ * makes the separation genuine by blocking the other rows too). Variant C:
+ * the only cell of the west region that could host a second Well with road
+ * access, (0,1), is terrain-blocked, so the west Residence can NEVER be
+ * served by a Well of its own — the connector road is the only Water route
+ * that exists, and no stock change can make a blocked cell legal.
+ *
+ * Material 30 is exactly one Residence (25) plus the connector road (5): the
+ * last building and the only connection compete for the same budget. Both
+ * outcomes complete the objective, with structurally different results —
+ * which is precisely the cell-role competition 10AU identified.
+ */
+export const TERRAIN_CHOKEPOINT_FIXTURE: ScenarioDefinition = {
+  id: 'terrain-chokepoint',
+  name: 'Terrain chokepoint (fixture)',
+  description:
+    'A rock ridge splits the valley. The east settlement holds the only Well; the west Residence stands outside its network, and one cell in the ridge is the only way through.',
+  objective: {
+    label: 'Reach Village with 3 colonists.',
+    description:
+      'The third colonist needs a Water-served Residence. Material 30 is exactly one Residence (25) plus the connector road (5), and the west Well site is blocked by terrain.',
+    constraint:
+      'Material 30 = Residence (25) + connector road (5); the west Well site (0,1) is terrain-blocked.',
+    requirements: [
+      { kind: 'stage', stage: 'village' },
+      { kind: 'population', atLeast: 3 },
+    ],
+    failsWithoutColonists: true,
+  },
+  resources: { material: 30, food: 30, water: 20 },
+  buildings: [
+    { type: 'residence', x: 1, y: 0, operational: true },
+    { type: 'residence', x: 5, y: 0, operational: true },
+    { type: 'farm', x: 1, y: 2, operational: true },
+    { type: 'well', x: 5, y: 2, operational: true },
+    // Vacant on purpose: it is the cross-region probe workplace of the
+    // chokepoint measurement (the automatic pass keeps it free).
+    { type: 'farm', x: 4, y: 2, operational: true },
+  ],
+  roads: [
+    { x: 1, y: 1 },
+    { x: 3, y: 1 },
+    { x: 4, y: 1 },
+    { x: 5, y: 1 },
+  ],
+  colonists: [
+    { residence: { x: 1, y: 0 } },
+    { residence: { x: 5, y: 0 } },
+  ],
+  blockedCells: [
+    // The only West cell that could host a Well with road access (variant C).
+    '0,1',
+    // The ridge: every cell of column 2 except the connector (2,1).
+    '2,0',
+    '2,2',
+    '2,3',
+    '2,4',
+    '2,5',
+    '2,6',
+    '2,7',
+    '2,8',
+    '2,9',
+    '2,10',
+    '2,11',
+  ],
+}
+
+/** Step 10AV fixtures, separated from the curated catalogue. */
+export const SCENARIO_FIXTURES: readonly ScenarioDefinition[] = [
+  TERRAIN_CHOKEPOINT_FIXTURE,
+]
+
+/** Resolve a fixture id (never a catalogue scenario). */
+export const findScenarioFixture = (
+  id: string
+): ScenarioDefinition | undefined =>
+  SCENARIO_FIXTURES.find((fixture) => fixture.id === id)
 
 /** The default game: unchanged starting state, no scenario framing. */
 export const DEFAULT_SCENARIO_ID = 'default'

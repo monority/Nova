@@ -848,10 +848,14 @@ describe('8-9. Minimum contract and architectural consequences', () => {
   })
 
   it('measures the persistence consequence of adding a world field', () => {
-    // The save validator REBUILDS config.world from exactly three fields and
+    // The save validator REBUILDS config.world from a fixed field set and
     // then requires canonicalJson equality, so an unknown world field is
-    // rejected outright. Terrain therefore needs a validator change and an
+    // rejected outright. Terrain therefore needed a validator change and an
     // explicit version decision — measured here, not assumed.
+    // Step 10AV implemented that decision (omit-when-empty, SAVE_VERSION 7),
+    // so this probe now uses a field that is STILL unknown: the measured
+    // property (unknown world fields are refused) is unchanged, only the
+    // example field name moved.
     const state = scene({
       residences: [[1, 0]],
       buildings: [{ type: 'farm', x: 1, y: 2 }],
@@ -863,7 +867,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
       state: { config: { world: Record<string, unknown> } }
     }
     const withTerrain = JSON.parse(serializeSave(state)) as typeof raw
-    withTerrain.state.config.world['blockedCells'] = ['2,2']
+    withTerrain.state.config.world['terrain'] = ['2,2']
     let rejected: string | null = null
     let acceptedKeys: string[] = []
     try {

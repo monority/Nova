@@ -12,8 +12,10 @@
 
 import {
   Group,
+  InstancedMesh,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   PlaneGeometry,
   Raycaster,
   Vector2,
@@ -28,6 +30,15 @@ import { reconcile } from './reconcile.js'
 
 const PLACEMENT_VALID_COLOR = 0x7fd1c8
 const PLACEMENT_INVALID_COLOR = 0xd1584f
+
+/**
+ * Step 10AV: terrain-blocked cells read as dark, matte, slightly raised rock —
+ * flat quads, a deliberately different value from the ground (0x14181f), the
+ * construction gray (0x6b7280) and the road slate (0x39404f). One
+ * InstancedMesh draws all of them in canonical snapshot order.
+ */
+const TERRAIN_BLOCKED_COLOR = 0x5a4436
+const TERRAIN_SURFACE_HEIGHT = 0.02
 
 export interface NovaRenderer {
   render: (snapshot: RenderSnapshot) => void
@@ -49,6 +60,8 @@ export interface NovaRenderer {
     cells: readonly { readonly x: number; readonly y: number }[],
     valid: boolean
   ) => void
+  /** Diagnostic (Step 10AV): blocked-cell instances currently drawn, or 0. */
+  terrainInstanceCount: () => number
   resize: (width: number, height: number) => void
   dispose: () => void
 }
@@ -62,9 +75,11 @@ export const createNovaRenderer = (
   const buildingGroup = new Group()
   const roadGroup = new Group()
   const colonistGroup = new Group()
+  const terrainGroup = new Group()
   scene.add(buildingGroup)
   scene.add(roadGroup)
   scene.add(colonistGroup)
+  scene.add(terrainGroup)
 
   const buildings = buildingOps(grid)
   const roads = roadOps(grid)
@@ -88,7 +103,48 @@ export const createNovaRenderer = (
   })
   const roadPreviewPool: Mesh[] = []
 
+  // Terrain (Step 10AV): ONE InstancedMesh for every blocked cell of the
+  // snapshot, instances placed in the snapshot's canonical cell order. The
+  // mesh is rebuilt only when the blocked set actually changes.
+  const terrainGeometry = new PlaneGeometry(0.92, 0.92)
+  terrainGeometry.rotateX(-Math.PI / 2)
+  const terrainMaterial = new MeshStandardMaterial({
+    color: TERRAIN_BLOCKED_COLOR,
+  })
+  const terrainDummy = new Object3D()
+  let terrainMesh: InstancedMesh | null = null
+  let terrainSignature = ''
+
+  const applyTerrain = (
+    cells: readonly { readonly x: number; readonly y: number }[]
+  ): void => {
+    const signature = cells.map((cell) => `${cell.x},${cell.y}`).join(' ')
+    if (signature === terrainSignature) {
+      return
+    }
+    terrainSignature = signature
+    if (terrainMesh !== null) {
+      terrainGroup.remove(terrainMesh)
+      terrainMesh.dispose()
+      terrainMesh = null
+    }
+    if (cells.length === 0) {
+      return
+    }
+    const mesh = new InstancedMesh(terrainGeometry, terrainMaterial, cells.length)
+    cells.forEach((cell, index) => {
+      const position = simulationCellToWorldPosition(cell, grid)
+      terrainDummy.position.set(position.x, TERRAIN_SURFACE_HEIGHT, position.z)
+      terrainDummy.updateMatrix()
+      mesh.setMatrixAt(index, terrainDummy.matrix)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    terrainGroup.add(mesh)
+    terrainMesh = mesh
+  }
+
   const render = (snapshot: RenderSnapshot): void => {
+    applyTerrain(snapshot.blockedCells)
     // Keyed reconciliation: stable identity per entity id, no scene rebuild.
     reconcile(buildings.views, snapshot.buildings, (b) => b.id, {
       create: (data) => {
@@ -209,11 +265,15 @@ export const createNovaRenderer = (
     cellToScreen,
     showPlacementIndicator,
     showRoadPreview,
+    terrainInstanceCount: () =>
+      terrainMesh === null ? 0 : terrainMesh.count,
     resize: novaScene.resize,
     dispose: () => {
       indicatorMaterial.dispose()
       indicatorGeometry.dispose()
       roadPreviewMaterial.dispose()
+      terrainGeometry.dispose()
+      terrainMaterial.dispose()
       novaScene.dispose()
     },
   }

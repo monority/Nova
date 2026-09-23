@@ -20,6 +20,7 @@ import {
   createInitialState,
   createScenarioState,
   findScenario,
+  findScenarioFixture,
   FOOD_PER_FARM_PER_TICK,
   getBuildingDefinition,
   getBuildingIdAtCell,
@@ -666,7 +667,7 @@ Constraint — ${currentScenarioObjective.constraint}`
  * simulation rule runs here and no rule differs between scenarios.
  */
 const applyScenario = (id: string): void => {
-  const definition = findScenario(id) ?? null
+  const definition = findScenario(id) ?? findScenarioFixture(id) ?? null
   const next =
     definition === null
       ? createDefaultState(WORLD_CONFIG)
@@ -985,6 +986,23 @@ if (ui.scenario !== null) {
   })
 }
 
+// --- Step 10AV: fixture deep link -------------------------------------------
+// The curated select above lists SCENARIOS only. A step FIXTURE (terrain) is
+// not product content, so it is loaded exclusively through an explicit
+// `?scenario=<fixture id>` deep link used by the browser E2E. An unknown id, or
+// any catalogue id, is ignored here: catalogue scenarios are chosen through the
+// select.
+const requestedScenario = new URLSearchParams(window.location.search).get(
+  'scenario'
+)
+if (
+  requestedScenario !== null &&
+  findScenario(requestedScenario) === undefined &&
+  findScenarioFixture(requestedScenario) !== undefined
+) {
+  applyScenario(requestedScenario)
+}
+
 // --- Simulation controls -----------------------------------------------------
 
 ui.play?.addEventListener('click', () => {
@@ -1071,6 +1089,10 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     // and stored Material production never covers it.
     return `cell ${cell.x},${cell.y} — insufficient water (${affordability.waterAvailable}/${affordability.waterRequired})`
   }
+  if (!placement.valid && placement.reason === 'terrainBlocked') {
+    // Step 10AV: terrain refusal is neither a cost nor an occupancy problem.
+    return `cell ${cell.x},${cell.y} — blocked by terrain`
+  }
   return `cell ${cell.x},${cell.y} — ${
     !placement.valid && placement.reason === 'cellOccupied' ? 'occupied' : 'out of bounds'
   }`
@@ -1091,6 +1113,9 @@ const describeRoadCells = (cells: readonly CellCoordinate[]): string => {
       return `${prefix} — nothing to place`
     case 'outOfBounds':
       return `${prefix} — out of bounds`
+    case 'terrainBlocked':
+      // Step 10AV: the whole command is refused atomically.
+      return `${prefix} — blocked by terrain`
     case 'cellOccupiedByBuilding':
       return `${prefix} — occupied by building`
     case 'cellOccupiedByRoad':
@@ -1233,6 +1258,11 @@ canvas.addEventListener('pointerup', (event) => {
       setStatus(
         `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — requires ${required} water (${available} available)`
       )
+    } else if (!attempt.valid && attempt.reason === 'terrainBlocked') {
+      // Step 10AV: a blocked cell is refused at any price.
+      setStatus(
+        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — blocked by terrain`
+      )
     } else {
       setStatus(`placement rejected at ${cell.x},${cell.y}`)
     }
@@ -1277,7 +1307,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -1364,6 +1394,12 @@ window.__nova = {
       waterSustainable: String(isWaterSupplySustainable(state)),
       waterSupply: getWaterSupplyStatus(state).state,
       hasOperationalWell: String(hasOperationalWell(state)),
+      // Step 10AV: terrain as spatial input. `blockedCells` is the canonical
+      // state projection; `terrainInstances` is what the renderer actually
+      // draws, so the browser E2E can prove the cells are rendered and not
+      // merely stored.
+      blockedCells: (state.config.world.blockedCells ?? []).join(' '),
+      terrainInstances: String(novaRenderer.terrainInstanceCount()),
       buildings: ui.buildings?.textContent ?? '',
       operational: ui.operational?.textContent ?? '',
       farms: String(

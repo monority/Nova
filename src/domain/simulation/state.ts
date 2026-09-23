@@ -14,7 +14,13 @@ import type { BuildingState, BuildingType } from '../building/building.js'
 import type { ColonistState } from '../population/colonist.js'
 import { ROAD_CONSTRUCTION_TICKS, type RoadState } from '../road/road.js'
 import { createInitialResourceStock, type ResourceStock } from '../resource/resource.js'
-import type { WorldConfig } from '../world/grid.js'
+import {
+  cellKey,
+  isInBounds,
+  listBlockedCells,
+  normalizeBlockedCells,
+  type WorldConfig,
+} from '../world/grid.js'
 
 export interface SimulationTime {
   /** Current tick. Starts at 0, increments once per completed tick. */
@@ -47,10 +53,36 @@ export interface SimulationConfig {
   readonly world: WorldConfig
 }
 
+/**
+ * Canonical world normalization (Step 10AV). Terrain is stored in exactly one
+ * form: validated keys, deduplicated, sorted by (x, y). An EMPTY list is
+ * dropped so "no terrain" has a single representation (the absent field) and
+ * a terrain-free world keeps its historical canonical form and hash. A
+ * malformed key throws here, at the only place a world is constructed.
+ */
+export const normalizeWorldConfig = (world: WorldConfig): WorldConfig => {
+  const blocked = world.blockedCells
+  if (blocked === undefined) {
+    return world
+  }
+  const normalized = normalizeBlockedCells(blocked)
+  if (normalized.length === 0) {
+    return { seed: world.seed, width: world.width, height: world.height }
+  }
+  return { ...world, blockedCells: normalized }
+}
+
+/** The same normalization applied to a whole simulation config. */
+export const normalizeConfig = (config: SimulationConfig): SimulationConfig => {
+  const world = normalizeWorldConfig(config.world)
+  return world === config.world ? config : { world }
+}
+
 export const createInitialState = (config: SimulationConfig): SimulationState => {
-  assertValidConfig(config)
+  const normalized = normalizeConfig(config)
+  assertValidConfig(normalized)
   return {
-    config,
+    config: normalized,
     time: { tick: 0 },
     resources: createInitialResourceStock(),
     buildings: {},
@@ -70,6 +102,14 @@ const assertValidConfig = (config: SimulationConfig): void => {
   }
   if (world.seed.length === 0) {
     throw new Error('world.seed must be a non-empty string')
+  }
+  // Step 10AV: terrain must address real cells of THIS world. Format and
+  // canonical order are already guaranteed by normalizeWorldConfig; bounds
+  // cannot be checked without the dimensions, so they are checked here.
+  for (const cell of listBlockedCells(world)) {
+    if (!isInBounds(world, cell)) {
+      throw new Error(`world.blockedCells out of bounds: ${cellKey(cell)}`)
+    }
   }
 }
 

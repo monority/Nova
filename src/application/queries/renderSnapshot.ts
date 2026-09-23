@@ -8,7 +8,7 @@
 
 import { iterateBuildings, iterateColonists } from '../../domain/housing/housing.js'
 import { iterateRoads } from '../../domain/road/road.js'
-import { cellKey } from '../../domain/world/grid.js'
+import { cellKey, listBlockedCells } from '../../domain/world/grid.js'
 import type { RoadStatus } from '../../domain/road/road.js'
 import type { BuildingStatus, BuildingType } from '../../domain/building/building.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
@@ -72,6 +72,13 @@ export interface RenderSnapshot {
   readonly colonists: readonly RenderColonist[]
   /** Step 09C: authoritative road cells projected for rendering. */
   readonly roads: readonly RenderRoad[]
+  /**
+   * Step 10AV: terrain-blocked cells, in the canonical order of
+   * `config.world.blockedCells` (never a renderer-side derivation). Empty
+   * when the world has no terrain, so the renderer draws nothing. Terrain is
+   * projection input only: it carries no productivity, cost or bonus.
+   */
+  readonly blockedCells: readonly { readonly x: number; readonly y: number }[]
 }
 
 export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
@@ -113,6 +120,10 @@ export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
       y: r.y,
       status: r.status,
       connections: roadConnections(state, r),
+    })),
+    blockedCells: listBlockedCells(state.config.world).map((cell) => ({
+      x: cell.x,
+      y: cell.y,
     })),
   }
 }
