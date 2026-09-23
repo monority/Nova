@@ -216,7 +216,9 @@ describe('1. freeze verification', () => {
     expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
     expect(frozen.saveVersion).toBe(7)
-    expect(frozen.catalogue).toBe(7)
+    // 7 at the freeze; Step 10BE later added one curated content scenario
+    // (no mechanic, no constant, no objective kind changed).
+    expect(frozen.catalogue).toBe(8)
     expect(frozen.fixtures).toBe(1)
     expect(frozen.objectiveKinds).toEqual([
       'building',
@@ -713,7 +715,7 @@ describe('5. content versus capability', () => {
     audit('FROZEN_BEHAVIOUR', rows)
     expect(rows.deterministic).toBe(true)
     expect(rows.noTownInSave).toBe(true)
-    expect(rows.catalogue).toBe(7)
+    expect(rows.catalogue).toBe(8)
     expect(rows.rejectedIsNoOp).toBe(true)
   })
 })

@@ -346,6 +346,43 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     roads: [{ x: 1, y: 1 }],
     colonists: [{ residence: { x: 1, y: 0 } }],
   },
+  {
+    // Step 10BE: the first catalogue scenario whose dominant decision is HOUSING
+    // TOPOLOGY. 10AZ measured the phenomenon on this exact shape (same
+    // buildings, same population, same road count: only the new Residence's
+    // network changes) and classified it B/deferred for lack of authored
+    // content; 10BA's placement preview made it readable. Two networks that do
+    // not touch: the Well and its serviced Residence on the east side, the only
+    // Farm on the west side. The next Residence decides whether its colonist is
+    // refused (unserved), admitted but unemployed (served, cannot reach the
+    // Farm), or admitted AND productive (a cell that touches both networks, or a
+    // 5-Material road that joins them). Material 30 is exactly one Residence
+    // plus one road cell, so a wrong placement is recoverable but not free.
+    id: 'housing-composition',
+    name: 'Housing composition',
+    description:
+      'Two road networks stand side by side without touching: the Well serves the east side, and the colony\u2019s only Farm stands alone on the west side. The next Residence decides whether its colonist can be served at all \u2014 and whether anyone can reach the food.',
+    objective: {
+      label: 'Reach Village.',
+      description:
+        'Village needs a second colonist, and a second colonist needs a water-served Residence. Food has to be produced as well, and the only Farm is on the other network.',
+      constraint:
+        'Material 30: one Residence (25) plus at most one road cell (5). The Well and the Farm are on separate networks.',
+      requirements: [{ kind: 'stage', stage: 'village' }],
+      failsWithoutColonists: true,
+    },
+    resources: { material: 30, food: 40, water: 0 },
+    buildings: [
+      { type: 'residence', x: 3, y: 0, operational: true },
+      { type: 'well', x: 3, y: 2, operational: true },
+      { type: 'farm', x: 1, y: 2, operational: true },
+    ],
+    roads: [
+      { x: 1, y: 1 },
+      { x: 3, y: 1 },
+    ],
+    colonists: [{ residence: { x: 3, y: 0 } }],
+  },
 ]
 
 export const findScenario = (id: string): ScenarioDefinition | undefined =>

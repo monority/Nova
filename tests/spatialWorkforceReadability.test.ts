@@ -542,6 +542,7 @@ describe('3. placement spatial preview', () => {
     audit('GAMEPLAY_INVARIANT', rows)
     expect(rows.identical).toBe(true)
     expect(rows.saveVersion).toBe(7)
-    expect(rows.scenarioCatalogue).toBe(7)
+    // 7 when this step ran; Step 10BE later added one content scenario.
+    expect(rows.scenarioCatalogue).toBe(8)
   })
 })

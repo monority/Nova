@@ -181,7 +181,7 @@ async function main() {
       options.map((o) => o.value).filter((v) => v !== 'default')
     );
     evidence('SCENARIO_IDS', scenarioIds);
-    assert(scenarioIds.length === 7, `expected 7 scenarios, got ${scenarioIds.length}`);
+    assert(scenarioIds.length === 8, `expected 8 catalogue scenarios (7 from 10AL-10AQ plus 10BE housing-composition), got ${scenarioIds.length}`);
     const catalogue = [];
     for (const id of scenarioIds) {
       await loadScenario(page, id);

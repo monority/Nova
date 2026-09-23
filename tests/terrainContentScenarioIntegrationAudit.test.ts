@@ -1457,8 +1457,9 @@ describe('11-12. catalogue decision and objective primitives', () => {
     ]
     audit('OBJECTIVE_PRIMITIVES', { primitives, candidates })
     expect(candidates.every((candidate) => candidate.expressible)).toBe(true)
-    // Audit-only: the curated catalogue is untouched.
-    expect(SCENARIOS).toHaveLength(7)
+    // Audit-only: the curated catalogue was untouched by that audit (Step
+    // 10BE later added one curated content scenario).
+    expect(SCENARIOS).toHaveLength(8)
     expect(SCENARIOS.every((scenario) => scenario.blockedCells === undefined)).toBe(true)
   })
 

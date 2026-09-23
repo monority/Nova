@@ -739,7 +739,8 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
       ],
     }
     audit('SCENARIO_DIFFERENTIATION', { profiles, classification })
-    expect(profiles).toHaveLength(7)
+    // 7 when this step ran; Step 10BE later added one content scenario.
+    expect(profiles).toHaveLength(8)
     expect(classification.class.startsWith('A')).toBe(true)
     // The new scenario is the only one whose requirement set asks for two
     // construction steps where the first funds the second.

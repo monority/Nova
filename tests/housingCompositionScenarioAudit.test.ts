@@ -699,9 +699,12 @@ describe('4. distinctiveness', () => {
     // - spatial-efficiency already owns "placement with an exact Material budget".
     const spatial = existing.find((row) => row.id === 'spatial-efficiency')
     expect(spatial?.material).toBe(55)
-    // No existing scenario has TWO networks at the start, which is the only
-    // genuinely new starting shape.
-    expect(existing.filter((row) => row.networks > 1)).toEqual([])
+    // At 10AZ time no catalogue scenario started on two networks. Step 10BE
+    // authored exactly that shape as content (housing-composition), which is the
+    // strongest evidence that the phenomenon was worth turning into a scenario.
+    expect(existing.filter((row) => row.networks > 1).map((row) => row.id)).toEqual([
+      'housing-composition',
+    ])
     // Classification: no scenario is "A — genuinely distinct".
     expect(rows.every((row) => row.verdict !== 'A')).toBe(true)
     expect(rows.filter((row) => row.verdict === 'B')).toHaveLength(4)
@@ -793,7 +796,7 @@ describe('5. terrain independence', () => {
 // ---------------------------------------------------------------------------
 
 describe('6. phase A boundary and determinism', () => {
-  it('keeps the catalogue and the fixture list unchanged (no scenario added)', () => {
+  it('records the phase A boundary: no fixture added, the phenomenon became content in 10BE', () => {
     const rows = {
       catalogue: SCENARIOS.map((scenario) => scenario.id).sort(),
       catalogueSize: SCENARIOS.length,
@@ -804,9 +807,12 @@ describe('6. phase A boundary and determinism', () => {
       saveVersion: SAVE_VERSION,
     }
     audit('PHASE_A_BOUNDARY', rows)
-    expect(rows.catalogueSize).toBe(7)
+    // 10AZ added nothing; the catalogue grew to 8 only in Step 10BE, which
+    // authored this step's phenomenon as content.
+    expect(rows.catalogueSize).toBe(8)
     expect(rows.catalogue).toEqual([
       'first-settlement',
+      'housing-composition',
       'industrial-expansion',
       'population-expansion',
       'recovery',
@@ -814,8 +820,8 @@ describe('6. phase A boundary and determinism', () => {
       'water-constraint',
       'water-reserve-industry',
     ])
-    // Only the 10AV terrain fixture exists: no housing scenario or fixture was
-    // added by this step.
+    // Only the 10AV terrain fixture exists: 10AZ added no fixture, and the
+    // housing phenomenon became a curated scenario in 10BE instead.
     expect(rows.fixtures).toEqual(['terrain-chokepoint'])
     expect(rows.saveVersion).toBe(7)
   })

@@ -539,7 +539,8 @@ describe('5. scenario wiring', () => {
   })
 
   it('keeps every curated scenario unchanged and terrain-free', () => {
-    expect(SCENARIOS).toHaveLength(7)
+    // 7 when this step ran; Step 10BE later added one content scenario.
+    expect(SCENARIOS).toHaveLength(8)
     for (const scenario of SCENARIOS) {
       expect(scenario.blockedCells).toBeUndefined()
       const state = createScenarioState(config, scenario)

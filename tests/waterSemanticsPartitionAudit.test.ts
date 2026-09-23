@@ -377,14 +377,16 @@ describe('1. Partitioned Valley — controlled layouts', { timeout: 60000 }, () 
       dominance: 'for a one-colonist island the two paths cost the SAME at a 5-cell gap, and for a two-colonist island the bridge dominates up to a 9-cell gap (25 vs 50): the spatial choice is knife-edge or dominated, and the world has no terrain to force a long gap',
       objectiveLimitation:
         'the actual goal (every Residence water-served) is not expressible with the closed requirement set; only a proxy is (the proxy is valid but adds no new objective vocabulary)',
-      decision: 'DEFERRED — documented, not added. The catalogue stays at 7 scenarios.',
+      decision:
+        'DEFERRED — documented, not added in that step. Step 10BE later added one curated CONTENT scenario (housing-composition) using the existing mechanics only; the partitioned-valley decision itself is still not represented.',
       revisitIf:
         'a future step introduces terrain/obstacles (a NEW mechanic) that makes partitions natural and gaps long, or an objective kind that can name coverage',
     }
     audit('PARTITIONED_CLASSIFICATION', classification)
     expect(classification.class.startsWith('B')).toBe(true)
     expect(SCENARIOS.some((scenario) => scenario.id.includes('partition'))).toBe(false)
-    expect(SCENARIOS).toHaveLength(7)
+    // 7 when this audit ran; Step 10BE later added one content scenario.
+    expect(SCENARIOS).toHaveLength(8)
   })
 
   it('shows the goal cannot be named, only proxied', () => {
@@ -666,7 +668,7 @@ describe('8. Architectural invariants', () => {
     expect(invariants.saveKeys).toHaveLength(7)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
-    expect(invariants.scenarioCount).toBe(7)
+    expect(invariants.scenarioCount).toBe(8)
     expect(invariants.waterRules).toEqual({ perWell: 2, perColonist: 1 })
     expect(invariants.noNewResource).toEqual(['construction', 'food', 'water'])
     expect(invariants.objectiveKinds).toEqual([

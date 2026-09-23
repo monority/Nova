@@ -44,7 +44,8 @@ describe('scenarios — data-only definitions', () => {
       expect(Array.isArray(scenario.roads)).toBe(true)
       expect(Array.isArray(scenario.colonists)).toBe(true)
     }
-    expect(SCENARIOS).toHaveLength(7)
+    // Step 10BE added one curated content scenario (no new mechanic).
+    expect(SCENARIOS).toHaveLength(8)
     expect(new Set(SCENARIOS.map((s) => s.id)).size).toBe(SCENARIOS.length)
   })
 
@@ -124,6 +125,8 @@ describe('scenarios — starting states and progression framing', () => {
       'water-reserve-industry': { stage: 'village', blockers: [] },
       'spatial-efficiency': { stage: 'wilderness', blockers: ['Population 1', 'Food balance', 'Road network'] },
       'population-expansion': { stage: 'settlement', blockers: ['Water capacity 2'] },
+      // Step 10BE: two networks, no Food production at the start.
+      'housing-composition': { stage: 'wilderness', blockers: ['Food balance'] },
       recovery: { stage: 'wilderness', blockers: ['Food balance'] },
     }
     for (const scenario of SCENARIOS) {

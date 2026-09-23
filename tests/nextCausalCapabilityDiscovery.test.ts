@@ -341,7 +341,8 @@ describe('1. delta-only closed capability matrix', () => {
       roadCost: ROAD_CONSTRUCTION_COST,
     }
     audit('FROZEN_BASELINE', frozen)
-    expect(frozen.scenarioCount).toBe(7)
+    // 7 in this audit; Step 10BE later added one curated content scenario.
+    expect(frozen.scenarioCount).toBe(8)
     expect(frozen.catalogueHasTerrain).toBe(false)
     expect(frozen.saveVersion).toBe(7)
     expect(frozen.objectiveKinds).toEqual([
@@ -1192,7 +1193,7 @@ describe('11. scenario potential and final matrix', () => {
       why: row.why,
     }))
     audit('SCENARIO_POTENTIAL', potential)
-    expect(SCENARIOS).toHaveLength(7)
+    expect(SCENARIOS).toHaveLength(8)
     expect(potential.every((row) => row.class !== 'A')).toBe(true)
   })
 })

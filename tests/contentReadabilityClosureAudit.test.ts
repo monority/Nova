@@ -243,6 +243,11 @@ const COMPLETION_POLICIES: Readonly<Record<string, readonly Step[]>> = {
     { kind: 'role', colonist: 3, role: 'well' },
   ],
   recovery: [{ kind: 'roads', cells: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] }],
+  // Step 10BE: one Residence on the cell that touches both networks completes
+  // the scenario (the bridge solution measured in tests/housingCompositionScenario.test.ts).
+  'housing-composition': [
+    { kind: 'building', type: 'residence', x: 2, y: 1 },
+  ],
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +286,7 @@ describe('1. Catalogue judged by state transitions', { timeout: 300000 }, () => 
       rows,
       reading: 'every scenario is started and driven to its objective with real placement/reassignment commands',
     })
-    expect(rows).toHaveLength(7)
+    expect(rows).toHaveLength(8)
     for (const row of rows) {
       expect(row.objective.startState).toBe('in_progress')
       expect(row.objective.startBlockers.length).toBeGreaterThan(0)
@@ -398,6 +403,7 @@ describe('2. Distinctness matrix', { timeout: 60000 }, () => {
       { id: 'industrial-expansion', marks: 'B/limit tutorial: the Workshop is buildable, cannot be run, and its output is discarded above the 25 storage (10AP, 10AS)' },
       { id: 'recovery', marks: 'B: repair (3 roads, keeps a redundant Farm) vs replace (1 road, 2 Farms) (10AM)' },
       { id: 'water-reserve-industry', marks: 'A: the Water reserve is the only budget and the build order is terminal if reversed (10AQ)' },
+      { id: 'housing-composition', marks: 'A: the new Residence’s NETWORK decides whether its colonist is refused, admitted-but-stranded or productive (10AZ/10BE)' },
     ]
 
     const overlapAnalysis = {
@@ -418,10 +424,11 @@ describe('2. Distinctness matrix', { timeout: 60000 }, () => {
         'spatial-efficiency (an exact road budget)',
         'population-expansion (housing ahead of capacity)',
         'water-reserve-industry (resource conversion with a terminal order)',
+        'housing-composition (housing topology: which network the new Residence joins)',
       ],
     }
     audit('DISTINCTNESS_MATRIX', { axes, measured, matrix, overlapAnalysis })
-    expect(measured).toHaveLength(7)
+    expect(measured).toHaveLength(8)
     for (const row of measured) {
       expect(row.startBlockers).toBeGreaterThan(0)
     }
@@ -432,7 +439,7 @@ describe('2. Distinctness matrix', { timeout: 60000 }, () => {
     expect(industrial.water).toBe(10)
     expect(reserve.stock).toBe(25)
     expect(reserve.water).toBe(51)
-    expect(overlapAnalysis.genuinelyDistinct).toHaveLength(5)
+    expect(overlapAnalysis.genuinelyDistinct).toHaveLength(6)
   })
 })
 

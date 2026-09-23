@@ -851,7 +851,8 @@ describe('8-9. Implementation and invariants', () => {
     // Scenario resources are untouched by this step.
     expect(invariants.scenarioResources.industrialExpansion).toEqual({ material: 100, food: 50, water: 10 })
     expect(invariants.scenarioResources.waterReserveIndustry).toEqual({ material: 25, food: 50, water: 51 })
-    expect(invariants.scenarioCount).toBe(7)
+    // 7 when this audit ran; Step 10BE later added one content scenario.
+    expect(invariants.scenarioCount).toBe(8)
     // The HUD storage display is derived from existing queries only.
     expect(invariants.storageDisplayInputs.capacity).toBe(0)
     expect(invariants.storageDisplayInputs.stored).toBe(0)

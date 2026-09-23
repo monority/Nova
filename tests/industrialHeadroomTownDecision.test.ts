@@ -380,7 +380,8 @@ describe('1. frozen baseline', () => {
     expect(contract.workshop).toBe(2)
     expect(contract.upkeep).toBe(1)
     expect(contract.saveVersion).toBe(7)
-    expect(contract.scenarios).toBe(7)
+    // 7 when this audit ran; Step 10BE later added one content scenario.
+    expect(contract.scenarios).toBe(8)
     // The measured identity the whole step rests on: the minimum survival
     // infrastructure occupies every colonist, so no discretionary worker exists
     // at 2/2 at any population (even P: exactly 0 free; odd P: one workplace
