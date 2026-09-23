@@ -62,6 +62,13 @@ export const WATER_PER_WELL_PER_TICK = 2
 /** One water-served colonist consumes one water unit per tick (Step 10P). */
 export const WATER_PER_COLONIST_PER_TICK = 1
 
+/**
+ * Settlement-phase storage allocation constants (Step 10BG).
+ * Storage enables strategic buffering: surplus fills the hub,
+ * shortages are absorbed before colony-level consumption.
+ */
+export const STORAGE_ALLOCATION_PHASE = 'townStorage'
+
 export const createInitialResourceStock = (): ResourceStock => ({
   construction: INITIAL_CONSTRUCTION_MATERIAL,
   food: INITIAL_FOOD,

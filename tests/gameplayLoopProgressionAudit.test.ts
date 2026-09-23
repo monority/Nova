@@ -1302,9 +1302,9 @@ describe('15-16. Progression signals and architecture boundary', { timeout: 3000
       ),
       stock: getResourceStock(a),
     })
-    expect(saved.version).toBe(7)
-    expect(SAVE_VERSION).toBe(7)
-    expect(Object.keys(saved.state)).toHaveLength(7)
+    expect(saved.version).toBe(8)
+    expect(SAVE_VERSION).toBe(8)
+    expect(Object.keys(saved.state)).toHaveLength(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serialized).not.toContain('stage')

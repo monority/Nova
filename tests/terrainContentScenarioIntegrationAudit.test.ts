@@ -1595,7 +1595,7 @@ describe('15. determinism, insertion order, save/load, hash', () => {
     expect(rows.insertionOrderEquivalent).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
     expect(rows.terrainSurvivesSave).toEqual(normalizeBlockedCells(cells))
-    expect(rows.saveVersion).toBe(7)
+    expect(rows.saveVersion).toBe(8)
     expect(rows.beforeHash).not.toBe(rows.afterHash)
   })
 

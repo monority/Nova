@@ -1249,6 +1249,6 @@ describe('N — replay, persistence and derived-only audit', () => {
     expect(serialized).not.toContain('mobilityConnected')
     expect(serialized).not.toContain('audit')
     // SAVE_VERSION unchanged by the audit step.
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
   })
 })

@@ -594,7 +594,7 @@ describe('employment render projection (Step 07C §13)', () => {
 
 describe('jobs persistence (Step 07C §10)', () => {
   it('bumps the save version to 4', () => {
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
   })
 
   it('round-trips employment state with hash and behavioral equivalence', () => {
@@ -712,6 +712,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
       'counters',
       'resources',
       'roads',
+      'storage',
       'time',
     ])
     expect(withConstruction(state, 10).resources.construction).toBe(10)

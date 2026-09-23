@@ -1531,9 +1531,9 @@ describe('13-14. Architecture boundary audit', { timeout: 30000 }, () => {
       hashAlgorithm: 'FNV-1a 64 over canonical JSON (unchanged)',
       uiOrRenderingFields: 0,
     })
-    expect(saved.version).toBe(7)
-    expect(SAVE_VERSION).toBe(7)
-    expect(Object.keys(saved.state)).toHaveLength(7)
+    expect(saved.version).toBe(8)
+    expect(SAVE_VERSION).toBe(8)
+    expect(Object.keys(saved.state)).toHaveLength(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serialized).not.toContain('coverage')

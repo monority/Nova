@@ -344,7 +344,7 @@ describe('1. delta-only closed capability matrix', () => {
     // 7 in this audit; Step 10BE later added one curated content scenario.
     expect(frozen.scenarioCount).toBe(8)
     expect(frozen.catalogueHasTerrain).toBe(false)
-    expect(frozen.saveVersion).toBe(7)
+    expect(frozen.saveVersion).toBe(8)
     expect(frozen.objectiveKinds).toEqual([
       'building',
       'foodBalance',
@@ -1216,7 +1216,7 @@ describe('12. determinism, save/load, frozen architecture', () => {
     audit('AUDIT_FIXTURE_DETERMINISM', rows)
     expect(rows.deterministic).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
-    expect(rows.saveVersion).toBe(7)
+    expect(rows.saveVersion).toBe(8)
     expect(rows.terrainFree).toBe(true)
   })
 

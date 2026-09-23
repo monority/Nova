@@ -379,7 +379,7 @@ describe('1. frozen baseline', () => {
     expect(contract.well).toBe(2)
     expect(contract.workshop).toBe(2)
     expect(contract.upkeep).toBe(1)
-    expect(contract.saveVersion).toBe(7)
+    expect(contract.saveVersion).toBe(8)
     // 7 when this audit ran; Step 10BE later added one content scenario.
     expect(contract.scenarios).toBe(8)
     // The measured identity the whole step rests on: the minimum survival

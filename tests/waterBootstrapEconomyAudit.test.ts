@@ -760,7 +760,7 @@ describe('§17 — Food / Water interaction', () => {
 
 describe('§18 — persistence, migration and hash', () => {
   it('SAVE_VERSION 6; water round-trips; derived coverage is not persisted', () => {
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     const state = waterWorld({ residences: 2, wells: 1, colonists: 1, water: 7 })
     const restored = loadSave(serializeSave(state))
     expect(restored.resources.water).toBe(7)

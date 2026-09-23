@@ -12,6 +12,7 @@ import { canonicalJson } from '../../domain/simulation/hash.js'
 import type { BuildingState } from '../../domain/building/building.js'
 import type { ColonistState } from '../../domain/population/colonist.js'
 import type { ResourceStock } from '../../domain/resource/resource.js'
+import { createInitialStorageHub, type StorageHub } from '../../domain/storage/storage.js'
 import { type RoadState } from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 import {
@@ -47,18 +48,22 @@ export const SAVE_FORMAT = 'nova-save'
  * colonists are never retroactively interpreted as construction crew.
  */
 /**
+ * v8: SimulationState gained `storage` (Step 10BG). A v7 save is migrated
+ * deterministically by adding an empty StorageHub to every state.
+ */
+/**
  * Step 10AV: terrain (`config.world.blockedCells`) is an OPTIONAL field that
  * is omitted whenever the world has no blocked cell, so a terrain-free world
  * — every save written before this step — keeps exactly its historical
  * canonical bytes and hash, and an old save loads with NO terrain. Only a
  * world that actually owns blocked cells carries the field. No migration and
- * therefore NO version bump: SAVE_VERSION stays 7.
+ * therefore NO version bump: SAVE_VERSION stays 8.
  */
-export const SAVE_VERSION = 7
-/** The single previous version this build knows how to migrate (v4/v5 chain through it). */
-export const MIGRATABLE_SAVE_VERSION = 6
+export const SAVE_VERSION = 8
+/** The single previous version this build knows how to migrate (v4/v5/v6/v7 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 7
 /** Every older version the chained migration still accepts. */
-export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6]
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -96,7 +101,8 @@ const assertString = (value: unknown, field: string): void => {
  * Deterministic, chained migration to the current SAVE_VERSION:
  *   v4 -> v5: stamp every colonist `workplaceAssignmentMode: 'automatic'`;
  *   v5 -> v6: add `water: 0` to the resource stock;
- *   v6 -> v7: stamp every colonist `constructionAssignmentId: null`.
+ *   v6 -> v7: stamp every colonist `constructionAssignmentId: null`;
+ *   v7 -> v8: add empty StorageHub.
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -109,6 +115,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV5ToV6(current)
     } else if (version === 6) {
       current = migrateV6ToV7(current)
+    } else if (version === 7) {
+      current = migrateV7ToV8(current)
     } else {
       break
     }
@@ -171,6 +179,21 @@ const migrateV6ToV7 = (save: Record<string, unknown>): Record<string, unknown> =
         : value
   }
   return { ...save, state: { ...state, colonists } }
+}
+
+/** v7 -> v8: add empty StorageHub (Step 10BG). */
+const migrateV7ToV8 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state)) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const storage = state['storage']
+  return {
+    ...save,
+    state: storage === undefined
+      ? { ...state, storage: createInitialStorageHub() }
+      : state,
+  }
 }
 
 /** Restore canonical state from serialized content. Migrates v4/v5 saves. */
@@ -328,6 +351,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     },
     time: { tick: time['tick'] as number },
     resources: resourcesStock,
+    storage: validateStorage(raw),
     buildings: validatedBuildings,
     colonists: validatedColonists,
     roads: validatedRoads,
@@ -345,6 +369,48 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     throw new SaveValidationError('Malformed save: state contains unexpected fields')
   }
   return state
+}
+
+/**
+ * Validate storage state from a save. Returns the default empty hub for
+ * saves that predate Step 10BG (v7 and earlier).
+ */
+const validateStorage = (raw: Record<string, unknown>): StorageHub => {
+  const storage = raw['storage']
+  if (!isRecord(storage)) {
+    // Pre-Step 10BG save: return default empty hub
+    return createInitialStorageHub()
+  }
+  const food = storage['food']
+  const water = storage['water']
+  const material = storage['material']
+  const capacities = storage['capacities']
+  if (
+    typeof food !== 'number' || !Number.isInteger(food) || food < 0 ||
+    typeof water !== 'number' || !Number.isInteger(water) || water < 0 ||
+    typeof material !== 'number' || !Number.isInteger(material) || material < 0
+  ) {
+    return createInitialStorageHub()
+  }
+  if (!isRecord(capacities)) {
+    return createInitialStorageHub()
+  }
+  const capFood = capacities['food']
+  const capWater = capacities['water']
+  const capMaterial = capacities['material']
+  if (
+    typeof capFood !== 'number' || !Number.isInteger(capFood) || capFood < 0 ||
+    typeof capWater !== 'number' || !Number.isInteger(capWater) || capWater < 0 ||
+    typeof capMaterial !== 'number' || !Number.isInteger(capMaterial) || capMaterial < 0
+  ) {
+    return createInitialStorageHub()
+  }
+  return {
+    food,
+    water,
+    material,
+    capacities: { food: capFood, water: capWater, material: capMaterial },
+  }
 }
 
 /**

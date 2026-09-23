@@ -12,7 +12,7 @@
  *     now use it.)
  *
  * Nothing in `src/domain` changed: the Water rules are untouched, no new
- * persisted field exists, `SAVE_VERSION` stays 7.
+ * persisted field exists, `SAVE_VERSION` bumps to 8.
  *
  * Run:
  *   npx vitest run tests/waterSemanticsPartitionAudit.test.ts --reporter=verbose
@@ -563,7 +563,7 @@ describe('5. Water semantics', { timeout: 30000 }, () => {
       note: 'the status is a query over canonical state: nothing new is persisted',
     })
     expect(JSON.stringify(first)).toBe(JSON.stringify(second))
-    expect(keys).toHaveLength(7)
+    expect(keys).toHaveLength(8)
     expect(JSON.stringify(JSON.parse(saved))).not.toContain('waterSupply')
     expect(hashCanonicalState(state)).toBe(hashCanonicalState(partitioned()))
     expect(getWaterProductionPerTick(state)).toBe(getWaterStatus(state).productionPerTick)
@@ -664,8 +664,8 @@ describe('8. Architectural invariants', () => {
       ].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(7)
-    expect(invariants.saveKeys).toHaveLength(7)
+    expect(invariants.saveVersion).toBe(8)
+    expect(invariants.saveKeys).toHaveLength(8)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
     expect(invariants.scenarioCount).toBe(8)

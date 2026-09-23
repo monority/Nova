@@ -33,6 +33,7 @@ describe('canonical state', () => {
       buildings: b.buildings,
       time: b.time,
       resources: b.resources,
+      storage: b.storage,
       config: b.config,
       roads: {},
     }

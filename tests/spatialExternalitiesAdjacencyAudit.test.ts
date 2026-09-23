@@ -1446,8 +1446,8 @@ describe('13. Architecture invariants (src-immutable audit)', { timeout: 30000 }
         (term) => ({ term, present: serializeCanonicalState(a).includes(term) })
       ),
     })
-    expect(saved.version).toBe(7)
-    expect(SAVE_VERSION).toBe(7)
+    expect(saved.version).toBe(8)
+    expect(SAVE_VERSION).toBe(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serializeCanonicalState(a)).not.toContain('coverage')

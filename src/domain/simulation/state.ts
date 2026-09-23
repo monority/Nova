@@ -14,6 +14,7 @@ import type { BuildingState, BuildingType } from '../building/building.js'
 import type { ColonistState } from '../population/colonist.js'
 import { ROAD_CONSTRUCTION_TICKS, type RoadState } from '../road/road.js'
 import { createInitialResourceStock, type ResourceStock } from '../resource/resource.js'
+import { createInitialStorageHub, type StorageHub } from '../storage/storage.js'
 import {
   cellKey,
   isInBounds,
@@ -37,6 +38,9 @@ export interface SimulationState {
   readonly config: SimulationConfig
   readonly time: SimulationTime
   readonly resources: ResourceStock
+  /** Centralized storage hub (Step 10BG). Aggregates surplus production
+   * for strategic buffering. */
+  readonly storage: StorageHub
   readonly buildings: Readonly<Record<string, BuildingState>>
   readonly colonists: Readonly<Record<string, ColonistState>>
   /** Authoritative mobility infrastructure (Step 09C). Derived road
@@ -85,6 +89,7 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
     config: normalized,
     time: { tick: 0 },
     resources: createInitialResourceStock(),
+    storage: createInitialStorageHub(),
     buildings: {},
     colonists: {},
     roads: {},

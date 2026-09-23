@@ -327,7 +327,7 @@ describe('material storage capacity (Step 08F)', () => {
   })
 
   it('19/20 — save/load round-trip (empty, partial, full, multi) + hash', () => {
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     const states: SimulationState[] = [
       withConstruction(singleWorkshop(), 0),
       withConstruction(singleWorkshop(), 13),

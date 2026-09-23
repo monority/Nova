@@ -1322,19 +1322,42 @@ export const materialStoredProductionForTick = (
  * (advanceConstruction ran before) contributes capacity this same tick.
  * Upkeep still runs after: production never bypasses the cap merely because
  * upkeep later frees space.
+ *
+ * Step 10BG: overflow (gross - stored) is captured in the central storage hub
+ * instead of being discarded. Storage is a PARALLEL pool — it does NOT
+ * reduce the main resource stock available for construction.
  */
 export const produceMaterial = (state: SimulationState): SimulationState => {
-  const stored = materialStoredProductionForTick(state)
-  if (stored === 0) {
+  const gross = materialProductionForTick(state)
+  if (gross === 0) {
     return state
   }
-  return {
+  const stored = materialStoredProductionForTick(state)
+  const overflow = gross - stored
+  if (stored === 0 && overflow === 0) {
+    return state
+  }
+  let nextState = {
     ...state,
     resources: {
       ...state.resources,
       construction: state.resources.construction + stored,
     },
   }
+  // Step 10BG: capture overflow in central storage (parallel pool, doesn't
+  // affect main stock affordability)
+  if (overflow > 0) {
+    const storage = nextState.storage
+    const materialHeadroom = storage.capacities.material - storage.material
+    if (materialHeadroom > 0) {
+      const allocated = Math.min(overflow, materialHeadroom)
+      nextState = {
+        ...nextState,
+        storage: { ...storage, material: storage.material + allocated },
+      }
+    }
+  }
+  return nextState
 }
 
 // ---------------------------------------------------------------------------

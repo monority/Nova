@@ -273,7 +273,7 @@ describe('productive labor constraint (Step 08E)', () => {
   })
 
   it('save/hash: SAVE_VERSION 4, round-trip stable, nothing new persisted', () => {
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     const state = stepSimulation(capacityState(5, 2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('productive')

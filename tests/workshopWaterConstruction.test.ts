@@ -353,7 +353,7 @@ describe('§8 — persistence and determinism', () => {
       saveLoadStable: serializeCanonicalState(restored) === serializeCanonicalState(after),
       water: getWaterStock(after),
     })
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(after))
     expect(hashCanonicalState(before)).not.toBe(hashCanonicalState(after))
   })

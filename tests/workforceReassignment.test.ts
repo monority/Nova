@@ -399,8 +399,8 @@ describe('5 — economic verification and recovery', () => {
 
 describe('6 — persistence and migration', () => {
   it('SAVE_VERSION is 7 and a manual assignment round-trips', () => {
-    expect(SAVE_VERSION).toBe(7)
-    expect(MIGRATABLE_SAVE_VERSION).toBe(6)
+    expect(SAVE_VERSION).toBe(8)
+    expect(MIGRATABLE_SAVE_VERSION).toBe(7)
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2 })
     const manual = reassign(state, 'colonist-2', 'building-5')
     const restored = loadSave(serializeSave(manual))

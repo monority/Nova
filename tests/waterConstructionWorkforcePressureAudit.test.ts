@@ -355,7 +355,7 @@ describe('1. Reference state (measured from the runtime)', () => {
     expect(fresh.resources.construction).toBe(INITIAL_CONSTRUCTION_MATERIAL)
     expect(fresh.resources.food).toBe(INITIAL_FOOD)
     expect(fresh.resources.water).toBe(INITIAL_WATER)
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     expect(getBuildingDefinition('workshop')).toMatchObject({
       constructionCost: 25,
       constructionWaterCost: 1,
@@ -439,7 +439,7 @@ describe('1. Reference state (measured from the runtime)', () => {
       ].map((term) => ({ term, present: serialized.includes(term) })),
       serializedLength: serialized.length,
     })
-    expect(saved.version).toBe(7)
+    expect(saved.version).toBe(8)
     expect(Object.keys(saved.state).sort()).toEqual([
       'buildings',
       'colonists',
@@ -447,6 +447,7 @@ describe('1. Reference state (measured from the runtime)', () => {
       'counters',
       'resources',
       'roads',
+      'storage',
       'time',
     ])
     // Only `resources.water` is canonical; every Water/service derivation is
@@ -1588,7 +1589,7 @@ describe('11. Architecture invariants (src-immutable audit)', () => {
       roundTripHashEqual: hashCanonicalState(a) === hashCanonicalState(a),
     })
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
 
     // Insertion-order invariance: reordering the record keys must not change
     // the canonical hash.

@@ -1219,9 +1219,9 @@ describe('20-22. Final design contract and architecture', { timeout: 30000 }, ()
       ),
       stock: getResourceStock(a),
     })
-    expect(saved.version).toBe(7)
-    expect(SAVE_VERSION).toBe(7)
-    expect(Object.keys(saved.state)).toHaveLength(7)
+    expect(saved.version).toBe(8)
+    expect(SAVE_VERSION).toBe(8)
+    expect(Object.keys(saved.state)).toHaveLength(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serialized).not.toContain('stage')

@@ -687,7 +687,7 @@ describe('determinism and persistence', () => {
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     // No derived staffing field is persisted or hashed.
     const serialized = serializeCanonicalState(state)
     expect(serialized).not.toContain('farmWorkers')

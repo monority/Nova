@@ -1475,7 +1475,7 @@ describe('§21 — audit harness performance (separate from production)', () => 
 
 describe('§22 — persistence and determinism (audit-only)', () => {
   it('SAVE_VERSION is 4 and no candidate state exists to persist', () => {
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     const state = rowWorld({ residences: 3, farms: 2, workshops: 2, material: 20 })
     const serialized = serializeCanonicalState(state)
     expect(serialized).not.toContain('farmUpkeep')

@@ -731,7 +731,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       granaryBuilding: 'if added, a new building type string only — no shape change',
       farmInput: 'no new state (reads resources.construction)',
     })
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
   })
 
   it('measures 60/120/600-tick cost of the current economy', () => {

@@ -261,7 +261,7 @@ describe('building road access (Step 09E)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getBuildingRoadAccess(loaded, b.id)).toEqual(before)
     // No access state persisted: SAVE_VERSION unchanged.
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
   })
 
   it('L — unknown building id has no access', () => {

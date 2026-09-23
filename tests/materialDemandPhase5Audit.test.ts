@@ -736,7 +736,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       buildingMaintenance: 'no new state; derived from operational buildings',
       phase5Service: 'would add a building type and possibly a resource — a shape change and a version bump',
     })
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
   })
 
   it('measures baseline performance and mirror determinism', () => {

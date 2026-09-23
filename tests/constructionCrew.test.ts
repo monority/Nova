@@ -493,8 +493,8 @@ describe('4 — economy', () => {
 // ---------------------------------------------------------------------------
 
 describe('5 — persistence and hash', () => {
-  it('SAVE_VERSION is 7 and an active crew round-trips', () => {
-    expect(SAVE_VERSION).toBe(7)
+  it('SAVE_VERSION is 8 and an active crew round-trips', () => {
+    expect(SAVE_VERSION).toBe(8)
     const base = crewWorldWithSite()
     const wellId = idsOf(base, 'well')[0]!
     const assigned = crew(base, 'colonist-1', wellId)

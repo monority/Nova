@@ -333,7 +333,7 @@ describe('4. determinism, persistence and architecture', () => {
     expect(rows.derivedInvariantUnderRoadOrder).toBe(true)
   })
 
-  it('round-trips through persistence at SAVE_VERSION 7', () => {
+  it('round-trips through persistence at SAVE_VERSION 8', () => {
     const state = run(
       [{ type: 'placeBuilding', x: 2, y: 1, buildingType: 'residence' }],
       6
@@ -349,7 +349,7 @@ describe('4. determinism, persistence and architecture', () => {
     audit('HOUSING_PERSISTENCE', rows)
     expect(rows.equalHash).toBe(true)
     expect(rows.scenarioFramingNotPersisted).toBe(true)
-    expect(rows.saveVersion).toBe(7)
+    expect(rows.saveVersion).toBe(8)
     expect(rows.networks).toBe(2)
   })
 

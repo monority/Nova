@@ -78,7 +78,7 @@ describe('scenarios — deterministic assembly', () => {
       const b = createScenarioState(shipConfig, scenario)
       expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
       expect(Object.keys(a).sort()).toEqual(
-        ['buildings', 'colonists', 'config', 'counters', 'resources', 'roads', 'time'].sort()
+        ['buildings', 'colonists', 'config', 'counters', 'resources', 'roads', 'storage', 'time'].sort()
       )
       expect(a.time.tick).toBe(0)
       // Every colonist lives in an operational Residence of this scenario.

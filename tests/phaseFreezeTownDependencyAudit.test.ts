@@ -215,7 +215,7 @@ describe('1. freeze verification', () => {
     expect(frozen.farm).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
-    expect(frozen.saveVersion).toBe(7)
+    expect(frozen.saveVersion).toBe(8)
     // 7 at the freeze; Step 10BE later added one curated content scenario
     // (no mechanic, no constant, no objective kind changed).
     expect(frozen.catalogue).toBe(8)
@@ -264,15 +264,15 @@ describe('1. freeze verification', () => {
       saveVersion: SAVE_VERSION,
     }
     audit('SOURCE_DRIFT', rows)
-    expect(rows.domainFiles).toBe(15)
-    expect(rows.srcFiles).toBe(35)
+    expect(rows.domainFiles).toBe(16)
+    expect(rows.srcFiles).toBe(36)
     expect(rows.terrainReaders).toBe(8)
     expect(rows.forbidden).toEqual([])
     // No Town stage, condition or helper exists; the only mention is the
     // progression comment that defers it.
     expect(rows.townValues).toEqual([])
     expect(rows.townMentions).toEqual(['src/application/queries/progression.ts'])
-    expect(rows.saveVersion).toBe(7)
+    expect(rows.saveVersion).toBe(8)
   })
 })
 

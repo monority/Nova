@@ -486,7 +486,7 @@ describe('1. Baseline contract', { timeout: 30000 }, () => {
     expect(contract.workshopUpkeep).toBe(1)
     expect(contract.materialStoragePerWorkshop).toBe(25)
     expect(contract.initialMaterial).toBe(100)
-    expect(contract.saveVersion).toBe(7)
+    expect(contract.saveVersion).toBe(8)
   })
 
   it('reads the Water admission gate and the Workforce contract', () => {
@@ -1537,7 +1537,7 @@ describe('16. Architectural invariants', () => {
       noNewBuilding: [...new Set([...iterateBuildings(a)].map((b) => b.type))].sort(),
       productionChanged: false,
     })
-    expect(SAVE_VERSION).toBe(7)
+    expect(SAVE_VERSION).toBe(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(a))
     expect(Object.keys(a.resources).sort()).toEqual(['construction', 'food', 'water'])

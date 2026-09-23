@@ -13,7 +13,7 @@
  *     plus a readability fix, no scenario data change.)
  *
  * No economic constant, no scenario resource, no domain rule changed.
- * `SAVE_VERSION` stays 7.
+ * `SAVE_VERSION` bumps to 8.
  *
  * Run:
  *   npx vitest run tests/openingEconomyScenarioStateAudit.test.ts --reporter=verbose
@@ -837,8 +837,8 @@ describe('8-9. Implementation and invariants', () => {
       },
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(7)
-    expect(invariants.saveKeys).toHaveLength(7)
+    expect(invariants.saveVersion).toBe(8)
+    expect(invariants.saveKeys).toHaveLength(8)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
     expect(invariants.economicConstants).toEqual({

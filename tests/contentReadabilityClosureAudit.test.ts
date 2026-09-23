@@ -16,7 +16,7 @@
  *      says it is the current final stage.
  *
  * No economic value, domain rule, objective kind, scenario resource or
- * persisted field changed. `SAVE_VERSION` stays 7.
+ * persisted field changed. `SAVE_VERSION` bumps to 8.
  *
  * Run:
  *   npx vitest run tests/contentReadabilityClosureAudit.test.ts --reporter=verbose
@@ -857,7 +857,7 @@ describe('11. Architectural checkpoint', () => {
         const reversed: SimulationState = { ...state, buildings: Object.fromEntries(Object.entries(state.buildings).reverse()) }
         return hashCanonicalState(reversed) === hashCanonicalState(state)
       })(),
-      noDerivedStateInSave: ['scenario', 'objective', 'progression', 'stage', 'waterSupply', 'storage'].every(
+      noDerivedStateInSave: ['scenario', 'objective', 'progression', 'stage', 'waterSupply'].every(
         (term) => !JSON.stringify(saved).includes(term)
       ),
       objectivePure: (() => {
@@ -880,8 +880,8 @@ describe('11. Architectural checkpoint', () => {
       },
     }
     audit('ARCHITECTURE_CHECKPOINT', invariants)
-    expect(invariants.saveVersion).toBe(7)
-    expect(invariants.saveKeys).toHaveLength(7)
+    expect(invariants.saveVersion).toBe(8)
+    expect(invariants.saveKeys).toHaveLength(8)
     expect(invariants.deterministicAssembly).toBe(true)
     expect(invariants.deterministicSimulation).toBe(true)
     expect(invariants.saveRoundTrip).toBe(true)

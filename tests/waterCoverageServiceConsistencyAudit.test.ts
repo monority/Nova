@@ -1332,7 +1332,7 @@ describe('9. persistence and closure', () => {
     }
     audit('PERSISTENCE', rows)
     expect(rows.saveVersion).toBe(SAVE_VERSION)
-    expect(rows.saveVersion).toBe(7)
+    expect(rows.saveVersion).toBe(8)
     expect(rows.topLevelKeys).toEqual([
       'buildings',
       'colonists',
@@ -1340,6 +1340,7 @@ describe('9. persistence and closure', () => {
       'counters',
       'resources',
       'roads',
+      'storage',
       'time',
     ])
     expect(rows.waterKeys).toEqual([])

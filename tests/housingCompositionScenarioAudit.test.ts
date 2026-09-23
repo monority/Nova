@@ -823,7 +823,7 @@ describe('6. phase A boundary and determinism', () => {
     // Only the 10AV terrain fixture exists: 10AZ added no fixture, and the
     // housing phenomenon became a curated scenario in 10BE instead.
     expect(rows.fixtures).toEqual(['terrain-chokepoint'])
-    expect(rows.saveVersion).toBe(7)
+    expect(rows.saveVersion).toBe(8)
   })
 
   it('keeps the layouts deterministic and save/load stable', () => {
@@ -867,7 +867,7 @@ describe('6. phase A boundary and determinism', () => {
       scenariosDeclarativeOnly: SCENARIOS.every(
         (scenario) =>
           Object.keys(scenario).sort().join(',') ===
-          'buildings,blockedCells,colonists,description,id,name,objective,resources,roads'
+          'buildings,blockedCells,colonists,description,id,name,objective,resources,roads,storage'
       ),
     }
     audit('NO_ENGINE_CHANGE', rows)
