@@ -22,12 +22,20 @@
  */
 
 import { getBuildingDefinition, type BuildingType } from '../../domain/building/building.js'
+import { isOperationalWorkplace } from '../../domain/jobs/jobs.js'
+import {
+  getBuildingRoadAccessWithNetworks,
+  getRoadIdAtCell,
+  getRoadNetworks,
+  isOperationalRoad,
+} from '../../domain/road/road.js'
 import type { CellCoordinate } from '../../domain/world/grid.js'
 import {
   validatePlacement,
   type PlacementValidation,
 } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
+import { getWaterCoverage } from '../../domain/water/water.js'
 import {
   getMaterialStoredProductionPerTick,
   getResourceStock,
@@ -75,5 +83,90 @@ export const getPlacementAffordability = (
     waterRequired,
     waterAvailable: stock.water,
     coveredByStoredProduction,
+  }
+}
+
+/**
+ * Spatial consequence preview (Step 10BA). Answers, BEFORE a command, what the
+ * candidate cell's road network would be — and therefore whether a Residence
+ * placed there could ever be water-served and how many workplaces it could
+ * reach. It creates NO new causality: every number below is read from the
+ * existing 09D/09E access and 10P coverage derivations, applied to the
+ * candidate cell instead of to an existing building.
+ *
+ * Read-only and pure: it never mutates, never reserves and never persists
+ * anything, and it is computed from the same primitives the placement
+ * authority uses (adjacent operational road cells -> their 09D network ->
+ * whether that network is covered by an operational Well).
+ */
+export interface PlacementSpatialPreview {
+  /** Operational road cells orthogonally adjacent to the candidate cell. */
+  readonly adjacentRoads: number
+  /** 09D networks those roads belong to (canonical lowest-road-id ids). */
+  readonly networkIds: readonly string[]
+  /** True when at least one touched network is covered by an operational Well. */
+  readonly waterCovered: boolean
+  /** Operational workplaces reachable through those networks. */
+  readonly reachableWorkplaces: number
+}
+
+const SPATIAL_NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+]
+
+export const getPlacementSpatialPreview = (
+  state: SimulationState,
+  cell: CellCoordinate
+): PlacementSpatialPreview => {
+  const networks = getRoadNetworks(state)
+  const networkIdByRoad = new Map<string, string>()
+  for (const network of networks) {
+    const networkId = network[0]
+    if (networkId === undefined) {
+      continue
+    }
+    for (const roadId of network) {
+      networkIdByRoad.set(roadId, networkId)
+    }
+  }
+  const adjacentRoadIds: string[] = []
+  for (const [dx, dy] of SPATIAL_NEIGHBOURS) {
+    const roadId = getRoadIdAtCell(state, { x: cell.x + dx, y: cell.y + dy })
+    if (roadId === null) {
+      continue
+    }
+    const road = state.roads[roadId]
+    if (road !== undefined && isOperationalRoad(road)) {
+      adjacentRoadIds.push(roadId)
+    }
+  }
+  const networkIds = [
+    ...new Set(
+      adjacentRoadIds
+        .map((roadId) => networkIdByRoad.get(roadId))
+        .filter((networkId): networkId is string => networkId !== undefined)
+    ),
+  ].sort()
+  const coveredNetworkIds = getWaterCoverage(state).coveredNetworkIds
+  let reachableWorkplaces = 0
+  for (const building of Object.values(state.buildings).sort((a, b) =>
+    a.id < b.id ? -1 : 1
+  )) {
+    if (!isOperationalWorkplace(building)) {
+      continue
+    }
+    const access = getBuildingRoadAccessWithNetworks(state, building.id, networks)
+    if (access.networkIds.some((networkId) => networkIds.includes(networkId))) {
+      reachableWorkplaces += 1
+    }
+  }
+  return {
+    adjacentRoads: adjacentRoadIds.length,
+    networkIds,
+    waterCovered: networkIds.some((networkId) => coveredNetworkIds.has(networkId)),
+    reachableWorkplaces,
   }
 }

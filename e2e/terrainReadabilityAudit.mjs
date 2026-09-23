@@ -134,13 +134,18 @@ async function main() {
       };
     });
     if (report.huds.legendTestIds.length === 0) {
-      finding('no HUD surface (legend/label/test id) explains terrain: the only explanation is the transient status line, so a player who moves the pointer away loses the information');
+      finding('no dedicated terrain test id is exposed (the legend lives in the shared stat row: "12 blocked cells (no roads or buildings)")');
     }
     if (report.huds.bodyMentionsTerrain && !report.huds.permanentTerrainText) {
       finding('the word "terrain" appears in the UI only through the scenario name and the transient status line: the panel itself carries no terrain legend or explanation of what a blocked cell does');
     }
-    if (report.huds.permanentTerrainText) {
-      finding('the panel mentions terrain only as scenario framing (the objective constraint sentence), never as a rule: nothing in the HUD states that a blocked cell can never hold a road or a building, and there is no legend for the visual style');
+    // Step 10BA: a terrain legend row now exists in the HUD.
+    const terrainLegend = (await stats(page)).terrainLegend;
+    report.huds.terrainLegend = terrainLegend;
+    if (!/blocked cell/.test(terrainLegend)) {
+      fail(`terrain legend missing from the HUD: "${terrainLegend}"`);
+    } else {
+      ok(`terrain legend: "${terrainLegend}"`);
     }
 
     // --- 1/4. visual distinction and layout at every viewport ----------------
@@ -202,7 +207,7 @@ async function main() {
       }
       if (metrics.blockedCellsBehindPanel.length > 0) {
         finding(
-          `at ${viewport.width}x${viewport.height} ${metrics.blockedCellsBehindPanel.length} of ${BLOCKED.length} blocked cells project behind the left HUD overlay (e.g. ${metrics.blockedCellsBehindPanel.slice(0, 3).join(' ')}) — the terrain there is obscured by the panel, which cannot be collapsed`
+          `at ${viewport.width}x${viewport.height} ${metrics.blockedCellsBehindPanel.length} of ${BLOCKED.length} blocked cells project behind the left HUD overlay (e.g. ${metrics.blockedCellsBehindPanel.slice(0, 3).join(' ')}) WHILE THE HUD IS EXPANDED — Step 10BA added a HUD collapse control that frees them (measured in e2e/spatialReadabilityAudit.mjs: 0 of 12 occluded when collapsed)`
         );
       }
       ok(`viewport ${viewport.width}x${viewport.height}: no overflow, board usable, terrain drawn (${s.terrainInstances})`);

@@ -227,6 +227,65 @@ export const getReassignmentOptions = (
   return options
 }
 
+/**
+ * Workforce diagnosis for ONE colonist (Step 10BA).
+ *
+ * PRESENTATION ONLY: every count below is a tally of the reasons the existing
+ * `validateReassignment` already returns (via `getReassignmentOptions`), plus
+ * the existing construction-assignment field. No new cause, classification or
+ * rule is introduced — the UI can therefore explain an unemployed colonist with
+ * the engine's own vocabulary instead of a second, hand-rolled explanation.
+ *
+ * Pure and read-only: nothing is stored, persisted or mutated.
+ */
+export interface WorkDiagnosis {
+  readonly colonistId: string
+  /** True when the colonist holds a workplace. */
+  readonly employed: boolean
+  /** True when the colonist is assigned to an under-construction site. */
+  readonly onConstructionCrew: boolean
+  readonly workplaceId: string | null
+  readonly assignmentMode: WorkplaceAssignmentMode
+  /** Operational workplaces in the colony (the candidate pool size). */
+  readonly operationalWorkplaces: number
+  /**
+   * How many NON-eligible targets carry each existing rejection reason (the
+   * colonist's current workplace is excluded: it is already held).
+   */
+  readonly reasons: Readonly<Partial<Record<string, number>>>
+}
+
+export const getWorkDiagnosis = (
+  state: SimulationState,
+  colonistId: string
+): WorkDiagnosis | null => {
+  const colonist = state.colonists[colonistId]
+  if (colonist === undefined) {
+    return null
+  }
+  const options = getReassignmentOptions(state, colonistId)
+  const reasons: Record<string, number> = {}
+  let operationalWorkplaces = 0
+  for (const option of options) {
+    if (option.status === 'operational') {
+      operationalWorkplaces += 1
+    }
+    if (option.isCurrent || option.reason === null) {
+      continue
+    }
+    reasons[option.reason] = (reasons[option.reason] ?? 0) + 1
+  }
+  return {
+    colonistId,
+    employed: colonist.workplaceId !== null,
+    onConstructionCrew: colonist.constructionAssignmentId !== null,
+    workplaceId: colonist.workplaceId,
+    assignmentMode: colonist.workplaceAssignmentMode,
+    operationalWorkplaces,
+    reasons,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Construction crew queries (Step 10Y)
 // ---------------------------------------------------------------------------

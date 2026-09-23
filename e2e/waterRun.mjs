@@ -196,7 +196,7 @@ async function main() {
     await selectAt(page, { x: 2, y: 3 });
     const unservedResidence = await inspectionHousingText(page);
     assert(
-      unservedResidence.includes('Water not served'),
+      unservedResidence.includes('Water: not served'),
       `unserved Residence inspection bad: "${unservedResidence}"`
     );
     ok(`unserved Residence inspection: "${unservedResidence}"`);
@@ -228,7 +228,7 @@ async function main() {
       return inspectionHousingText(page);
     })();
     assert(
-      servedResidence.includes('Water served'),
+      servedResidence.includes('Water: served'),
       `served Residence inspection bad: "${servedResidence}"`
     );
     ok(`connected Well: water ${s.water}, production ${s.waterProduction}, population ${s.colonists}, supply "${s.waterSupply}"`);

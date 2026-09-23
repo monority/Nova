@@ -205,6 +205,45 @@ export const isWaterSupplySustainable = (state: SimulationState): boolean => {
 }
 
 /**
+ * Step 10BA: the ONE wording for the colony-wide Water SUPPLY state. `served`
+ * deliberately does not appear here — `served` belongs to Residential Water
+ * SERVICE (coverage), which is a different fact and is named explicitly in the
+ * Residence inspector. No new state is introduced: each label is a function of
+ * the measured quantities of `getWaterSupplyStatus`.
+ */
+export const WATER_SUPPLY_LABELS: Readonly<Record<WaterSupplyState, string>> = {
+  inactive: '',
+  noService: 'no service',
+  noReserve: 'reserve 0',
+  supplied: 'supplied',
+  draining: 'draining',
+  shortage: 'shortage',
+}
+
+/** HUD suffix for the colony-wide supply state, e.g. ` · supplied`. */
+export const formatWaterSupplySuffix = (status: WaterSupplyStatus): string => {
+  const label = WATER_SUPPLY_LABELS[status.state]
+  return label.length === 0 ? '' : ` · ${label}`
+}
+
+/**
+ * Step 10BA: colony-wide Residential Water SERVICE, e.g. `1 / 2 served`. Both
+ * numbers already exist in the derived supply status; nothing is stored.
+ */
+export const formatResidenceService = (status: WaterSupplyStatus): string =>
+  `${status.servedResidences} / ${status.residences} served`
+
+/**
+ * Step 10BA: is ONE Residence water-served? The authority stays 10P coverage
+ * (`getWaterCoverage`); this is only the yes/no projection the inspector and
+ * the placement preview need, so the UI never re-derives coverage itself.
+ */
+export const isResidenceWaterServed = (
+  state: SimulationState,
+  residenceId: string
+): boolean => getWaterCoverage(state).servedResidenceIds.includes(residenceId)
+
+/**
  * The precise Water supply state (Step 10AR). ONE derived value built only
  * from existing queries, so the UI can never conflate the five concepts the
  * Water rules actually use:

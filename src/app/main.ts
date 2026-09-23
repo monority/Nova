@@ -28,10 +28,16 @@ import {
   getColonistInspection,
   getConstructionCrewId,
   getConstructionCrewOptions,
+  formatResidenceService,
+  formatWaterSupplySuffix,
   getObjectiveStatus,
+  getPlacementSpatialPreview,
   getProgression,
   getReassignmentOptions,
+  getWorkDiagnosis,
+  isResidenceWaterServed,
   SCENARIOS,
+  type WorkDiagnosis,
   type ObjectiveDefinition,
   type ObjectiveStatus,
   serializeSave,
@@ -55,7 +61,6 @@ import {
   getWaterServedResidenceCount,
   getWaterStock,
   getWaterSupplyStatus,
-  getWaterCoverage,
   hasOperationalWell,
   MATERIAL_PER_WORKER_PER_TICK,
   MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
@@ -116,6 +121,11 @@ const ui = {
   foodForecast: document.querySelector<HTMLSpanElement>('#ui-food-forecast'),
   water: document.querySelector<HTMLSpanElement>('#ui-water'),
   waterStatus: document.querySelector<HTMLSpanElement>('#ui-water-status'),
+  hudToggle: document.querySelector<HTMLButtonElement>('#btn-hud'),
+  panel: document.querySelector<HTMLElement>('#nova-ui'),
+  residences: document.querySelector<HTMLSpanElement>('#ui-residences'),
+  terrainLabel: document.querySelector<HTMLElement>('#ui-terrain-label'),
+  terrain: document.querySelector<HTMLSpanElement>('#ui-terrain'),
   buildings: document.querySelector<HTMLSpanElement>('#ui-buildings'),
   operational: document.querySelector<HTMLSpanElement>('#ui-operational'),
   colonists: document.querySelector<HTMLSpanElement>('#ui-colonists'),
@@ -254,17 +264,17 @@ const refreshInspection = (): void => {
               ? 'Water production — staffed but no road access, producing +0/tick'
               : `Water production — producing +${WATER_PER_WELL_PER_TICK}/tick (staffed)`
     } else if (building.type === 'residence') {
-      // Step 10AR: Water service is a property of the Residence's road
-      // network (10P coverage), so the inspector names it explicitly: the
-      // HUD's supply state alone cannot show which Residence is unserved.
-      const served = getWaterCoverage(controller.getState()).servedResidenceIds.includes(
-        building.id
-      )
+      // Step 10AR/10BA: Water service is a property of the Residence's road
+      // network (10P coverage), so the inspector names it explicitly — the
+      // HUD's supply state alone cannot show which Residence is unserved. The
+      // word `served` here means SERVICE (coverage), never the colony supply
+      // state, which the HUD reports separately as supplied/draining/shortage.
+      const served = isResidenceWaterServed(controller.getState(), building.id)
       ui.insHousing.textContent = `Housing — Capacity ${building.housingCapacity} · Residents ${building.occupiedHousing}${
         building.status === 'operational'
           ? served
-            ? ' · Water served'
-            : ' · Water not served (no covered Well on this network)'
+            ? ' · Water: served'
+            : ' · Water: not served (no covered Well on this network)'
           : ''
       }`
     } else {
@@ -293,7 +303,19 @@ const refreshInspection = (): void => {
   currentWorkerColonistId = workerId
   if (ui.insWorker !== null) {
     if (!isWorkplace) {
-      ui.insWorker.textContent = ''
+      // Step 10BA: for a Residence the same row answers the WORKFORCE question
+      // — including the case 10AZ found unreadable, an unemployed resident.
+      // The explanation is composed from the reasons the domain already
+      // returns (getWorkDiagnosis), never from a second rule.
+      const residentId =
+        workplace?.type === 'residence'
+          ? (Object.values(state.colonists)
+              .filter((colonist) => colonist.residenceId === workplace.id)
+              .map((colonist) => colonist.id)
+              .sort()[0] ?? null)
+          : null
+      const diagnosis = residentId === null ? null : getWorkDiagnosis(state, residentId)
+      ui.insWorker.textContent = describeWork(diagnosis)
     } else if (workerId === null) {
       ui.insWorker.textContent = 'Worker — none (vacant)'
     } else {
@@ -779,23 +801,27 @@ const refreshUi = (): void => {
   if (ui.water !== null) {
     ui.water.textContent = String(getWaterStock(s))
   }
-  // Step 10AR: the precise Water supply state, so the HUD never conflates
-  // capacity, balance, reserve, service and shortage. Vocabulary:
-  //   no service / shortage / draining / reserve 0 / served
+  // Step 10AR/10BA: the precise Water supply state, so the HUD never conflates
+  // capacity, balance, reserve, service and shortage. The wording lives in ONE
+  // place (`WATER_SUPPLY_LABELS`) and deliberately avoids `served`: that word
+  // belongs to Residential SERVICE, shown on the Residences row and named
+  // explicitly per Residence in the inspector.
   const water = getWaterSupplyStatus(s)
   if (ui.waterStatus !== null) {
-    ui.waterStatus.textContent =
-      water.state === 'inactive'
-        ? ''
-        : water.state === 'noService'
-          ? ' · no service'
-          : water.state === 'shortage'
-            ? ' · shortage'
-            : water.state === 'draining'
-              ? ' · draining'
-              : water.state === 'noReserve'
-                ? ' · reserve 0'
-                : ' · served'
+    ui.waterStatus.textContent = formatWaterSupplySuffix(water)
+  }
+  if (ui.residences !== null) {
+    ui.residences.textContent = formatResidenceService(water)
+  }
+  // Step 10BA: a terrain legend, only when the world actually has terrain.
+  const blockedCells = s.config.world.blockedCells ?? []
+  if (ui.terrainLabel !== null && ui.terrain !== null) {
+    const hasTerrain = blockedCells.length > 0
+    ui.terrainLabel.style.display = hasTerrain ? '' : 'none'
+    ui.terrain.style.display = hasTerrain ? '' : 'none'
+    ui.terrain.textContent = hasTerrain
+      ? `${blockedCells.length} blocked cell${blockedCells.length === 1 ? '' : 's'} (no roads or buildings)`
+      : ''
   }
   if (ui.buildings !== null) {
     ui.buildings.textContent = String(Object.keys(s.buildings).length)
@@ -1003,6 +1029,25 @@ if (
   applyScenario(requestedScenario)
 }
 
+// --- HUD collapse (Step 10BA) -------------------------------------------------
+// The panel can be hidden so the board stays visible at narrow viewports. The
+// status line (placement/refusal feedback) is deliberately NOT hidden, and the
+// state lives only in the DOM: nothing about the HUD is persisted.
+const setHudCollapsed = (collapsed: boolean): void => {
+  ui.panel?.classList.toggle('collapsed', collapsed)
+  if (ui.hudToggle !== null) {
+    ui.hudToggle.setAttribute('aria-expanded', String(!collapsed))
+    ui.hudToggle.textContent = collapsed ? 'SHOW' : 'HIDE'
+    ui.hudToggle.title = collapsed
+      ? 'Show the HUD panels'
+      : 'Hide the HUD panels (the status line stays visible)'
+  }
+}
+
+ui.hudToggle?.addEventListener('click', () => {
+  setHudCollapsed(!(ui.panel?.classList.contains('collapsed') ?? false))
+})
+
 // --- Simulation controls -----------------------------------------------------
 
 ui.play?.addEventListener('click', () => {
@@ -1060,6 +1105,68 @@ const roadCandidateCells = (
   return expandRoadDrag(start, cell)
 }
 
+/**
+ * Step 10BA: what the candidate cell's NETWORK would mean, BEFORE the command.
+ * Every fact comes from existing derivations (`getPlacementSpatialPreview`); the
+ * UI only chooses the wording. Shown only when the cell is placeable, so the
+ * refusal messages stay exactly as they were.
+ */
+function describeSpatialConsequence(
+  cell: CellCoordinate,
+  buildingType: BuildingType
+): string {
+  const preview = getPlacementSpatialPreview(controller.getState(), cell)
+  if (buildingType === 'residence') {
+    if (preview.adjacentRoads === 0) {
+      return ' · no adjacent road → would never be water-served'
+    }
+    if (!preview.waterCovered) {
+      return ' · water: NOT served (no covered Well on this network)'
+    }
+    const workplaces = preview.reachableWorkplaces
+    return ` · water: served · ${workplaces} workplace${workplaces === 1 ? '' : 's'} reachable`
+  }
+  return preview.adjacentRoads === 0
+    ? ' · no adjacent road → would produce nothing'
+    : ' · road access'
+}
+
+/**
+ * Step 10BA: the workforce line for a selected Residence, built ONLY from the
+ * reasons the domain already returns (`getWorkDiagnosis`), with the engine's own
+ * vocabulary. No new cause is invented.
+ */
+function describeWork(diagnosis: WorkDiagnosis | null): string {
+  if (diagnosis === null) {
+    return ''
+  }
+  if (diagnosis.onConstructionCrew) {
+    return 'Work — construction crew (not employed)'
+  }
+  if (!diagnosis.employed) {
+    const reasons = diagnosis.reasons
+    const parts: string[] = []
+    if (diagnosis.operationalWorkplaces === 0) {
+      parts.push('no operational workplace')
+    }
+    const notConnected = reasons['notConnected'] ?? 0
+    const occupied = reasons['workplaceOccupied'] ?? 0
+    if (notConnected > 0) {
+      parts.push(`${notConnected} with no road access`)
+    }
+    if (occupied > 0) {
+      parts.push(`${occupied} occupied`)
+    }
+    if (parts.length === 0) {
+      parts.push('no reachable workplace')
+    }
+    return `Work — unemployed · ${parts.join(' · ')}`
+  }
+  const mode =
+    diagnosis.assignmentMode === 'manual' ? 'manual override' : 'automatic assignment'
+  return `Work — employed (${mode})`
+}
+
 const describeCellStatus = (cell: CellCoordinate): string => {
   const tool = selectedTool
   if (tool.kind !== 'building') {
@@ -1077,7 +1184,7 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     const storedSuffix = affordability.coveredByStoredProduction
       ? ` (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored this tick)`
       : ''
-    return `cell ${cell.x},${cell.y} — ready · material ${cost}${storedSuffix}${waterSuffix}`
+    return `cell ${cell.x},${cell.y} — ready · material ${cost}${storedSuffix}${waterSuffix}${describeSpatialConsequence(cell, tool.type)}`
   }
   const placement = affordability.placement
   if (!placement.valid && placement.reason === 'insufficientResources') {
@@ -1307,7 +1414,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string; readonly residenceService: string; readonly terrainLegend: string; readonly panelCollapsed: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -1393,6 +1500,10 @@ window.__nova = {
       servedColonists: String(getServedColonistCount(state)),
       waterSustainable: String(isWaterSupplySustainable(state)),
       waterSupply: getWaterSupplyStatus(state).state,
+      // Step 10BA: the two readability surfaces this step exposes.
+      residenceService: formatResidenceService(getWaterSupplyStatus(state)),
+      terrainLegend: ui.terrain?.style.display === 'none' ? '' : (ui.terrain?.textContent ?? ''),
+      panelCollapsed: String(ui.panel?.classList.contains('collapsed') ?? false),
       hasOperationalWell: String(hasOperationalWell(state)),
       // Step 10AV: terrain as spatial input. `blockedCells` is the canonical
       // state projection; `terrainInstances` is what the renderer actually

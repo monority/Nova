@@ -246,7 +246,7 @@ async function main() {
     evidence('INSPECTIONS', inspections);
     assert(inspections.farm.includes('producing +2/tick'), `Farm inspection must name its production: "${inspections.farm}"`);
     assert(inspections.well.includes('producing +2/tick'), `Well inspection must name its production: "${inspections.well}"`);
-    assert(inspections.residence.includes('Water served'), `Residence inspection must name Water service: "${inspections.residence}"`);
+    assert(inspections.residence.includes('Water: served'), `Residence inspection must name Water service: "${inspections.residence}"`);
     // Step 10AT: the Workshop must speak the same language as the Farm and the
     // Well (production) and name BOTH industrial constraints: upkeep and the
     // 25-per-Workshop storage.

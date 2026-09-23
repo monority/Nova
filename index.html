@@ -50,6 +50,29 @@
         letter-spacing: 0.18em;
         color: #d9a441;
       }
+      #nova-ui-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      #btn-hud {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        padding: 2px 6px;
+      }
+      /* Step 10BA: at narrow viewports a HUD that cannot be hidden covers the
+         board — and therefore the cells the player must click. Collapsing keeps
+         the header and the status line (the placement/refusal feedback) and
+         hides only the panels, which stay one click away. State is DOM-only:
+         nothing about the HUD is persisted. */
+      #nova-ui.collapsed .row,
+      #nova-ui.collapsed #scenario,
+      #nova-ui.collapsed #selected-building,
+      #nova-ui.collapsed #progression,
+      #nova-ui.collapsed .stats {
+        display: none;
+      }
       #nova-ui .row {
         display: flex;
         gap: 6px;
@@ -138,12 +161,58 @@
       #selected-building b {
         color: #d9a441;
       }
+      /* Step 10BA: at narrow viewports the content-sized overlay used to take
+         ~95-96% of the viewport width, hiding the board (and therefore the
+         cells the player has to click). Cap its share of the width, tighten the
+         padding and the type a notch, and let long lines wrap: every causal
+         information stays reachable, the board stays visible. */
+      @media (max-width: 560px) {
+        #nova-ui {
+          top: 8px;
+          left: 8px;
+          gap: 6px;
+          padding: 8px 10px;
+          max-width: 58vw;
+          max-height: calc(100vh - 16px);
+          font-size: 12px;
+        }
+        #nova-ui h1 {
+          font-size: 13px;
+        }
+        #ui-status,
+        #progression,
+        #selected-building {
+          max-width: none;
+        }
+        #scenario {
+          max-width: 100%;
+        }
+        #nova-ui .row,
+        #nova-ui button,
+        #nova-ui select {
+          font-size: 11px;
+        }
+        #nova-ui .stats {
+          font-size: 11px;
+          gap: 2px 8px;
+        }
+      }
     </style>
   </head>
   <body>
     <div id="nova-container" data-testid="nova-viewport"></div>
     <div id="nova-ui">
-      <h1>NOVA</h1>
+      <div id="nova-ui-header">
+        <h1>NOVA</h1>
+        <button
+          id="btn-hud"
+          data-testid="hud-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="nova-ui"
+          title="Show or hide the HUD panels (the status line stays visible)"
+        >HIDE</button>
+      </div>
       <div id="selected-building" data-testid="building-inspection">
         <div>Building: <b id="ins-type" data-testid="inspection-type">[ none ]</b></div>
         <div id="ins-status" data-testid="inspection-status">No building selected</div>
@@ -198,6 +267,8 @@
         <div>Material:</div><span><span id="ui-construction" data-testid="stat-construction">100</span><span id="ui-material-status" data-testid="stat-material-status"></span></span>
         <div>Food:</div><span><span id="ui-food" data-testid="stat-food">100</span><span id="ui-food-forecast" data-testid="stat-food-forecast"></span></span>
         <div>Water:</div><span><span id="ui-water" data-testid="stat-water">0</span><span id="ui-water-status" data-testid="stat-water-status"></span></span>
+        <div>Residences:</div><span id="ui-residences" data-testid="stat-residences">0 / 0 served</span>
+        <div id="ui-terrain-label" style="display: none">Terrain:</div><span id="ui-terrain" data-testid="stat-terrain" style="display: none"></span>
         <div>Buildings:</div><span id="ui-buildings" data-testid="stat-buildings">0</span>
         <div>Operational:</div><span id="ui-operational" data-testid="stat-operational">0</span>
         <div>Colonists:</div><span id="ui-colonists" data-testid="stat-colonists">0</span>
