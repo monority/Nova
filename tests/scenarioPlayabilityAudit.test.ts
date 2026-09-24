@@ -252,7 +252,7 @@ describe('1. Architecture verification', { timeout: 30000 }, () => {
     }
     // Progression thresholds are model-produced.
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
-    expect(getProgression(createScenarioState(shipConfig, findScenario('industrial-expansion')!)).deferred).toBe(true)
+    expect(getProgression(createScenarioState(shipConfig, findScenario('industrial-expansion')!)).deferred).toBe(false)
   })
 })
 

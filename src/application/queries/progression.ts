@@ -17,7 +17,8 @@
  *
  * Every threshold is produced by the model itself (1 Water per served
  * colonist, 2 Water per staffed Well, 2 Food per staffed Farm). Town and
- * beyond are explicitly DEFERRED rather than given fake conditions.
+ * Town is a derived capability state: Village conditions plus a staffed
+ * Workshop. No new persistent state is required.
  *
  * Food sustainability is not re-implemented here: the authoritative query
  * (`isFoodSupplySustainable`) is reused, so there is exactly one definition.
@@ -27,7 +28,7 @@
 
 import { WATER_PER_WELL_PER_TICK } from '../../domain/resource/resource.js'
 import { getRoadNetworks } from '../../domain/road/road.js'
-import { getPopulationCount } from '../../domain/simulation/phases.js'
+import { getPopulationCount, countStaffedOperationalWorkshops } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 import {
   getFoodConsumptionPerTick,
@@ -36,7 +37,7 @@ import {
   isFoodSupplySustainable,
 } from './resources.js'
 
-export type ProgressionStage = 'wilderness' | 'settlement' | 'village'
+export type ProgressionStage = 'wilderness' | 'settlement' | 'village' | 'town'
 
 /**
  * Colonists one staffed Well supports. NOT an arbitrary number: a Well
@@ -47,7 +48,7 @@ export type ProgressionStage = 'wilderness' | 'settlement' | 'village'
  */
 export const COLONISTS_PER_STAFFED_WELL = WATER_PER_WELL_PER_TICK
 
-export type ProgressionConditionId = 'population' | 'food' | 'roads' | 'water'
+export type ProgressionConditionId = 'population' | 'food' | 'roads' | 'water' | 'workshop'
 
 export interface ProgressionCondition {
   readonly id: ProgressionConditionId
@@ -77,6 +78,7 @@ const STAGE_LABELS: Readonly<Record<ProgressionStage, string>> = {
   wilderness: 'Wilderness',
   settlement: 'Settlement',
   village: 'Village',
+  town: 'Town',
 }
 
 const populationCondition = (
@@ -137,6 +139,17 @@ export const getVillageConditions = (
   foodCondition(state),
 ]
 
+export const getTownConditions = (state: SimulationState): readonly ProgressionCondition[] => [
+  {
+    id: 'workshop',
+    label: 'Staffed Workshop',
+    met: countStaffedOperationalWorkshops(state) > 0,
+    detail: `${countStaffedOperationalWorkshops(state)} staffed`,
+  },
+  waterCapacityCondition(state),
+  foodCondition(state),
+]
+
 const allMet = (conditions: readonly ProgressionCondition[]): boolean =>
   conditions.every((condition) => condition.met)
 
@@ -147,23 +160,27 @@ const allMet = (conditions: readonly ProgressionCondition[]): boolean =>
 export const getProgression = (state: SimulationState): ProgressionStatus => {
   const settlement = getSettlementConditions(state)
   const village = getVillageConditions(state)
-  const isVillage = allMet(village)
+  const isVillageBase = allMet(village)
+  const isTown = isVillageBase && allMet(getTownConditions(state))
+  const isVillage = isTown || isVillageBase
   const isSettlement = isVillage || allMet(settlement)
-  const stage: ProgressionStage = isVillage
-    ? 'village'
-    : isSettlement
-      ? 'settlement'
-      : 'wilderness'
+  const stage: ProgressionStage = isTown
+    ? 'town'
+    : isVillage
+      ? 'village'
+      : isSettlement
+        ? 'settlement'
+        : 'wilderness'
   const nextStage: ProgressionStage | null =
-    stage === 'wilderness' ? 'settlement' : stage === 'settlement' ? 'village' : null
+    stage === 'wilderness' ? 'settlement' : stage === 'settlement' ? 'village' : stage === 'village' ? 'town' : null
   const nextConditions: readonly ProgressionCondition[] =
-    nextStage === 'settlement' ? settlement : nextStage === 'village' ? village : []
+    nextStage === 'settlement' ? settlement : nextStage === 'village' ? village : nextStage === 'town' ? getTownConditions(state) : []
   return {
     stage,
     stageLabel: STAGE_LABELS[stage],
     nextStage,
     nextStageLabel: nextStage === null ? null : STAGE_LABELS[nextStage],
-    conditions: stage === 'wilderness' ? [] : stage === 'settlement' ? settlement : village,
+    conditions: stage === 'wilderness' ? [] : stage === 'settlement' ? settlement : stage === 'village' ? village : getTownConditions(state),
     nextConditions,
     blockers: nextConditions
       .filter((condition) => !condition.met)

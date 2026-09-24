@@ -121,8 +121,8 @@ describe('scenarios — starting states and progression framing', () => {
     const expectations: Readonly<Record<string, { stage: string; blockers: readonly string[] }>> = {
       'first-settlement': { stage: 'wilderness', blockers: ['Population 1', 'Food balance', 'Road network'] },
       'water-constraint': { stage: 'settlement', blockers: ['Water capacity 2'] },
-      'industrial-expansion': { stage: 'village', blockers: [] },
-      'water-reserve-industry': { stage: 'village', blockers: [] },
+      'industrial-expansion': { stage: 'village', blockers: ['Staffed Workshop'] },
+      'water-reserve-industry': { stage: 'village', blockers: ['Staffed Workshop'] },
       'spatial-efficiency': { stage: 'wilderness', blockers: ['Population 1', 'Food balance', 'Road network'] },
       'population-expansion': { stage: 'settlement', blockers: ['Water capacity 2'] },
       // Step 10BE: two networks, no Food production at the start.

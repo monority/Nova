@@ -71,6 +71,7 @@ const STAGE_RANK: Readonly<Record<ProgressionStage, number>> = {
   wilderness: 0,
   settlement: 1,
   village: 2,
+  town: 3,
 }
 
 const BUILDING_LABELS: Readonly<Record<BuildingType, string>> = {

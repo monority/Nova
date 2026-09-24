@@ -32,7 +32,8 @@
     "test:e2e:spatial-readability": "node e2e/spatialReadabilityAudit.mjs",
     "test:e2e:housing": "node e2e/housingCompositionRun.mjs",
     "test:e2e:workforce-contention": "node e2e/workforceContentionFeedbackRun.mjs",
-    "test:e2e:farm-well-allocation": "node e2e/farmWellAllocationRun.mjs"
+    "test:e2e:farm-well-allocation": "node e2e/farmWellAllocationRun.mjs",
+    "test:e2e:town-gate": "node e2e/townGateRun.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

@@ -520,7 +520,7 @@ describe('3-4. Objective and progression readability', { timeout: 60000 }, () =>
     audit('PROGRESSION_READABILITY', {
       rows,
       uiWording: {
-        definedNext: 'Settlement / Village',
+        definedNext: 'Settlement / Village / Town',
         blockedDefined: 'the unmet condition is listed and repeated on the blocked line',
         undefinedFuture: 'not yet defined (this is the current final stage)',
       },
@@ -529,11 +529,11 @@ describe('3-4. Objective and progression readability', { timeout: 60000 }, () =>
     expect(rows.wilderness.blockers.length).toBe(3)
     expect(rows.settlement.next).toBe('village')
     expect(rows.settlement.blockers).toEqual(['Water capacity 2'])
-    // Village: a defined-but-absent next stage, no fabricated Town condition.
-    expect(rows.village.next).toBeNull()
-    expect(rows.village.deferred).toBe(true)
-    expect(rows.village.conditions).toHaveLength(0)
-    expect(rows.village.blockers).toHaveLength(0)
+    // Village now names Town as the next, fully derived capability gate.
+    expect(rows.village.next).toBe('town')
+    expect(rows.village.deferred).toBe(false)
+    expect(rows.village.conditions).toHaveLength(3)
+    expect(rows.village.blockers).toEqual(['Staffed Workshop'])
     expect(rows.village.currentConditions.every(([, met]) => met)).toBe(true)
   })
 })

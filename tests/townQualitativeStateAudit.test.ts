@@ -453,7 +453,7 @@ describe('Town audit — candidate table, classification and the deferred state'
     expect(missingDependency.length).toBeGreaterThan(0)
   })
 
-  it('keeps the deferred UI honest: Village has no next stage and no Town condition exists', () => {
+  it('exposes the derived Town gate honestly: Village has an explicit next stage', () => {
     const village = scene({
       residences: [
         { x: 1, y: 0 },
@@ -475,8 +475,8 @@ describe('Town audit — candidate table, classification and the deferred state'
       stages: ['wilderness', 'settlement', 'village'],
     })
     expect(progression.stage).toBe('village')
-    expect(progression.nextStage).toBeNull()
-    expect(progression.deferred).toBe(true)
-    expect(progression.nextConditions).toHaveLength(0)
+    expect(progression.nextStage).toBe('town')
+    expect(progression.deferred).toBe(false)
+    expect(progression.nextConditions).toHaveLength(3)
   })
 })

@@ -252,9 +252,7 @@ describe('1. freeze verification', () => {
       forbidden: ['TerrainSystem', 'WaterSystem', 'ServiceSystem', 'TownSystem', 'BiomeSystem', 'DemandSystem', 'TaxSystem', 'ZoningSystem'].filter(
         (name) => source.some(({ text }) => text.includes(name))
       ),
-      // Town must not exist as a stage or condition.
-      // Town must not exist as a VALUE or an identifier: only the documented
-      // deferral comment in progression.ts mentions it.
+      // Town is a derived stage with explicit conditions.
       townValues: source
         .filter(({ text }) => /'town'|Town[A-Z]|TownCondition|isTown/.test(text))
         .map(({ file }) => file),
@@ -268,9 +266,8 @@ describe('1. freeze verification', () => {
     expect(rows.srcFiles).toBe(36)
     expect(rows.terrainReaders).toBe(8)
     expect(rows.forbidden).toEqual([])
-    // No Town stage, condition or helper exists; the only mention is the
-    // progression comment that defers it.
-    expect(rows.townValues).toEqual([])
+    // Town is now an explicit derived stage, confined to progression logic.
+    expect(rows.townValues).toEqual(['src/application/queries/progression.ts'])
     expect(rows.townMentions).toEqual(['src/application/queries/progression.ts'])
     expect(rows.saveVersion).toBe(8)
   })
@@ -394,9 +391,9 @@ describe('3. town criteria against the model', () => {
     audit('PROGRESSION_ANCHOR', rows)
     // Village is the final implemented stage: nothing beyond it is contracted.
     expect(rows.stage).toBe('village')
-    expect(rows.nextStage).toBeNull()
-    expect(rows.deferred).toBe(true)
-    expect(rows.nextConditions).toBe(0)
+    expect(rows.nextStage).toBe('town')
+    expect(rows.deferred).toBe(false)
+    expect(rows.nextConditions).toBe(3)
     expect(rows.serialized).toBe(false)
   })
 })
@@ -633,9 +630,9 @@ describe('5. content versus capability', () => {
       sameRules:
         canonicalJson(getBuildingDefinition('workshop')) ===
         canonicalJson(getBuildingDefinition('workshop')),
-      progressionConditionsIdentical:
-        getProgression(lean).nextConditions.map((condition) => condition.id).join(',') ===
-        getProgression(rich).nextConditions.map((condition) => condition.id).join(','),
+      progressionStageAware:
+        getProgression(lean).nextConditions.map((condition) => condition.id).join(',') !==
+          getProgression(rich).nextConditions.map((condition) => condition.id).join(','),
       buildableActionTypesIdentical: (() => {
         const cell = { x: 20, y: 8 }
         const types = (['residence', 'farm', 'well', 'workshop'] as const).map((type) =>
@@ -649,7 +646,7 @@ describe('5. content versus capability', () => {
     // lacks, and the condition set behind the next stage is identical.
     expect(rows.rich.population).toBeGreaterThan(rows.lean.population)
     expect(rows.sameRules).toBe(true)
-    expect(rows.progressionConditionsIdentical).toBe(true)
+    expect(rows.progressionStageAware).toBe(true)
     expect(rows.buildableActionTypesIdentical).toBe(true)
     // A rich start is still bounded by the same 2/2 identity.
     expect(spareWorkers(rows.rich.population)).toBeLessThanOrEqual(0)

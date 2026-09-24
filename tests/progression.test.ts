@@ -32,7 +32,7 @@ import {
   type SimulationState,
 } from '@/index'
 
-const shipConfig: SimulationConfig = { world: { seed: 'nova-step10al', width: 12, height: 12 } }
+const shipConfig: SimulationConfig = { world: { seed: 'nova-step10al', width: 24, height: 12 } }
 
 const createState = (): SimulationState => createInitialState(shipConfig)
 
@@ -175,7 +175,7 @@ describe('progression — Settlement', () => {
 })
 
 describe('progression — Village', () => {
-  it('reaches Village when population, Water capacity and Food balance all hold, and defers further stages', () => {
+  it('reaches Village when population, Water capacity and Food balance all hold, and exposes Town next', () => {
     const village = scene({
       residences: [
         { x: 1, y: 0 },
@@ -191,11 +191,11 @@ describe('progression — Village', () => {
     const progression = getProgression(village)
     expect(progression.stage).toBe('village')
     expect(progression.stageLabel).toBe('Village')
-    expect(progression.nextStage).toBeNull()
-    expect(progression.nextStageLabel).toBeNull()
-    expect(progression.nextConditions).toEqual([])
-    expect(progression.blockers).toEqual([])
-    expect(progression.deferred).toBe(true)
+    expect(progression.nextStage).toBe('town')
+    expect(progression.nextStageLabel).toBe('Town')
+    expect(progression.nextConditions.map((condition) => condition.id)).toEqual(['workshop', 'water', 'food'])
+    expect(progression.blockers).toEqual(['Staffed Workshop'])
+    expect(progression.deferred).toBe(false)
     expect(progression.conditions.map((c) => c.id)).toEqual(['population', 'water', 'food'])
     expect(progression.conditions.every((c) => c.met)).toBe(true)
   })
@@ -269,7 +269,53 @@ describe('progression — Village', () => {
     for (let i = 0; i < 5; i += 1) state = stepSimulation(state)
     const progression = getProgression(state)
     expect(progression.stage).toBe('village')
-    expect(progression.deferred).toBe(true)
+    expect(progression.deferred).toBe(false)
+  })
+})
+
+describe('progression — Town', () => {
+  it('reaches Town when a staffed Workshop, Food balance, and Water capacity support the population', () => {
+    const town = scene({
+      residences: Array.from({ length: 10 }, (_, index) => ({ x: 1 + index * 2, y: 0 })),
+      workplaces: [
+        { type: 'farm', x: 1, y: 2 },
+        { type: 'farm', x: 3, y: 2 },
+        { type: 'farm', x: 5, y: 2 },
+        { type: 'farm', x: 7, y: 2 },
+        { type: 'farm', x: 9, y: 2 },
+        { type: 'well', x: 11, y: 2 },
+        { type: 'well', x: 13, y: 2 },
+        { type: 'well', x: 15, y: 2 },
+        { type: 'well', x: 17, y: 2 },
+        { type: 'workshop', x: 19, y: 2 },
+      ],
+      roads: rowRoads(19),
+      colonists: 10,
+      material: 1000,
+      water: 100,
+    })
+    const progression = getProgression(town)
+    expect(progression.stageLabel).toBe('Town')
+    expect(progression.nextStage).toBeNull()
+    expect(progression.conditions.map((condition) => condition.id)).toEqual(['workshop', 'water', 'food'])
+    expect(progression.conditions.every((condition) => condition.met)).toBe(true)
+  })
+
+  it('shows Town as blocked when a Workshop is unstaffed', () => {
+    const village = scene({
+      residences: [{ x: 1, y: 0 }, { x: 3, y: 0 }],
+      workplaces: [
+        { type: 'farm', x: 1, y: 2 },
+        { type: 'well', x: 3, y: 2 },
+        { type: 'workshop', x: 5, y: 2 },
+      ],
+      roads: rowRoads(5),
+      colonists: 2,
+      material: 1000,
+      water: 100,
+    })
+    expect(getProgression(village).stage).toBe('village')
+    expect(getProgression(village).nextConditions.find((condition) => condition.id === 'workshop')?.met).toBe(false)
   })
 })
 
