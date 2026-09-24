@@ -21,6 +21,7 @@ import {
   materialStoredProductionForTick,
 } from '../../domain/simulation/phases.js'
 import {
+  countStaffedOperationalWells,
   getWaterCoverage,
   getWaterStatus,
   hasOperationalWell,
@@ -65,6 +66,59 @@ export const getVacantOperationalFarmCount = (
 /** Deterministic colony food demand per tick: population × 1 (Step 05B). */
 export const getFoodConsumptionPerTick = (state: SimulationState): number =>
   Object.keys(state.colonists).length * FOOD_PER_COLONIST_PER_TICK
+
+/** Derived Farm/Well workforce allocation summary for player-facing expression. */
+export interface FarmWellAllocationSummary {
+  readonly population: number
+  readonly employed: number
+  readonly farmStaffed: number
+  readonly farmCapacity: number
+  readonly wellStaffed: number
+  readonly wellCapacity: number
+  readonly vacantFarmJobs: number
+  readonly vacantWellJobs: number
+  readonly foodProduction: number
+  readonly foodConsumption: number
+  readonly foodBalance: number
+  readonly waterCapacity: number
+  readonly waterNeed: number
+  readonly waterHeadroom: number
+}
+
+export const getFarmWellAllocationSummary = (
+  state: SimulationState
+): FarmWellAllocationSummary => {
+  let farmCapacity = 0
+  let wellCapacity = 0
+  for (const building of iterateBuildings(state)) {
+    if (building.status !== 'operational') continue
+    if (building.type === 'farm') farmCapacity += 1
+    if (building.type === 'well') wellCapacity += 1
+  }
+  const population = Object.keys(state.colonists).length
+  const foodProduction = getFoodProductionPerTick(state)
+  const foodConsumption = getFoodConsumptionPerTick(state)
+  const waterCapacity = getWaterProductionPerTick(state)
+  const waterNeed = getWaterNeedPerTick(state)
+  const farmStaffed = countStaffedOperationalFarms(state)
+  const wellStaffed = countStaffedOperationalWells(state)
+  return {
+    population,
+    employed: countEmployedWorkers(state),
+    farmStaffed,
+    farmCapacity,
+    wellStaffed,
+    wellCapacity,
+    vacantFarmJobs: farmCapacity - farmStaffed,
+    vacantWellJobs: wellCapacity - wellStaffed,
+    foodProduction,
+    foodConsumption,
+    foodBalance: foodProduction - foodConsumption,
+    waterCapacity,
+    waterNeed,
+    waterHeadroom: waterCapacity - waterNeed,
+  }
+}
 
 /**
  * Derived food forecast (Step 07C §1, correcting the Step 07A finding).

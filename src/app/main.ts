@@ -46,6 +46,7 @@ import {
   getAccessibleBuildingCount,
   getEmploymentSummary,
   getFoodTicksRemaining,
+  getFarmWellAllocationSummary,
   getProductiveFarmWorkerCount,
   getHousingSummary,
   getMaterialProductionPerTick,
@@ -134,6 +135,7 @@ const ui = {
   operational: document.querySelector<HTMLSpanElement>('#ui-operational'),
   colonists: document.querySelector<HTMLSpanElement>('#ui-colonists'),
   jobs: document.querySelector<HTMLSpanElement>('#ui-jobs'),
+  allocation: document.querySelector<HTMLSpanElement>('#ui-allocation'),
   roads: document.querySelector<HTMLSpanElement>('#ui-roads'),
   scenario: document.querySelector<HTMLSelectElement>('#scenario'),
   stage: document.querySelector<HTMLSpanElement>('#ui-stage'),
@@ -862,6 +864,10 @@ const refreshUi = (): void => {
   }
   if (ui.jobs !== null) {
     ui.jobs.textContent = `${employment.employed} / ${employment.jobCapacity}`
+  }
+  if (ui.allocation !== null) {
+    const allocation = getFarmWellAllocationSummary(s)
+    ui.allocation.textContent = `Farms ${allocation.farmStaffed}/${allocation.farmCapacity} · Wells ${allocation.wellStaffed}/${allocation.wellCapacity} · Food ${allocation.foodBalance >= 0 ? '+' : ''}${allocation.foodBalance}/tick · Water headroom ${allocation.waterHeadroom >= 0 ? '+' : ''}${allocation.waterHeadroom}`
   }
   if (ui.roads !== null) {
     const roadCount = Object.keys(s.roads).length
