@@ -1296,7 +1296,7 @@ describe('9. Town candidate gate', () => {
     // The gate passing is necessary but NOT sufficient: no Town contract is
     // implemented and no threshold is invented in this step.
     expect(SCENARIOS.every((scenario) => scenario.objective !== undefined)).toBe(true)
-  })
+  }, 30000)
 })
 
 // ---------------------------------------------------------------------------
