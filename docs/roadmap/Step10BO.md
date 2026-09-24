@@ -991,7 +991,7 @@ The construction fixture had Material 1000 and no under-construction sites. It c
 STEP 10BO — SCALE PRESSURE REPORT
 
 Commit:
-8f01e4a
+b685f54
 
 Working tree:
 Clean after measurement commit.
