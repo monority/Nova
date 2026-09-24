@@ -78,6 +78,7 @@ import {
   jobCapacityOf,
   validatePlacement,
 } from '../index.js'
+import { PROTECTED_MATERIAL_RESERVE } from '../domain/storage/storage.js'
 import { createGameController } from './gameController.js'
 import { createSimulationClock } from './simulationClock.js'
 import { createNovaScene } from '../renderer/three/scene.js'
@@ -117,6 +118,7 @@ const ui = {
   tick: document.querySelector<HTMLSpanElement>('#ui-tick'),
   construction: document.querySelector<HTMLSpanElement>('#ui-construction'),
   materialStatus: document.querySelector<HTMLSpanElement>('#ui-material-status'),
+  storageMaterial: document.querySelector<HTMLSpanElement>('#ui-storage-material'),
   food: document.querySelector<HTMLSpanElement>('#ui-food'),
   foodForecast: document.querySelector<HTMLSpanElement>('#ui-food-forecast'),
   water: document.querySelector<HTMLSpanElement>('#ui-water'),
@@ -613,6 +615,7 @@ let previousColonistCount = 0
 let previousFood = INITIAL_FOOD
 let previousEmployed = 0
 let previousConstruction = INITIAL_CONSTRUCTION_MATERIAL
+let previousStorageMaterial = 0
 let previousBuildingCount = 0
 let tickCausalMessage = false
 
@@ -705,6 +708,7 @@ const applyScenario = (id: string): void => {
   previousFood = next.resources.food
   previousEmployed = getEmploymentSummary(next).employed
   previousConstruction = next.resources.construction
+  previousStorageMaterial = next.storage.material
   previousBuildingCount = Object.keys(next.buildings).length
   starved = false
   tickCausalMessage = false
@@ -765,11 +769,13 @@ const refreshUi = (): void => {
   const prevFood = previousFood
   const prevEmployed = previousEmployed
   const prevConstruction = previousConstruction
+  const prevStorageMaterial = previousStorageMaterial
   const prevBuildings = previousBuildingCount
   previousColonistCount = colonists
   previousFood = food
   previousEmployed = employment.employed
   previousConstruction = getResourceStock(s).construction
+  previousStorageMaterial = s.storage.material
   previousBuildingCount = Object.keys(s.buildings).length
 
   if (ui.tick !== null) {
@@ -789,8 +795,13 @@ const refreshUi = (): void => {
       ui.materialStatus.textContent = ''
     } else {
       const discarded = getMaterialProductionPerTick(s) > getMaterialStoredProductionPerTick(s)
-      ui.materialStatus.textContent = ` · storage ${storage}${discarded ? ' · full' : ''}`
+      ui.materialStatus.textContent = ` · production cap ${storage}${discarded ? ' · full' : ''}`
     }
+  }
+  if (ui.storageMaterial !== null) {
+    const reserve = s.storage.material
+    const capacity = s.storage.capacities.material
+    ui.storageMaterial.textContent = `${reserve} / ${capacity} · ${PROTECTED_MATERIAL_RESERVE} protected`
   }
   if (ui.food !== null) {
     ui.food.textContent = String(food)
@@ -885,6 +896,13 @@ const refreshUi = (): void => {
     const produced = food - prevFood + consumed
     const material = getMaterialProductionPerTick(s)
     const parts: string[] = []
+    const reserveReleased = prevStorageMaterial - s.storage.material
+    const reserveGained = s.storage.material - prevStorageMaterial
+    if (reserveReleased > 0) {
+      parts.push(`Reserve released ${reserveReleased} material`)
+    } else if (reserveGained > 0) {
+      parts.push(`Reserve +${reserveGained} material`)
+    }
     if (employment.employed > prevEmployed) {
       // Step 10E: Farms joined the workplace pool, so report the type(s) that
       // actually hold workers instead of always claiming "Workshop".
@@ -1485,6 +1503,7 @@ window.__nova = {
     return {
       tick: ui.tick?.textContent ?? '',
       construction: ui.construction?.textContent ?? '',
+      storageMaterial: ui.storageMaterial?.textContent ?? '',
       food: ui.food?.textContent ?? '',
       foodForecast:
         forecast !== null
