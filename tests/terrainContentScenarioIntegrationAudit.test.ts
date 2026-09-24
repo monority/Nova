@@ -1675,7 +1675,6 @@ describe('16. architecture audit', () => {
       'src/application/queries/objective.ts',
       'src/application/queries/inspection.ts',
       'src/application/queries/network.ts',
-      'src/application/queries/roads.ts',
     ]
     const offenders = forbidden.filter((file) =>
       TERRAIN_REFERENCE.test(readFileSync(file, 'utf8'))

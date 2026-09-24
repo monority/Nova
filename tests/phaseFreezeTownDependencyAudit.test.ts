@@ -263,7 +263,7 @@ describe('1. freeze verification', () => {
     }
     audit('SOURCE_DRIFT', rows)
     expect(rows.domainFiles).toBe(16)
-    expect(rows.srcFiles).toBe(36)
+    expect(rows.srcFiles).toBe(35)
     expect(rows.terrainReaders).toBe(8)
     expect(rows.forbidden).toEqual([])
     // Town is now an explicit derived stage, confined to progression logic.

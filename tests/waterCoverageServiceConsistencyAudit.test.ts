@@ -704,7 +704,7 @@ describe('4. intent: the documented bootstrap rule', () => {
   })
 
   it('verifies the documented contract text exists in the domain source', () => {
-    const source = readFileSync('src/domain/water/water.ts', 'utf8')
+    const source = readFileSync('src/domain/water/water.ts', 'utf8').replace(/\r\n/g, '\n')
     const rows = {
       staffedCoverageRejected: source.includes('Step 10O proposed requiring a'),
       coverageIsInfrastructure: source.includes('Coverage therefore requires an operational, road-accessible Well'),
