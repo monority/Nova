@@ -94,6 +94,7 @@ import {
 import type { CellCoordinate } from '../world/grid.js'
 import { isInBounds, isTerrainBlocked } from '../world/grid.js'
 import { waterProductionForTick } from '../water/water.js'
+import { releaseProtectedMaterialReserve } from '../storage/storage.js'
 import type { SimulationCommand } from './command.js'
 import {
   createBuilding,
@@ -166,6 +167,46 @@ export type PlacementValidation =
         | 'insufficientResources'
         | 'insufficientWater'
     }
+
+export const releaseMaterialForCommand = (
+  state: SimulationState,
+  command: SimulationCommand | undefined
+): SimulationState => {
+  if (command === undefined || command.type !== 'placeBuilding') {
+    return state
+  }
+  const definition = BUILDING_CATALOG[command.buildingType]
+  const preflight = {
+    ...state,
+    resources: {
+      ...state.resources,
+      // Affordability is checked after the centralized release below. All
+      // other placement constraints still preflight against current state.
+      construction: Number.MAX_SAFE_INTEGER,
+    },
+  }
+  const validation = validatePlacement(
+    preflight,
+    { x: command.x, y: command.y },
+    command.buildingType
+  )
+  if (!validation.valid || definition === undefined) {
+    return state
+  }
+  const released = releaseProtectedMaterialReserve(
+    state.storage,
+    state.resources.construction,
+    definition.constructionCost
+  )
+  if (released.releaseAmount === 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: { ...state.resources, construction: released.operationalMaterial },
+    storage: released.storage,
+  }
+}
 
 export const validatePlacement = (
   state: SimulationState,

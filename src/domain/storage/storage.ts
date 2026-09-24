@@ -30,6 +30,16 @@ export const DEFAULT_STORAGE_CAPACITIES: StorageCapacities = {
   material: 40,
 }
 
+/**
+ * Material reserve floor for Step 10BJ.
+ *
+ * The 40-unit reserve can cover one standard 25-unit building transaction.
+ * Keeping the remaining 15 units protected makes the releasable maximum
+ * exactly one normal construction cost, derived from current scale rather
+ * than a new progression constant.
+ */
+export const PROTECTED_MATERIAL_RESERVE = 15
+
 export interface StorageHub {
   /** Current food stored. Never negative. */
   readonly food: number
@@ -185,6 +195,35 @@ export const releaseFromStorage = (
     unmetFood,
     unmetWater,
     unmetMaterial,
+  }
+}
+
+export interface StorageReleaseResult {
+  readonly storage: StorageHub
+  readonly operationalMaterial: number
+  readonly releaseAmount: number
+}
+
+/**
+ * Release only Material above the protected floor, and only enough to cover
+ * an operational deficit. This is a pure operation: no same-tick release is
+ * implied by this helper; callers decide when demand exists.
+ */
+export const releaseProtectedMaterialReserve = (
+  storage: StorageHub,
+  operationalMaterial: number,
+  operationalRequirement: number
+): StorageReleaseResult => {
+  const deficit = Math.max(0, operationalRequirement - operationalMaterial)
+  const releasable = Math.max(0, storage.material - PROTECTED_MATERIAL_RESERVE)
+  const releaseAmount = Math.min(deficit, releasable)
+  if (releaseAmount === 0) {
+    return { storage, operationalMaterial, releaseAmount: 0 }
+  }
+  return {
+    storage: { ...storage, material: storage.material - releaseAmount },
+    operationalMaterial: operationalMaterial + releaseAmount,
+    releaseAmount,
   }
 }
 

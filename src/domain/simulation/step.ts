@@ -25,6 +25,7 @@ import {
   produceWater,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
+  releaseMaterialForCommand,
   updateNeeds,
   updatePopulation,
   upkeepBuildings,
@@ -46,11 +47,15 @@ export const stepSimulation = (
   // Phase 1: Construction progress / lifecycle.
   const constructed = advanceConstruction(preResolved)
 
+  // Release only pre-existing protected Material before production. Newly
+  // produced overflow remains protected for at least this tick.
+  const reserveReleased = releaseMaterialForCommand(constructed, lateCommand)
+
   // Phase 3: food need — derived from the colony before admission.
-  const requiredFood = updateNeeds(constructed)
+  const requiredFood = updateNeeds(reserveReleased)
 
   // Phase 4: farm production into the shared stock.
-  const produced = produceFood(constructed)
+  const produced = produceFood(reserveReleased)
 
   // Phase 4b: Well production into the shared Water stock.
   const watered = produceWater(produced)
