@@ -157,6 +157,24 @@ const allMet = (conditions: readonly ProgressionCondition[]): boolean =>
  * Deterministic progression status derived from canonical state. Pure: it
  * reads existing queries only and never mutates or caches.
  */
+export interface TownCapabilityStatus {
+  readonly available: boolean
+  readonly label: string
+  readonly detail: string
+}
+
+/** Derived Town capability: review and manually rebalance the live workforce. */
+export const getTownCapabilityStatus = (state: SimulationState): TownCapabilityStatus => {
+  const available = getProgression(state).stage === 'town'
+  return {
+    available,
+    label: available ? 'Town workforce allocation' : 'Town workforce allocation locked',
+    detail: available
+      ? 'Farm / Well / Workshop allocation is active; use Move worker to rebalance.'
+      : 'Reach Town to review and rebalance the live workforce.',
+  }
+}
+
 export const getProgression = (state: SimulationState): ProgressionStatus => {
   const settlement = getSettlementConditions(state)
   const village = getVillageConditions(state)

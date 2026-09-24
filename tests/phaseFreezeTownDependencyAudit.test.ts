@@ -267,8 +267,8 @@ describe('1. freeze verification', () => {
     expect(rows.terrainReaders).toBe(8)
     expect(rows.forbidden).toEqual([])
     // Town is now an explicit derived stage, confined to progression logic.
-    expect(rows.townValues).toEqual(['src/application/queries/progression.ts'])
-    expect(rows.townMentions).toEqual(['src/application/queries/progression.ts'])
+    expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts'])
+    expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts'])
     expect(rows.saveVersion).toBe(8)
   })
 })

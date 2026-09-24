@@ -18,6 +18,7 @@ import {
   createInitialState,
   createRoads,
   getProgression,
+  getTownCapabilityStatus,
   getSettlementConditions,
   getVillageConditions,
   hashCanonicalState,
@@ -299,6 +300,11 @@ describe('progression — Town', () => {
     expect(progression.nextStage).toBeNull()
     expect(progression.conditions.map((condition) => condition.id)).toEqual(['workshop', 'water', 'food'])
     expect(progression.conditions.every((condition) => condition.met)).toBe(true)
+    expect(getTownCapabilityStatus(town)).toEqual({
+      available: true,
+      label: 'Town workforce allocation',
+      detail: 'Farm / Well / Workshop allocation is active; use Move worker to rebalance.',
+    })
   })
 
   it('shows Town as blocked when a Workshop is unstaffed', () => {
@@ -316,6 +322,7 @@ describe('progression — Town', () => {
     })
     expect(getProgression(village).stage).toBe('village')
     expect(getProgression(village).nextConditions.find((condition) => condition.id === 'workshop')?.met).toBe(false)
+    expect(getTownCapabilityStatus(village).available).toBe(false)
   })
 })
 

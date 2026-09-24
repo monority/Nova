@@ -62,6 +62,8 @@ try {
   assert(progression.stage === 'town', `expected Town, got ${JSON.stringify(progression)}`)
   const text = await page.getByTestId('progression-progress').textContent()
   assert(text?.includes('Staffed Workshop'), `Town conditions not visible: ${text}`)
+  const capability = await page.getByTestId('town-capability').textContent()
+  assert(capability?.includes('Town workforce allocation'), `Town capability not visible: ${capability}`)
   const viewports = []
   for (const viewport of [{ width: 1280, height: 800 }, { width: 420, height: 740 }, { width: 360, height: 640 }]) {
     await page.setViewportSize(viewport)

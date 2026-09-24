@@ -33,6 +33,7 @@ import {
   getObjectiveStatus,
   getPlacementSpatialPreview,
   getProgression,
+  getTownCapabilityStatus,
   getReassignmentOptions,
   getWorkDiagnosis,
   getWorkplaceWorkforceDiagnosis,
@@ -140,6 +141,7 @@ const ui = {
   scenario: document.querySelector<HTMLSelectElement>('#scenario'),
   stage: document.querySelector<HTMLSpanElement>('#ui-stage'),
   nextStage: document.querySelector<HTMLSpanElement>('#ui-next-stage'),
+  townCapability: document.querySelector<HTMLDivElement>('#town-capability'),
   objective: document.querySelector<HTMLElement>('#ui-objective'),
   objectiveStatus: document.querySelector<HTMLElement>('#ui-objective-status'),
   progress: document.querySelector<HTMLElement>('#ui-progress'),
@@ -654,6 +656,10 @@ const renderProgression = (): void => {
   if (ui.nextStage !== null) {
     ui.nextStage.textContent =
       status.nextStageLabel ?? 'not yet defined (this is the current final stage)'
+  }
+  if (ui.townCapability !== null) {
+    const capability = getTownCapabilityStatus(controller.getState())
+    ui.townCapability.textContent = `${capability.label} — ${capability.detail}`
   }
   const objectiveStatus: ObjectiveStatus | null =
     currentScenarioObjective === null
