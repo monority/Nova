@@ -16,6 +16,7 @@ import {
   type ConstructionCrewReason,
   type ReassignmentReason,
 } from '../../domain/simulation/phases.js'
+import { areBuildingsMobilityConnected } from '../../domain/mobility/mobility.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 export interface InspectionSummary {
@@ -56,6 +57,71 @@ export const getInspectionSummary = (
  * Construction duration and housing capacity come from the deterministic
  * building catalog; occupancy comes from colonist residence assignments.
  */
+/** Derived presentation diagnosis for one workplace's worker availability. */
+export type WorkplaceWorkforceDiagnosis =
+  | { readonly kind: 'unknown' }
+  | { readonly kind: 'notWorkplace' }
+  | { readonly kind: 'notOperational' }
+  | { readonly kind: 'notConnected' }
+  | { readonly kind: 'staffed'; readonly workers: number }
+  | { readonly kind: 'available'; readonly unassignedEligible: number }
+  | {
+      readonly kind: 'workerShortage'
+      readonly population: number
+      readonly assignedElsewhere: number
+    }
+
+/**
+ * Explain why an operational workplace is or is not staffed. This is derived
+ * application state and reuses the existing mobility and reassignment rules.
+ */
+export const getWorkplaceWorkforceDiagnosis = (
+  state: SimulationState,
+  buildingId: string
+): WorkplaceWorkforceDiagnosis => {
+  const building = state.buildings[buildingId]
+  if (building === undefined) return { kind: 'unknown' }
+  if (
+    building.type !== 'farm' &&
+    building.type !== 'workshop' &&
+    building.type !== 'well'
+  ) {
+    return { kind: 'notWorkplace' }
+  }
+  if (building.status !== 'operational') return { kind: 'notOperational' }
+
+  const workers = countWorkersAt(state, buildingId)
+  if (workers > 0) return { kind: 'staffed', workers }
+
+  let connectedColonists = 0
+  let unassignedEligible = 0
+  let assignedElsewhere = 0
+  for (const colonist of iterateColonists(state)) {
+    if (
+      colonist.residenceId === null ||
+      !areBuildingsMobilityConnected(state, colonist.residenceId, buildingId)
+    ) {
+      continue
+    }
+    connectedColonists += 1
+    if (colonist.workplaceId === null && colonist.constructionAssignmentId === null) {
+      if (validateReassignment(state, colonist.id, buildingId).valid) {
+        unassignedEligible += 1
+      }
+    } else if (colonist.workplaceId !== buildingId) {
+      assignedElsewhere += 1
+    }
+  }
+
+  if (connectedColonists === 0) return { kind: 'notConnected' }
+  if (unassignedEligible > 0) return { kind: 'available', unassignedEligible }
+  return {
+    kind: 'workerShortage',
+    population: Object.keys(state.colonists).length,
+    assignedElsewhere,
+  }
+}
+
 export interface BuildingInspection {
   readonly id: string
   readonly type: BuildingType

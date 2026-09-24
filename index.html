@@ -75,10 +75,13 @@
       }
       #nova-ui .row {
         display: flex;
+        flex-wrap: wrap;
         gap: 6px;
       }
       #nova-ui button,
       #nova-ui select {
+        box-sizing: border-box;
+        max-width: 100%;
         background: #1a202b;
         color: #d7dde8;
         border: 1px solid #2a3140;
@@ -146,7 +149,9 @@
         color: #d98f8f;
       }
       #scenario {
+        width: 100%;
         max-width: 190px;
+        box-sizing: border-box;
       }
       #selected-building {
         font-size: 12px;

@@ -35,12 +35,14 @@ import {
   getProgression,
   getReassignmentOptions,
   getWorkDiagnosis,
+  getWorkplaceWorkforceDiagnosis,
   isResidenceWaterServed,
   SCENARIOS,
   type WorkDiagnosis,
   type ObjectiveDefinition,
   type ObjectiveStatus,
   serializeSave,
+  loadSave,
   getAccessibleBuildingCount,
   getEmploymentSummary,
   getFoodTicksRemaining,
@@ -319,7 +321,19 @@ const refreshInspection = (): void => {
       const diagnosis = residentId === null ? null : getWorkDiagnosis(state, residentId)
       ui.insWorker.textContent = describeWork(diagnosis)
     } else if (workerId === null) {
-      ui.insWorker.textContent = 'Worker — none (vacant)'
+      const diagnosis = selectedBuildingId === null
+        ? null
+        : getWorkplaceWorkforceDiagnosis(state, selectedBuildingId)
+      if (diagnosis?.kind === 'workerShortage') {
+        ui.insWorker.textContent =
+          'Worker — none · no worker available: all eligible workers assigned'
+      } else if (diagnosis?.kind === 'notConnected') {
+        ui.insWorker.textContent = 'Worker — none · no eligible worker (no road access)'
+      } else if (diagnosis?.kind === 'available') {
+        ui.insWorker.textContent = 'Worker — none · eligible worker available'
+      } else {
+        ui.insWorker.textContent = 'Worker — none (vacant)'
+      }
     } else {
       const colonist = getColonistInspection(state, workerId)
       const mode =
@@ -1438,6 +1452,7 @@ declare global {
       context: () => WebGLDiagnostic
       selectedBuilding: () => BuildingInspection | null
       readonly serialize: () => string
+      readonly loadSerialized: (raw: string) => boolean
       progression: () => ProgressionStatus
       objective: () => ObjectiveStatus | null
       scenario: () => { readonly id: string; readonly objective: string }
@@ -1651,6 +1666,15 @@ window.__nova = {
   // browser E2E to prove constructionAssignmentId is part of canonical save
   // state (the app itself has no save/load UI).
   serialize: () => serializeSave(controller.getState()),
+  loadSerialized: (raw: string) => {
+    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return false
+    try {
+      controller.load(loadSave(raw))
+      return true
+    } catch {
+      return false
+    }
+  },
   progression: () => getProgression(controller.getState()),
   objective: () =>
     currentScenarioObjective === null
