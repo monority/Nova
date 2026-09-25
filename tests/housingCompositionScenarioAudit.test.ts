@@ -807,9 +807,9 @@ describe('6. phase A boundary and determinism', () => {
       saveVersion: SAVE_VERSION,
     }
     audit('PHASE_A_BOUNDARY', rows)
-    // 10AZ added nothing; the catalogue grew to 8 only in Step 10BE, which
-    // authored this step's phenomenon as content.
-    expect(rows.catalogueSize).toBe(8)
+    // 10AZ added nothing; the catalogue grew to 8 in Step 10BE, then to 11 in
+    // Step 10CI, which added the three Town-goal scenarios by product decision.
+    expect(rows.catalogueSize).toBe(11)
     expect(rows.catalogue).toEqual([
       'first-settlement',
       'housing-composition',
@@ -817,6 +817,9 @@ describe('6. phase A boundary and determinism', () => {
       'population-expansion',
       'recovery',
       'spatial-efficiency',
+      'town-balance',
+      'town-connection',
+      'town-threshold',
       'water-constraint',
       'water-reserve-industry',
     ])

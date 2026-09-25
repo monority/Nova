@@ -216,9 +216,10 @@ describe('1. freeze verification', () => {
     expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
     expect(frozen.saveVersion).toBe(8)
-    // 7 at the freeze; Step 10BE later added one curated content scenario
+    // 7 at the freeze; Step 10BE added one curated content scenario and Step
+    // 10CI added three Town-goal scenarios
     // (no mechanic, no constant, no objective kind changed).
-    expect(frozen.catalogue).toBe(8)
+    expect(frozen.catalogue).toBe(11)
     expect(frozen.fixtures).toBe(1)
     expect(frozen.objectiveKinds).toEqual([
       'building',
@@ -267,8 +268,11 @@ describe('1. freeze verification', () => {
     expect(rows.terrainReaders).toBe(8)
     expect(rows.forbidden).toEqual([])
     // Town is now an explicit derived stage, confined to progression logic.
-    expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts'])
-    expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts'])
+    // Step 10CI adds two data/display mentions, both allowlisted here because
+    // they carry no rule: scenarios.ts names the 'town' stage requirement value
+    // in catalogue DATA, and objective.ts renders the 'Town' requirement LABEL.
+    expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts'])
+    expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts'])
     expect(rows.saveVersion).toBe(8)
   })
 })
@@ -712,7 +716,9 @@ describe('5. content versus capability', () => {
     audit('FROZEN_BEHAVIOUR', rows)
     expect(rows.deterministic).toBe(true)
     expect(rows.noTownInSave).toBe(true)
-    expect(rows.catalogue).toBe(8)
+    // Step 10CI added three Town-goal scenarios; determinism and save-shape
+    // pins above are unchanged.
+    expect(rows.catalogue).toBe(11)
     expect(rows.rejectedIsNoOp).toBe(true)
   })
 })

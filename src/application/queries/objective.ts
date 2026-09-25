@@ -95,7 +95,10 @@ const requirementStatus = (
       const stage = getProgression(state).stage
       const met = STAGE_RANK[stage] >= STAGE_RANK[requirement.stage]
       return {
-        label: `Reach ${requirement.stage === 'settlement' ? 'Settlement' : 'Village'}`,
+        // Step 10CI: the evaluator already ranked Town (STAGE_RANK has town: 3);
+        // only the display label lagged behind, naming every non-settlement stage
+        // 'Village'. The evaluation above is untouched.
+        label: `Reach ${requirement.stage === 'settlement' ? 'Settlement' : requirement.stage === 'village' ? 'Village' : 'Town'}`,
         met,
         detail: `stage ${stage}`,
       }

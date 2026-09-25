@@ -895,7 +895,8 @@ describe('9-10. Town implication and content candidates', { timeout: 30000 }, ()
     // per-scenario measurement below is generic, so it covers the catalogue as
     // it stands.
     // 7 when this audit ran; Step 10BE later added one content scenario.
-    expect(existing).toHaveLength(8)
+    // Step 10CI added three Town-goal scenarios; the measurement is generic.
+    expect(existing).toHaveLength(11)
     expect(candidates).toHaveLength(3)
     for (const candidate of candidates) {
       expect(candidate.valid).toBe(true)

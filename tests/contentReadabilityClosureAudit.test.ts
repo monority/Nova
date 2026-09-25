@@ -248,6 +248,10 @@ const COMPLETION_POLICIES: Readonly<Record<string, readonly Step[]>> = {
   'housing-composition': [
     { kind: 'building', type: 'residence', x: 2, y: 1 },
   ],
+  // Step 10CI: one deliberate policy per Town scenario (real commands only).
+  'town-threshold': [{ kind: 'building', type: 'workshop', x: 7, y: 2 }],
+  'town-balance': [{ kind: 'building', type: 'farm', x: 9, y: 2 }],
+  'town-connection': [{ kind: 'roads', cells: [{ x: 6, y: 1 }, { x: 7, y: 1 }] }],
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +290,7 @@ describe('1. Catalogue judged by state transitions', { timeout: 300000 }, () => 
       rows,
       reading: 'every scenario is started and driven to its objective with real placement/reassignment commands',
     })
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(11)
     for (const row of rows) {
       expect(row.objective.startState).toBe('in_progress')
       expect(row.objective.startBlockers.length).toBeGreaterThan(0)
@@ -404,6 +408,9 @@ describe('2. Distinctness matrix', { timeout: 60000 }, () => {
       { id: 'recovery', marks: 'B: repair (3 roads, keeps a redundant Farm) vs replace (1 road, 2 Farms) (10AM)' },
       { id: 'water-reserve-industry', marks: 'A: the Water reserve is the only budget and the build order is terminal if reversed (10AQ)' },
       { id: 'housing-composition', marks: 'A: the new Residence’s NETWORK decides whether its colonist is refused, admitted-but-stranded or productive (10AZ/10BE)' },
+      { id: 'town-threshold', marks: 'C: spend the reserve on the Workshop or wait with an idle colonist (10CI)' },
+      { id: 'town-balance', marks: 'C: hold Food balance for five while industry stays staffed (10CI)' },
+      { id: 'town-connection', marks: 'C: access alone switches on an operational Workshop (10CI)' },
     ]
 
     const overlapAnalysis = {
@@ -428,7 +435,7 @@ describe('2. Distinctness matrix', { timeout: 60000 }, () => {
       ],
     }
     audit('DISTINCTNESS_MATRIX', { axes, measured, matrix, overlapAnalysis })
-    expect(measured).toHaveLength(8)
+    expect(measured).toHaveLength(11)
     for (const row of measured) {
       expect(row.startBlockers).toBeGreaterThan(0)
     }

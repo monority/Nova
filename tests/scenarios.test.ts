@@ -45,7 +45,7 @@ describe('scenarios — data-only definitions', () => {
       expect(Array.isArray(scenario.colonists)).toBe(true)
     }
     // Step 10BE added one curated content scenario (no new mechanic).
-    expect(SCENARIOS).toHaveLength(8)
+    expect(SCENARIOS).toHaveLength(11)
     expect(new Set(SCENARIOS.map((s) => s.id)).size).toBe(SCENARIOS.length)
   })
 
@@ -128,6 +128,10 @@ describe('scenarios — starting states and progression framing', () => {
       // Step 10BE: two networks, no Food production at the start.
       'housing-composition': { stage: 'wilderness', blockers: ['Food balance'] },
       recovery: { stage: 'wilderness', blockers: ['Food balance'] },
+      // Step 10CI: Town-targeted scenarios start one decision below Town.
+      'town-threshold': { stage: 'village', blockers: ['Staffed Workshop'] },
+      'town-balance': { stage: 'wilderness', blockers: ['Food balance'] },
+      'town-connection': { stage: 'village', blockers: ['Staffed Workshop'] },
     }
     for (const scenario of SCENARIOS) {
       const state = createScenarioState(shipConfig, scenario)

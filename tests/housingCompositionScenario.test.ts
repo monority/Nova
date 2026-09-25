@@ -380,6 +380,7 @@ describe('4. determinism, persistence and architecture', () => {
       'waterCapacity',
     ])
     expect(rows.keys).toEqual(['buildings', 'colonists', 'description', 'id', 'name', 'objective', 'resources', 'roads'])
-    expect(rows.catalogue).toBe(8)
+    // Step 10CI added three Town-goal scenarios; kinds and shape unchanged.
+    expect(rows.catalogue).toBe(11)
   })
 })

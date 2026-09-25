@@ -385,8 +385,9 @@ describe('1. Partitioned Valley — controlled layouts', { timeout: 60000 }, () 
     audit('PARTITIONED_CLASSIFICATION', classification)
     expect(classification.class.startsWith('B')).toBe(true)
     expect(SCENARIOS.some((scenario) => scenario.id.includes('partition'))).toBe(false)
-    // 7 when this audit ran; Step 10BE later added one content scenario.
-    expect(SCENARIOS).toHaveLength(8)
+    // 7 when this audit ran; Step 10BE added one content scenario and Step
+    // 10CI added three Town-goal scenarios by product decision.
+    expect(SCENARIOS).toHaveLength(11)
   })
 
   it('shows the goal cannot be named, only proxied', () => {
@@ -668,7 +669,8 @@ describe('8. Architectural invariants', () => {
     expect(invariants.saveKeys).toHaveLength(8)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
-    expect(invariants.scenarioCount).toBe(8)
+    // Step 10CI added three Town-goal scenarios; water rules below unchanged.
+    expect(invariants.scenarioCount).toBe(11)
     expect(invariants.waterRules).toEqual({ perWell: 2, perColonist: 1 })
     expect(invariants.noNewResource).toEqual(['construction', 'food', 'water'])
     expect(invariants.objectiveKinds).toEqual([

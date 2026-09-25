@@ -424,6 +424,10 @@ const PRIMARY_DECISION: Readonly<Record<string, string>> = {
   'population-expansion': 'housing planned ahead of Water capacity',
   recovery: 'repair a stranded Farm versus duplicate it',
   [HOUSING]: 'which road network(s) the next Residence joins',
+  // Step 10CI: Town-targeted decisions, each owned by exactly one scenario.
+  'town-threshold': 'spend the last reserve on the Workshop that crosses the threshold',
+  'town-balance': 'feed five colonists without unstaffing industry',
+  'town-connection': 'extend the road network to a cut-off Workshop',
 }
 
 /** The authored unique consequence of every scenario. */
@@ -436,6 +440,9 @@ const UNIQUE_CONSEQUENCE: Readonly<Record<string, string>> = {
   'population-expansion': 'housing is built before the capacity that admits its occupants',
   recovery: 'a stranded building is fixed by infrastructure rather than replaced',
   [HOUSING]: 'housing placement decides whether a colonist is admitted at all AND who can reach the food',
+  'town-threshold': 'a Village becomes Town by committing its reserve to industry, or waits with an idle colonist',
+  'town-balance': 'growth is held at the Food edge until the third Farm completes',
+  'town-connection': 'an operational building is switched on by infrastructure alone',
 }
 
 /**
@@ -462,6 +469,10 @@ const MATRIX_MARKS: Readonly<Record<string, DecisionMarks>> = {
   'population-expansion': { spatial: false, workforce: true, water: true, food: true, industry: false, recovery: false },
   recovery: { spatial: true, workforce: true, water: false, food: true, industry: false, recovery: true },
   [HOUSING]: { spatial: true, workforce: true, water: true, food: true, industry: false, recovery: true },
+  // Step 10CI marks, re-checked against the Town start states.
+  'town-threshold': { spatial: false, workforce: true, water: false, food: false, industry: true, recovery: false },
+  'town-balance': { spatial: false, workforce: true, water: false, food: true, industry: true, recovery: false },
+  'town-connection': { spatial: true, workforce: true, water: false, food: false, industry: true, recovery: true },
 }
 
 const EMPTY_MARKS: DecisionMarks = {
@@ -518,7 +529,7 @@ describe('3. Catalogue matrix and redundancy', () => {
       }
     })
     audit('CATALOGUE_MATRIX', rows)
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(11)
     for (const row of rows) {
       expect(row.primaryDecision.length).toBeGreaterThan(0)
       expect(row.uniqueConsequence.length).toBeGreaterThan(0)
@@ -526,10 +537,10 @@ describe('3. Catalogue matrix and redundancy', () => {
       expect(row.measured.blockers.length).toBeGreaterThan(0)
     }
     // Every scenario owns a distinct dominant decision and consequence.
-    expect(new Set(rows.map((row) => row.primaryDecision)).size).toBe(8)
-    expect(new Set(rows.map((row) => row.uniqueConsequence)).size).toBe(8)
+    expect(new Set(rows.map((row) => row.primaryDecision)).size).toBe(11)
+    expect(new Set(rows.map((row) => row.uniqueConsequence)).size).toBe(11)
     // No two scenarios start from the same measured state.
-    expect(new Set(rows.map((row) => row.measured.structure)).size).toBe(8)
+    expect(new Set(rows.map((row) => row.measured.structure)).size).toBe(11)
     // housing-composition is the only 2-network catalogue start.
     const split = rows.filter((row) => row.measured.networks > 1)
     expect(split.map((row) => row.id)).toEqual([HOUSING])
@@ -644,7 +655,7 @@ describe('4. Entry conditions', () => {
       }
     })
     audit('ENTRY_CONDITIONS', rows)
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(11)
     for (const row of rows) {
       expect(row.resourceNumbersVisible).toBe(true)
       expect(row.objectiveComplete.label).toBe(true)
@@ -844,6 +855,10 @@ const COMPLETION_POLICIES: Readonly<Record<string, readonly CompletionStep[]>> =
   ],
   recovery: [{ kind: 'roads', cells: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] }],
   [HOUSING]: [{ kind: 'building', type: 'residence', x: 2, y: 1 }],
+  // Step 10CI: one deliberate policy per Town scenario (real commands only).
+  'town-threshold': [{ kind: 'building', type: 'workshop', x: 7, y: 2 }],
+  'town-balance': [{ kind: 'building', type: 'farm', x: 9, y: 2 }],
+  'town-connection': [{ kind: 'roads', cells: [{ x: 6, y: 1 }, { x: 7, y: 1 }] }],
 }
 
 const FIRST_DECISION: Readonly<Record<string, string>> = {
@@ -855,6 +870,9 @@ const FIRST_DECISION: Readonly<Record<string, string>> = {
   'population-expansion': 'build capacity before or after the population',
   recovery: 'whether to reconnect or replace the stranded Farm',
   [HOUSING]: 'which network the second Residence joins',
+  'town-threshold': 'whether the reserve is spent on the Workshop',
+  'town-balance': 'add the third Farm before the reserve drains',
+  'town-connection': 'extend the network to the Workshop door',
 }
 
 const MAIN_DECISION: Readonly<Record<string, string>> = {
@@ -866,6 +884,9 @@ const MAIN_DECISION: Readonly<Record<string, string>> = {
   'population-expansion': 'staff the new Wells and Farms as the population grows',
   recovery: 'restore access without wasting the finite Food reserve',
   [HOUSING]: 'keep the new colonist served AND able to reach the Farm',
+  'town-threshold': 'cross the Town threshold with the idle colonist',
+  'town-balance': 'hold Food balance while industry stays staffed',
+  'town-connection': 'switch on the cut-off Workshop through access alone',
 }
 
 describe('5. Completion quality', { timeout: 300000 }, () => {
@@ -890,7 +911,7 @@ describe('5. Completion quality', { timeout: 300000 }, () => {
       }
     })
     audit('COMPLETION_QUALITY', rows)
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(11)
     for (const row of rows) {
       expect(row.firstDecision.length).toBeGreaterThan(0)
       expect(row.mainDecision.length).toBeGreaterThan(0)
@@ -963,7 +984,7 @@ describe('5. Completion quality', { timeout: 300000 }, () => {
 // ---------------------------------------------------------------------------
 
 describe('6. Ninth-scenario decision', () => {
-  it('rejects every candidate on measured evidence and keeps the catalogue at 8', () => {
+  it('rejects every MECHANIC candidate on measured evidence; catalogue growth came only from the 10CH Town-goal decision', () => {
     const objectiveKinds = [
       ...new Set(
         SCENARIOS.flatMap((definition) =>
@@ -1017,10 +1038,17 @@ describe('6. Ninth-scenario decision', () => {
     expect(objectiveKinds).toEqual(['building', 'foodBalance', 'population', 'stage', 'waterCapacity'])
     expect(candidates.every((candidate) => candidate.accepted === false)).toBe(true)
     expect(candidates.every((candidate) => candidate.reason.length > 0)).toBe(true)
-    const finalDecision = 'No additional scenario justified.'
+    // Step 10CI: this closure decision held until the 10CH product direction
+    // gate, which explicitly authorized 2-4 Town-goal scenarios on EXISTING
+    // primitives (no new mechanic). The candidate rejections above still stand;
+    // only the catalogue ceiling moved, by product decision, from 8 to 11.
+    const finalDecision =
+      'No additional MECHANIC-driven scenario justified; Town-goal scenarios authorized by the 10CH direction gate.'
     audit('NINTH_SCENARIO_DECISION', finalDecision)
-    expect(finalDecision).toBe('No additional scenario justified.')
-    expect(SCENARIOS).toHaveLength(8)
+    expect(finalDecision).toBe(
+      'No additional MECHANIC-driven scenario justified; Town-goal scenarios authorized by the 10CH direction gate.'
+    )
+    expect(SCENARIOS).toHaveLength(11)
   })
 })
 
@@ -1032,7 +1060,7 @@ describe('7. Content versus capability', () => {
   it('exercises the supported model and does not claim Town-scale simulation', () => {
     const supported = {
       multipleSpatialLayouts:
-        new Set(SCENARIOS.map((definition) => structureOf(definition))).size === 8,
+        new Set(SCENARIOS.map((definition) => structureOf(definition))).size === 11,
       networkTopology: getRoadNetworks(housingState()).length === 2,
       waterCoverage: getWaterCoverage(housingState()).servedResidenceIds.length > 0,
       workforceMobility: getEmploymentSummary(housingState()).jobCapacity === 2,
@@ -1081,8 +1109,10 @@ describe('7. Content versus capability', () => {
     // The model has exactly three progression stages and five objective kinds.
     expect(unsupported.progressionStages).toEqual(['settlement', 'village', 'wilderness'])
     expect(unsupported.objectiveKinds).toHaveLength(5)
-    // Town stays undefined: no catalogue scenario frames itself around it.
-    expect(unsupported.townReferenced).toBe(false)
+    // Step 10CI reverses the pre-10CH closure: the 10CH direction gate
+    // explicitly authorized Town-goal scenarios on existing primitives, so
+    // the catalogue now frames itself around Town by product decision.
+    expect(unsupported.townReferenced).toBe(true)
   })
 })
 
@@ -1188,8 +1218,10 @@ describe('9. Architecture checkpoint', () => {
       ...new Set(SCENARIOS.flatMap((definition) => definition.buildings.map((b) => b.type))),
     ].sort()
     audit('BUILDING_TYPES', buildingTypes)
-    // No catalogue scenario STARTS with a Workshop; the Workshop is reached
-    // through the objective (industrial-expansion, water-reserve-industry).
-    expect(buildingTypes).toEqual(['farm', 'residence', 'well'])
+    // Step 10CI: two Town scenarios START with a Workshop building present but
+    // not Town-making (town-balance: staffed yet starving colony; town-connection:
+    // operational yet roadless). Starting WITH a Workshop is not starting AT Town:
+    // all three Town scenarios start below Town with the objective in progress.
+    expect(buildingTypes).toEqual(['farm', 'residence', 'well', 'workshop'])
   })
 })

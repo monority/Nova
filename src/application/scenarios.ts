@@ -383,6 +383,130 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     ],
     colonists: [{ residence: { x: 3, y: 0 } }],
   },
+  {
+    id: 'town-threshold',
+    name: 'Town threshold',
+    description:
+      'A complete Village with an idle fourth colonist and a reserve worth exactly one Workshop: industry is the only missing threshold, and the choice is whether the reserve is spent crossing it.',
+    objective: {
+      label: 'Reach Town.',
+      description:
+        'The Village already feeds and waters four colonists. Build the Workshop and let the idle colonist staff it: the staffed Workshop is the last Town condition.',
+      constraint:
+        'Material 30 = Workshop (25) with 5 to spare; Water 5 pays the Workshop water cost (1). Staffing comes from the idle fourth colonist.',
+      requirements: [{ kind: 'stage', stage: 'town' }],
+      failsWithoutColonists: true,
+    },
+    resources: { material: 30, food: 60, water: 5 },
+    buildings: [
+      { type: 'residence', x: 1, y: 0, operational: true },
+      { type: 'residence', x: 3, y: 0, operational: true },
+      { type: 'residence', x: 5, y: 0, operational: true },
+      { type: 'residence', x: 7, y: 0, operational: true },
+      { type: 'farm', x: 1, y: 2, operational: true },
+      { type: 'farm', x: 3, y: 2, operational: true },
+      { type: 'well', x: 5, y: 2, operational: true },
+    ],
+    roads: [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 4, y: 1 },
+      { x: 5, y: 1 },
+      { x: 6, y: 1 },
+      { x: 7, y: 1 },
+    ],
+    colonists: [
+      { residence: { x: 1, y: 0 } },
+      { residence: { x: 3, y: 0 } },
+      { residence: { x: 5, y: 0 } },
+      { residence: { x: 7, y: 0 } },
+    ],
+  },
+  {
+    id: 'town-balance',
+    name: 'Town balance',
+    description:
+      'Five colonists share two Farms while the Workshop already runs: the colony is one harvest short of Town, and the idle fifth colonist is the only hand left to close the gap.',
+    objective: {
+      label: 'Reach Town.',
+      description:
+        'Industry is staffed but five mouths eat more than two Farms grow. Build the third Farm and keep the Workshop running: Town needs the staffed Workshop AND a balanced Food supply.',
+      constraint:
+        'Material 30 = third Farm (25) with 5 to spare; the idle fifth colonist staffs it once it completes.',
+      requirements: [{ kind: 'stage', stage: 'town' }],
+      failsWithoutColonists: true,
+    },
+    resources: { material: 30, food: 60, water: 0 },
+    buildings: [
+      { type: 'residence', x: 1, y: 0, operational: true },
+      { type: 'residence', x: 3, y: 0, operational: true },
+      { type: 'residence', x: 5, y: 0, operational: true },
+      { type: 'residence', x: 7, y: 0, operational: true },
+      { type: 'residence', x: 9, y: 0, operational: true },
+      { type: 'farm', x: 1, y: 2, operational: true },
+      { type: 'farm', x: 3, y: 2, operational: true },
+      { type: 'well', x: 5, y: 2, operational: true },
+      { type: 'workshop', x: 7, y: 2, operational: true },
+    ],
+    roads: [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 4, y: 1 },
+      { x: 5, y: 1 },
+      { x: 6, y: 1 },
+      { x: 7, y: 1 },
+      { x: 8, y: 1 },
+      { x: 9, y: 1 },
+    ],
+    colonists: [
+      { residence: { x: 1, y: 0 } },
+      { residence: { x: 3, y: 0 } },
+      { residence: { x: 5, y: 0 } },
+      { residence: { x: 7, y: 0 } },
+      { residence: { x: 9, y: 0 } },
+    ],
+  },
+  {
+    id: 'town-connection',
+    name: 'Town connection',
+    description:
+      'The Workshop stands built and empty beyond the road network while an idle colonist waits inside it: one stretch of road is the whole distance between this Village and Town.',
+    objective: {
+      label: 'Reach Town.',
+      description:
+        'Food and Water are balanced and the Workshop is operational, but it has no road access so nobody can staff it. Extend the network to the Workshop door: access is the last Town condition.',
+      constraint:
+        'Material 15 = two road cells (10) with 5 to spare; the idle fourth colonist staffs the Workshop once it is connected.',
+      requirements: [{ kind: 'stage', stage: 'town' }],
+      failsWithoutColonists: true,
+    },
+    resources: { material: 15, food: 60, water: 0 },
+    buildings: [
+      { type: 'residence', x: 1, y: 0, operational: true },
+      { type: 'residence', x: 3, y: 0, operational: true },
+      { type: 'residence', x: 5, y: 0, operational: true },
+      { type: 'residence', x: 7, y: 0, operational: true },
+      { type: 'farm', x: 1, y: 2, operational: true },
+      { type: 'farm', x: 3, y: 2, operational: true },
+      { type: 'well', x: 5, y: 2, operational: true },
+      { type: 'workshop', x: 7, y: 2, operational: true },
+    ],
+    roads: [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 4, y: 1 },
+      { x: 5, y: 1 },
+    ],
+    colonists: [
+      { residence: { x: 1, y: 0 } },
+      { residence: { x: 3, y: 0 } },
+      { residence: { x: 5, y: 0 } },
+      { residence: { x: 7, y: 0 } },
+    ],
+  },
 ]
 
 export const findScenario = (id: string): ScenarioDefinition | undefined =>
