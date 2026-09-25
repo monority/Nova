@@ -461,6 +461,8 @@ describe('7 — colonist inspection', () => {
       workplaceAssignmentMode: 'manual',
       // Step 10Y: the crew assignment is part of the colonist inspection.
       constructionAssignmentId: null,
+      // Step 10CQ: income is part of the colonist inspection.
+      materialIncome: 2,
     })
     expect(getColonistInspection(manual, 'colonist-999')).toBeNull()
   })

@@ -634,6 +634,8 @@ describe('6 — determinism', () => {
       workplaceId: null,
       workplaceAssignmentMode: 'automatic',
       constructionAssignmentId: wellId,
+      // Step 10CQ: crew-assigned colonists earn zero income.
+      materialIncome: 0,
     })
   })
 })

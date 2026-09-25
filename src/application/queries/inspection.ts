@@ -16,6 +16,11 @@ import {
   type ConstructionCrewReason,
   type ReassignmentReason,
 } from '../../domain/simulation/phases.js'
+import {
+  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
+} from '../../domain/population/colonist.js'
 import { areBuildingsMobilityConnected } from '../../domain/mobility/mobility.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
@@ -145,6 +150,11 @@ export interface BuildingInspection {
    * (Step 10Y §2). Derived, deterministic, never persisted.
    */
   readonly constructionProgressPerTick: number
+  /**
+   * Step 10CQ: total Material income per tick earned by workers at this
+   * building. Zero when vacant, under construction, or inaccessible.
+   */
+  readonly materialIncome: number
 }
 
 /** Inspection detail for one building, or null when the id is unknown. */
@@ -178,6 +188,17 @@ export const getBuildingInspection = (
       getConstructionCrewId(state, building.id) !== null
         ? 2
         : 1,
+    // Step 10CQ: sum material income from all colonists employed at this building.
+    materialIncome: [...iterateColonists(state)]
+      .filter((colonist) => colonist.workplaceId === building.id && colonist.constructionAssignmentId === null)
+      .reduce((sum, colonist) => {
+        if (building.status !== 'operational') return sum
+        if (colonist.workplaceId === null) return sum
+        if (building.type === 'farm') return sum + MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
+        if (building.type === 'well') return sum + MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
+        if (building.type === 'workshop') return sum + MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+        return sum
+      }, 0),
   }
 }
 
@@ -210,6 +231,8 @@ export interface ColonistInspection {
   readonly workplaceAssignmentMode: WorkplaceAssignmentMode
   /** Under-construction building this colonist crews, or null (Step 10Y). */
   readonly constructionAssignmentId: string | null
+  /** Step 10CQ: Material income per tick earned by this colonist (derived). */
+  readonly materialIncome: number
 }
 
 export const getColonistInspection = (
@@ -220,12 +243,23 @@ export const getColonistInspection = (
   if (colonist === undefined) {
     return null
   }
+  // Step 10CQ: compute income from workplace type.
+  let materialIncome = 0
+  if (colonist.workplaceId !== null && colonist.constructionAssignmentId === null) {
+    const workplace = state.buildings[colonist.workplaceId]
+    if (workplace !== undefined && workplace.status === 'operational') {
+      if (workplace.type === 'farm') materialIncome = MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
+      else if (workplace.type === 'well') materialIncome = MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
+      else if (workplace.type === 'workshop') materialIncome = MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+    }
+  }
   return {
     id: colonist.id,
     residenceId: colonist.residenceId,
     workplaceId: colonist.workplaceId,
     workplaceAssignmentMode: colonist.workplaceAssignmentMode,
     constructionAssignmentId: colonist.constructionAssignmentId,
+    materialIncome,
   }
 }
 
@@ -399,4 +433,25 @@ export const getConstructionCrewOptions = (
     })
   }
   return options
+}
+
+// ---------------------------------------------------------------------------
+// Workforce income (Step 10CQ)
+// ---------------------------------------------------------------------------
+
+/**
+ * Step 10CQ: total Material income per tick earned by all employed colonists.
+ * Derived from canonical state; never persisted separately.
+ */
+export const getWorkforceIncome = (state: SimulationState): number => {
+  let total = 0
+  for (const colonist of iterateColonists(state)) {
+    if (colonist.workplaceId === null || colonist.constructionAssignmentId !== null) continue
+    const workplace = state.buildings[colonist.workplaceId]
+    if (workplace === undefined || workplace.status !== 'operational') continue
+    if (workplace.type === 'farm') total += MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
+    else if (workplace.type === 'well') total += MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
+    else if (workplace.type === 'workshop') total += MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+  }
+  return total
 }

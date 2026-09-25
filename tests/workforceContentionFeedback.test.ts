@@ -116,6 +116,7 @@ describe('Step 10BQ - derived workforce contention diagnosis', () => {
           ...state.colonists['colonist-3']!,
           workplaceId: null,
           workplaceAssignmentMode: 'automatic' as const,
+          materialIncome: 0,
         },
       },
     }

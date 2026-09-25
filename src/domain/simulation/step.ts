@@ -20,6 +20,7 @@ import {
   assignJobs,
   consumeFood,
   consumeWater,
+  creditMaterialIncome,
   produceFood,
   produceMaterial,
   produceWater,
@@ -98,7 +99,10 @@ export const stepSimulation = (
   // Phase 8: labor output into the construction stock.
   const materialized = produceMaterial(staffed)
 
-  // Phase 8a: player construction transaction (Step 08G §5).
+  // Phase 8a: material income from employed colonists (Step 10CQ).
+  const withIncome = creditMaterialIncome(materialized)
+
+  // Phase 8b: player construction transaction (Step 08G §5).
   const commanded = applyCommand(materialized, lateCommand)
 
   const progressed = progressPlacedRoads(commanded.state, commanded)

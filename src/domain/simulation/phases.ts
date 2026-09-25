@@ -67,6 +67,11 @@ import {
 } from '../mobility/mobility.js'
 import type { ColonistState } from '../population/colonist.js'
 import {
+  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
+} from '../population/colonist.js'
+import {
   getBuildingRoadAccess,
   getBuildingRoadAccessWithNetworks,
   getRoadNetworks,
@@ -1399,6 +1404,44 @@ export const produceMaterial = (state: SimulationState): SimulationState => {
     }
   }
   return nextState
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8a - Material income from employed colonists (Step 10CQ)
+// ---------------------------------------------------------------------------
+
+/**
+ * Credit Material income to the stock based on employed colonists.
+ * Runs after produceMaterial so income is additive to production,
+ * and before upkeep so income is available to pay upkeep.
+ *
+ * Income rates:
+ * - Farm worker: 1 Material/tick
+ * - Well worker: 1 Material/tick
+ * - Workshop worker: 2 Material/tick
+ *
+ * Only employed colonists at operational workplaces earn income.
+ * Unemployed, construction-crew-assigned, or improperly assigned colonists earn 0.
+ */
+export const creditMaterialIncome = (state: SimulationState): SimulationState => {
+  let totalIncome = 0
+  for (const colonist of iterateColonists(state)) {
+    if (colonist.workplaceId === null) continue
+    if (colonist.constructionAssignmentId !== null) continue
+    const workplace = state.buildings[colonist.workplaceId]
+    if (workplace === undefined || workplace.status !== 'operational') continue
+    if (workplace.type === 'farm') totalIncome += MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
+    else if (workplace.type === 'well') totalIncome += MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
+    else if (workplace.type === 'workshop') totalIncome += MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+  }
+  if (totalIncome <= 0) return state
+  return {
+    ...state,
+    resources: {
+      ...state.resources,
+      construction: state.resources.construction + totalIncome,
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------
