@@ -103,7 +103,7 @@ export const stepSimulation = (
   const withIncome = creditMaterialIncome(materialized)
 
   // Phase 8b: player construction transaction (Step 08G §5).
-  const commanded = applyCommand(materialized, lateCommand)
+  const commanded = applyCommand(withIncome, lateCommand)
 
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
