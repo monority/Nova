@@ -36,6 +36,7 @@ import {
 } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 import { getWaterCoverage } from '../../domain/water/water.js'
+import { getWorkforceIncome } from './inspection.js'
 import {
   getMaterialStoredProductionPerTick,
   getResourceStock,
@@ -53,8 +54,8 @@ export interface PlacementAffordability {
   readonly materialAvailable: number
   readonly waterRequired: number
   readonly waterAvailable: number
-  /** True when only the same-tick stored Material inflow makes it affordable. */
-  readonly coveredByStoredProduction: boolean
+  /** True when the same-tick stored inflow or income completes the Material cost. */
+  readonly coveredBySameTickInflow: boolean
 }
 
 export const getPlacementAffordability = (
@@ -70,19 +71,21 @@ export const getPlacementAffordability = (
   // Stored Material inflow may complete a Material shortfall, but it must never
   // mask a Water shortfall: the Water part of the placement contract has no
   // same-tick producer equivalent, so it is checked directly.
-  const coveredByStoredProduction =
+  // Step 10CQ: income is credited before commands, so a shortfall may also be
+  // covered by this tick's workforce income (not just stored Workshop production).
+  const coveredBySameTickInflow =
     !placement.valid &&
     placement.reason === 'insufficientResources' &&
     stock.water >= waterRequired &&
-    stock.construction + getMaterialStoredProductionPerTick(state) >= materialRequired
+    stock.construction + getMaterialStoredProductionPerTick(state) + getWorkforceIncome(state) >= materialRequired
   return {
     placement,
-    affordable: placement.valid || coveredByStoredProduction,
+    affordable: placement.valid || coveredBySameTickInflow,
     materialRequired,
     materialAvailable: stock.construction,
     waterRequired,
     waterAvailable: stock.water,
-    coveredByStoredProduction,
+    coveredBySameTickInflow,
   }
 }
 

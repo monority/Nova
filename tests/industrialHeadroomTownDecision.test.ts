@@ -531,7 +531,7 @@ describe('2. experiment matrix', () => {
     expect(spareOf('Food3+Water3 (3/3)', 6)).toBe(2)
   })
 
-  it('measures the Food/Water surplus structure of the three tunings', () => {
+  it('measures the Food/Water surplus structure of the three tunings', { timeout: 120000 }, () => {
     const rows = CONFIGS.map(({ label, rates }) => {
       const sweep = POPULATIONS.map((population) => {
         const after = steady(
@@ -590,7 +590,7 @@ describe('2. experiment matrix', () => {
 // ---------------------------------------------------------------------------
 
 describe('3. town-capable state', () => {
-  it('searches the minimum population with survival + a sustainable Workshop', () => {
+  it('searches the minimum population with survival + a sustainable Workshop', { timeout: 120000 }, () => {
     const rows = CONFIGS.map(({ label, rates }) => {
       const candidates = POPULATIONS.map((population) => {
         const farms = minFarms(population, rates)

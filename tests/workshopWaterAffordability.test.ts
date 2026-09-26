@@ -91,7 +91,7 @@ describe('§1 — the 24-Material equilibrium is buildable', () => {
       storedThisTick: stored,
       restValidation,
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       domainAcceptedThePlacement:
         Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
       materialAfterDispatch: getResourceStock(dispatched).construction,
@@ -99,7 +99,7 @@ describe('§1 — the 24-Material equilibrium is buildable', () => {
     expect(getResourceStock(state).construction).toBe(24)
     expect(stored).toBeGreaterThanOrEqual(1)
     expect(restValidation).toEqual({ valid: false, reason: 'insufficientResources' })
-    expect(affordability.coveredByStoredProduction).toBe(true)
+    expect(affordability.coveredBySameTickInflow).toBe(true)
     expect(affordability.affordable).toBe(true)
     // The preview now agrees with what the domain actually does.
     expect(Object.keys(dispatched.buildings)).toHaveLength(3)
@@ -114,12 +114,12 @@ describe('§1 — the 24-Material equilibrium is buildable', () => {
       visibleMaterial: getResourceStock(state).construction,
       storedThisTick: getMaterialStoredProductionPerTick(state),
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       reason: affordability.placement.valid ? null : affordability.placement.reason,
       domainAccepted: Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
     })
     expect(affordability.affordable).toBe(false)
-    expect(affordability.coveredByStoredProduction).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
     expect(Object.keys(dispatched.buildings)).toHaveLength(2)
   })
 })
@@ -136,14 +136,14 @@ describe('§1 — the Water shortfall is its own refusal', () => {
       storedThisTick: getMaterialStoredProductionPerTick(state),
       water: getResourceStock(state).water,
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       reason: affordability.placement.valid ? null : affordability.placement.reason,
       waterRequired: affordability.waterRequired,
       domainAccepted: Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
     })
     expect(affordability.affordable).toBe(false)
     // Stored Material production must NOT be treated as covering the Water cost.
-    expect(affordability.coveredByStoredProduction).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
     // The validator reports the Material shortfall first (its deterministic
     // order) and the placement is refused either way.
     expect(affordability.placement).toEqual({ valid: false, reason: 'insufficientResources' })
@@ -157,7 +157,7 @@ describe('§1 — the Water shortfall is its own refusal', () => {
       material: getResourceStock(state).construction,
       water: getResourceStock(state).water,
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       reason: affordability.placement.valid ? null : affordability.placement.reason,
     })
     expect(affordability.affordable).toBe(false)
@@ -170,7 +170,7 @@ describe('§1 — the Water shortfall is its own refusal', () => {
     const dispatched = stepSimulation(state, place(3, 2, 'workshop'))
     audit('WATER_READY', {
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       waterAfter: getResourceStock(dispatched).water,
       domainAccepted: Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
     })
@@ -187,11 +187,11 @@ describe('§1 — the shared predicate never invents a second rule', () => {
     audit('AGREEMENT', {
       placement: affordability.placement,
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
     })
     expect(affordability.placement).toEqual({ valid: true })
     expect(affordability.affordable).toBe(true)
-    expect(affordability.coveredByStoredProduction).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
   })
 
   it('keeps non-resource failures (occupied cell) refused and uncompensated', () => {
@@ -200,11 +200,11 @@ describe('§1 — the shared predicate never invents a second rule', () => {
     const affordability = getPlacementAffordability(state, { x: 1, y: 2 }, 'workshop')
     audit('OCCUPIED', {
       affordable: affordability.affordable,
-      coveredByStoredProduction: affordability.coveredByStoredProduction,
+      coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       reason: affordability.placement.valid ? null : affordability.placement.reason,
     })
     expect(affordability.affordable).toBe(false)
-    expect(affordability.coveredByStoredProduction).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
     expect(affordability.placement).toEqual({ valid: false, reason: 'cellOccupied' })
   })
 })

@@ -301,8 +301,10 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     // Step 10CQ.1: worker income funds the Well at tick 10 (rejected before),
     // so the compact policy now reaches Village at tick 12 and accrues to 400.
     expect(compact.final.stage).toBe('village')
-    expect(compact.villageTick).toBe(12)
-    expect(compact.final.material).toBe(400)
+    // Step 10CR: affordability now accounts for income, so Village reaches one tick earlier.
+    expect(compact.villageTick).toBe(11)
+    // Step 10CR: affordability now accounts for income, so Village reaches one tick earlier and material shifts by 1.
+    expect(compact.final.material).toBe(399)
     expect(extended.settlementTick).not.toBeNull()
     expect(extended.final.roads).toBe(4)
     expect(waterFirst.final.stage).toBe('wilderness')
@@ -623,7 +625,8 @@ describe('5. Carried-forward findings', { timeout: 30000 }, () => {
     expect(farmFirst.final.stage).toBe('settlement')
     // Step 10CQ.1: Farm + Well workers earn 2/tick, so the run that stalled
     // below 25 now accrues to 201 — the Village funding gap is gone.
-    expect(farmFirst.final.material).toBe(201)
+    // Step 10CR: affordability query now accounts for income, so the Village's final material shifts by 1 tick.
+    expect(farmFirst.final.material).toBe(200)
     expect(wellFirst.final.stage).toBe('wilderness')
     expect(wellFirst.wipeTick).not.toBeNull()
   })

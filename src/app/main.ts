@@ -54,6 +54,7 @@ import {
   getMaterialStorageCapacity,
   getMaterialStoredProductionPerTick,
   getPlacementAffordability,
+  getWorkforceIncome,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getVacantOperationalFarmCount,
@@ -1225,8 +1226,8 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     definition.constructionWaterCost === 0 ? '' : ` · water ${definition.constructionWaterCost}`
   if (affordability.affordable) {
     const cost = definition.constructionCost
-    const storedSuffix = affordability.coveredByStoredProduction
-      ? ` (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored this tick)`
+    const storedSuffix = affordability.coveredBySameTickInflow
+      ? ` (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored + ${getWorkforceIncome(controller.getState())} income)`
       : ''
     return `cell ${cell.x},${cell.y} — ready · material ${cost}${storedSuffix}${waterSuffix}${describeSpatialConsequence(cell, tool.type)}`
   }

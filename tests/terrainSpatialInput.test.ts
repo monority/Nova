@@ -309,7 +309,7 @@ describe('2. building placement', () => {
       reason: 'terrainBlocked',
     })
     expect(affordability.affordable).toBe(false)
-    expect(affordability.coveredByStoredProduction).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
   })
 
   it('leaves the construction contract untouched (2 ticks after placement)', () => {
