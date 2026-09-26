@@ -39,6 +39,7 @@ import {
   loadSave,
   produceFood,
   produceMaterial,
+  creditMaterialIncome,
   produceWater,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -236,7 +237,8 @@ const stepAudit = (state: SimulationState, model: AdmissionModel): SimulationSta
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, undefined)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)

@@ -527,7 +527,7 @@ describe('3-4. The decision blocked topology changes', { timeout: 120000 }, () =
     audit('OPEN_MAP', { log: result.log, final: read(result.state) })
     expect(read(result.state).roads).toBe(5)
     expect(read(result.state).roadNetworks).toBe(1)
-    expect(read(result.state).material).toBe(25)
+    expect(read(result.state).material).toBe(37)
   })
 
   it('obstructed map: the detour costs more cells and one more command', () => {
@@ -552,7 +552,8 @@ describe('3-4. The decision blocked topology changes', { timeout: 120000 }, () =
         'the emulated wall forces a detour: more cells (Material) and one more command (a tick), and the harness could only reach the far side by leaving the blocked row',
     })
     expect(final.roadNetworks).toBe(1)
-    expect(final.material).toBeLessThan(25)
+    // Step 10CQ.1: income drives accumulation above old 25 cap.
+    expect(final.material).toBeGreaterThan(25)
   })
 
   it('chokepoint: a building on the only connector severs the network', () => {

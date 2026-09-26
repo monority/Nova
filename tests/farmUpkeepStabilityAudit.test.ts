@@ -53,11 +53,14 @@ import {
   loadSave,
   MATERIAL_PER_WORKER_PER_TICK,
   MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
   materialStorageCapacityForTick,
   materialStoredProductionForTick,
   materialUpkeepDueForTick,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -248,7 +251,8 @@ const stepWithMetrics = (
   const staffedWorkshops = countStaffedOperationalWorkshops(staffed)
   const materialProduction = materialStoredProductionForTick(staffed)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, command)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, command)
   const crestStock = commanded.state.resources.construction
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
@@ -438,7 +442,7 @@ describe('§2 — baseline reproduction (current rules, Farm upkeep absent)', ()
     })
   })
 
-  it('reproduces the 1-staffed-Workshop equilibrium at 24 (cap 25, net +1)', () => {
+  it('reproduces the 1-staffed-Workshop accumulation past the cap (Step 10CQ.1)', () => {
     const start = rowWorld({ residences: 1, farms: 0, workshops: 1, material: 0, food: 200 })
     const r0 = runTrace(start, 1, false).records[0]!
     expect(r0.staffedWorkshops).toBe(1)
@@ -455,21 +459,29 @@ describe('§2 — baseline reproduction (current rules, Farm upkeep absent)', ()
       tick40: after[39],
       canAfford25AtRest: trace.state.resources.construction >= 25,
     })
-    expect(after[19]).toBe(20)
-    expect(after[23]).toBe(24)
-    expect(after[39]).toBe(24)
-    expect(trace.state.resources.construction).toBeLessThan(25)
+    // Step 10CQ.1: below the cap each tick adds 2 stored + 2 income − 1
+    // upkeep = +3 up to 24 (t8), one clamp tick lands 26 (t9), then stored 0
+    // and income − upkeep = +1/tick: t20 = 37, t24 = 41, t40 = 57.
+    expect(after[19]).toBe(37)
+    expect(after[23]).toBe(41)
+    expect(after[39]).toBe(57)
+    expect(trace.state.resources.construction).toBeGreaterThanOrEqual(25)
   })
 
-  it('confirms a staffed Farm currently costs no Material', () => {
+  it('confirms a staffed Farm costs no Material upkeep but earns +1 income/tick (Step 10CQ.1)', () => {
     const start = rowWorld({ residences: 1, farms: 1, workshops: 0, material: 10, food: 100 })
     const after = runTrace(start, 30, false).state
     audit('BASELINE_FARM_UPKEEP_ZERO', {
       materialStart: 10,
       materialAfter30: after.resources.construction,
       farmUpkeepDue: countStaffedOperationalFarms(start),
+      note: 'Farm upkeep stays 0; the +30 is pure Step 10CQ Farm-worker income (1/tick × 30)',
     })
-    expect(after.resources.construction).toBe(10)
+    // Step 10CQ.1: 10 + 30 × 1 (Farm income) = 40 — with zero Farm upkeep.
+    expect(materialUpkeepDueForTick(start)).toBe(0)
+    expect(after.resources.construction).toBe(
+      10 + 30 * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
+    )
   })
 })
 
@@ -618,7 +630,7 @@ describe('§5 — classification comparison (baseline vs candidate)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§6 — critical 24/25 equilibrium experiment', () => {
-  it('candidate 1F+1W: gross 2, total upkeep 2, net exactly 0 at any stock', () => {
+  it('candidate 1F+1W: gross 2, upkeep 2, income 3 — accumulates from any stock (Step 10CQ.1)', () => {
     const start = rowWorld({ residences: 2, farms: 1, workshops: 1, material: 0, food: 200 })
     const trace = runTrace(start, 40, true)
     const r = trace.records[0]!
@@ -633,23 +645,29 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
     })
     expect(r.materialProduction).toBe(2)
     expect(r.totalUpkeep).toBe(2)
-    for (const record of trace.records) {
-      expect(record.material).toBe(0)
-    }
+    // Step 10CQ.1: income (1 Farm + 2 Workshop) exceeds the candidate upkeep
+    // (1 + 1), so the old net-0 plateau is gone: below the cap each tick adds
+    // 2 stored + 3 income − 2 upkeep = +3, then +1/tick above the cap.
+    expect(
+      MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
+        MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+    ).toBe(3)
+    expect(trace.records.slice(0, 5).map((x) => x.material)).toEqual([3, 6, 9, 12, 15])
+    expect(trace.state.resources.construction).toBe(57)
   })
 
-  it('candidate 1F+1W from a 24 stock equilibrates at 23; the crest still allows a timed build', () => {
+  it('candidate 1F+1W from a 24 stock accumulates; the crest still allows a timed build (Step 10CQ.1)', () => {
     const start = rowWorld({ residences: 2, farms: 1, workshops: 1, material: 24, food: 200 })
     const trace = runTrace(start, 40, true)
     audit('CRITICAL_1F1W_AT_24', {
       materialAfter40: trace.state.resources.construction,
-      restEquilibrium: 23,
-      crestEquilibrium: 25,
-      note: 'near the 25 storage cap the clamp reduces stored production to 1, so upkeep 2 yields rest 23; phase 8a still crests 25 every tick',
+      restEquilibrium: null,
+      note: 'Step 10CQ.1: income (3) exceeds candidate upkeep (2), so there is no rest equilibrium — the stock grows +1/tick above the cap (24 -> 26 -> 65 after 40) and the crest is at least the build cost every tick',
     })
-    // Near the cap the clamp cuts stored production: 24 -> 25 (crest) -> 23.
-    expect(trace.state.resources.construction).toBe(23)
-    expect(trace.records.every((r) => r.materialCrest === 25)).toBe(true)
+    // Step 10CQ.1: t1 stores 1 and credits 3, pays 2 -> 26; then +1/tick
+    // (income 3 − upkeep 2, production clamped): 26 + 39 = 65 after 40.
+    expect(trace.state.resources.construction).toBe(65)
+    expect(trace.records.every((r) => r.materialCrest >= 25)).toBe(true)
     // On the crest tick, produceMaterial fills to 25 and applyCommand can
     // spend it in the SAME tick (08G phase 8a precedes 8b).
     const crest = stepWithMetrics(start, true, {
@@ -689,17 +707,26 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
         colonists,
         netPerTick: last.materialProduction - last.totalUpkeep,
         netPerTickAtStart: trace.records[0]!.materialProduction - trace.records[0]!.totalUpkeep,
+        netWithIncomePerTick:
+          farms * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
+          workshops * MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK -
+          last.totalUpkeep,
         materialEnd: last.material,
         classification: classify(trace.records),
       })
     }
     audit('MIN_ACCUMULATION', rows)
-    for (const row of rows as { farms: number; workshops: number; classification: string }[]) {
-      if (row.workshops > row.farms) {
-        expect(row.classification).toBe('GROWING')
-      } else {
-        expect(row.classification).toBe('MARGINALLY_STABLE')
-      }
+    // Step 10CQ.1: income (F×1 + W×2) − candidate upkeep (F + W) = +W/tick
+    // for every configuration — the old "W must exceed F" boundary is gone:
+    // every staffed Workshop now guarantees accumulation.
+    for (const row of rows as unknown as {
+      farms: number
+      workshops: number
+      classification: string
+      netWithIncomePerTick: number
+    }[]) {
+      expect(row.netWithIncomePerTick).toBe(row.workshops)
+      expect(row.classification).toBe('GROWING')
     }
   })
 
@@ -759,15 +786,17 @@ describe('§7 — construction stability (time-to-25)', () => {
       }
     }
     audit('CONSTRUCTION_TIME_TO_25', out)
-    // W <= F never reaches the build cost; W > F always does.
-    expect(out['1F+1W']).toEqual({ baselineTicksTo25: expect.any(Number), candidateTicksTo25: null })
-    expect(out['2F+2W']).toEqual({ baselineTicksTo25: expect.any(Number), candidateTicksTo25: null })
+    // Step 10CQ.1: employment income guarantees the build cost for every
+    // configuration, candidate rule included — nothing is locked out.
+    expect(out['1F+1W']).toEqual({ baselineTicksTo25: expect.any(Number), candidateTicksTo25: expect.any(Number) })
+    expect(out['2F+2W']).toEqual({ baselineTicksTo25: expect.any(Number), candidateTicksTo25: expect.any(Number) })
     expect((out['1F+2W'] as { candidateTicksTo25: number | null }).candidateTicksTo25).not.toBeNull()
     expect((out['2F+3W'] as { candidateTicksTo25: number | null }).candidateTicksTo25).not.toBeNull()
   })
 
   it('the candidate never makes an expanding configuration unable to expand', () => {
-    // W > F always accumulates; W <= F never does. The dependency is exact.
+    // Step 10CQ.1: previously only W > F accumulated; income now guarantees
+    // the build cost for every configuration, so nothing can be locked out.
     const out: Record<string, number | null> = {}
     for (const [farms, workshops] of [
       [0, 1],
@@ -788,14 +817,10 @@ describe('§7 — construction stability (time-to-25)', () => {
       out[`F${farms}W${workshops}`] = ticksTo(start, true)
     }
     audit('CONSTRUCTION_EXPANSION_MATRIX', out)
-    for (const [key, value] of Object.entries(out)) {
-      const farms = Number(key.slice(1, key.indexOf('W')))
-      const workshops = Number(key.slice(key.indexOf('W') + 1))
-      if (workshops > farms) {
-        expect(value).not.toBeNull()
-      } else {
-        expect(value).toBeNull()
-      }
+    // Step 10CQ.1: every configuration — not only W > F — reaches the build
+    // cost, because employed workers earn income regardless of the W/F ratio.
+    for (const value of Object.values(out)) {
+      expect(value).not.toBeNull()
     }
   })
 })
@@ -873,9 +898,11 @@ describe('§8 — bootstrap experiment', () => {
       candidateMaterialEnd: candidate.state.resources.construction,
       baselineMaterialEnd: baseline.state.resources.construction,
     })
-    // The candidate drains the residual bootstrap stock to 0; the baseline
-    // leaves it at rest below the 25 build cost. BOTH are stuck at the gap.
-    expect(candidate.state.resources.construction).toBe(0)
+    // Step 10CQ.1: the candidate no longer drains to 0 — Farm + Workshop
+    // income outruns the candidate upkeep and it retains 15 — but BOTH runs
+    // still end below the 25 build cost: the bootstrap gap survives.
+    expect(candidate.state.resources.construction).toBe(15)
+    expect(candidate.state.resources.construction).toBeLessThan(25)
     expect(baseline.state.resources.construction).toBeLessThan(25)
     expect(getPopulationCount(candidate.state)).toBe(1)
   })
@@ -1232,7 +1259,12 @@ describe('§13 — expansion threshold: minimum Workshops per Farm', () => {
         const trace = runTrace(start, 60, true)
         const last = trace.records[59]!
         const maxCrest = Math.max(...trace.records.map((r) => r.materialCrest))
-        const net = last.materialProduction - last.totalUpkeep
+        // Step 10CQ.1: accumulation now comes from employment income, not from
+        // clamped stored production (which is 0 once the cap is reached).
+        const income =
+          last.staffedFarms * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
+          last.staffedWorkshops * MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+        const net = income - last.totalUpkeep
         if (net >= 0 && maxCrest >= 25) {
           minimum = workshops
           break
@@ -1241,26 +1273,39 @@ describe('§13 — expansion threshold: minimum Workshops per Farm', () => {
       return { farms, minimumWorkshopsForAccumulation: minimum }
     })
     audit('EXPANSION_THRESHOLD_TABLE', table)
+    // Step 10CQ.1: with income-drived accumulation the threshold collapses:
+    // one Workshop per Farm suffices, and even F1W0 fails only because the
+    // crest never reaches 25 (income equals the candidate upkeep).
     expect(table).toEqual([
       { farms: 0, minimumWorkshopsForAccumulation: 1 },
-      { farms: 1, minimumWorkshopsForAccumulation: 2 },
-      { farms: 2, minimumWorkshopsForAccumulation: 3 },
-      { farms: 3, minimumWorkshopsForAccumulation: 4 },
+      { farms: 1, minimumWorkshopsForAccumulation: 1 },
+      { farms: 2, minimumWorkshopsForAccumulation: 1 },
+      { farms: 3, minimumWorkshopsForAccumulation: 2 },
     ])
   })
 
   it('converts the threshold into worker requirements (one worker per workplace)', () => {
+    // Step 10CQ.1: the minimum thresholds from the table above, expressed as
+    // worker requirements (one worker per workplace). Production-less-upkeep
+    // can be negative while income-less-upkeep is +W/tick — income is what
+    // actually accumulates.
     const rows = [0, 1, 2, 3].map((farms) => {
-      const workshops = farms + 1
+      const workshops = [1, 1, 1, 2][farms]!
       const workers = farms + workshops
-      return { farms, workshops, requiredWorkers: workers, netMaterialPerTick: workshops - farms }
+      return {
+        farms,
+        workshops,
+        requiredWorkers: workers,
+        productionLessUpkeep: workshops - farms,
+        incomeLessUpkeep: workshops,
+      }
     })
     audit('EXPANSION_WORKER_REQUIREMENTS', rows)
     expect(rows).toEqual([
-      { farms: 0, workshops: 1, requiredWorkers: 1, netMaterialPerTick: 1 },
-      { farms: 1, workshops: 2, requiredWorkers: 3, netMaterialPerTick: 1 },
-      { farms: 2, workshops: 3, requiredWorkers: 5, netMaterialPerTick: 1 },
-      { farms: 3, workshops: 4, requiredWorkers: 7, netMaterialPerTick: 1 },
+      { farms: 0, workshops: 1, requiredWorkers: 1, productionLessUpkeep: 1, incomeLessUpkeep: 1 },
+      { farms: 1, workshops: 1, requiredWorkers: 2, productionLessUpkeep: 0, incomeLessUpkeep: 1 },
+      { farms: 2, workshops: 1, requiredWorkers: 3, productionLessUpkeep: -1, incomeLessUpkeep: 1 },
+      { farms: 3, workshops: 2, requiredWorkers: 5, productionLessUpkeep: -1, incomeLessUpkeep: 2 },
     ])
   })
 })
@@ -1307,7 +1352,7 @@ describe('§14 — death spiral test (low Material, candidate ON)', () => {
     }
   })
 
-  it('shows the exact floor: W>F recovers, W<=F floors at 0', () => {
+  it('shows there is no floor anymore: income makes every configuration recover (Step 10CQ.1)', () => {
     const floorOf = (farms: number, workshops: number): number => {
       const start = rowWorld({
         residences: farms + workshops,
@@ -1326,10 +1371,12 @@ describe('§14 — death spiral test (low Material, candidate ON)', () => {
       F2W2: floorOf(2, 2),
     }
     audit('DEATH_SPIRAL_FLOORS', floors)
+    // Step 10CQ.1: income ≥ upkeep for every configuration (net = +W/tick
+    // above the cap), so all four recover from Material 1 instead of flooring.
     expect(floors.F1W2).toBeGreaterThan(1)
-    expect(floors.F1W1).toBe(1)
-    expect(floors.F2W1).toBe(0)
-    expect(floors.F2W2).toBe(1)
+    expect(floors.F1W1).toBeGreaterThan(1)
+    expect(floors.F2W1).toBeGreaterThan(1)
+    expect(floors.F2W2).toBeGreaterThan(1)
   })
 })
 
@@ -1362,8 +1409,10 @@ describe('§15 — recovery test', () => {
       F2W3: recover(2, 3),
     }
     audit('RECOVERY_FROM_ZERO', out)
-    expect((out.F1W1 as { recovered: boolean }).recovered).toBe(false)
-    expect((out.F2W1 as { recovered: boolean }).recovered).toBe(false)
+    // Step 10CQ.1: income makes every configuration recover from Material 0 —
+    // the old irreversible W<=F collapse no longer exists.
+    expect((out.F1W1 as { recovered: boolean }).recovered).toBe(true)
+    expect((out.F2W1 as { recovered: boolean }).recovered).toBe(true)
     expect((out.F1W2 as { recovered: boolean }).recovered).toBe(true)
     expect((out.F2W3 as { recovered: boolean }).recovered).toBe(true)
   })

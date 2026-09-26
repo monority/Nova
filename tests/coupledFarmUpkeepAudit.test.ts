@@ -51,6 +51,7 @@ import {
   materialStoredProductionForTick,
   materialUpkeepDueForTick,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -234,7 +235,8 @@ const stepWithMetrics = (
   const staffedWorkshops = countStaffedOperationalWorkshops(staffed)
   const materialProduction = materialStoredProductionForTick(staffed)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, command)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, command)
   const crestStock = commanded.state.resources.construction
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
@@ -810,7 +812,7 @@ describe('§11 — terminal states and recovery from Material 0', () => {
     }
   })
 
-  it('confirms the only non-recovering configuration has no staffed Workshop', () => {
+  it('confirms even the Farm-only configuration recovers under Step 10CQ income (Step 10CQ.1)', () => {
     const start = rowWorld({ residences: 1, farms: 1, workshops: 0, material: 0, food: 400 })
     const trace = runTrace(start, 60, 'coupled')
     audit('NO_WORKSHOP_NO_MATERIAL', {
@@ -818,8 +820,11 @@ describe('§11 — terminal states and recovery from Material 0', () => {
       F: trace.records[0]!.staffedFarms,
       net: trace.records[0]!.materialProduction - trace.records[0]!.totalUpkeep,
       materialEnd: trace.records[59]!.material,
+      note: 'Step 10CQ.1: the Farm worker earns 1/tick with no Workshop, so the old terminal Farm-only state recovers at +60 over 60 ticks',
     })
-    expect(trace.records[59]!.material).toBe(0)
+    // Step 10CQ.1: 0 + 60 × 1 (Farm income, no upkeep under the coupled rule
+    // without a Workshop) = 60 — the only non-recovering configuration is gone.
+    expect(trace.records[59]!.material).toBe(60)
     expect(trace.records[0]!.staffedWorkshops).toBe(0)
   })
 })

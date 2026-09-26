@@ -36,6 +36,7 @@ import {
   countWorkersAt,
   materialProductionForTick,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   produceWater,
   progressPlacedRoads,
@@ -220,7 +221,8 @@ const stepMirror = (state: SimulationState, opts: MirrorOptions): SimulationStat
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, undefined)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
@@ -302,7 +304,8 @@ const stepBaselineMirror = (state: SimulationState): SimulationState => {
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, undefined)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
@@ -509,8 +512,10 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
     expect(baseline.resources.construction).toBeGreaterThan(withInput.resources.construction)
   })
 
-  it('tests the Farm-input deadlock: no Material means no Food', () => {
-    // 2 Farms, 0 Workshops, Material 0 -> Farms cannot pay the input.
+  it('tests the Farm-input deadlock: broken by Step 10CQ employment income', () => {
+    // 2 Farms, 0 Workshops, Material 0. Under Step 10CQ, Farm workers earn
+    // 1 Material/tick, which pays their own 1 Material input starting at tick 2.
+    // The deadlock is broken: the colony survives.
     const start = world({ residences: 2, farms: 2, colonists: 2, material: 0, food: 3 })
     const run = runMirror(start, 30, { farmInput: 1, farmOutput: 2 })
     audit('FARM_INPUT_DEADLOCK', {
@@ -518,9 +523,10 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
       food: run.state.resources.food,
       material: run.state.resources.construction,
       starved: run.trace.some((r) => r.population === 0),
+      note: 'Step 10CQ.1: Farm-worker income pays the Farm input; the deadlock no longer causes starvation',
     })
-    // No Material -> no Food production -> the reserve is exhausted -> death.
-    expect(getPopulationCount(run.state)).toBe(0)
+    expect(getPopulationCount(run.state)).toBe(2)
+    expect(run.trace.some((r) => r.population === 0)).toBe(false)
   })
 })
 

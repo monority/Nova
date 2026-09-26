@@ -632,7 +632,7 @@ describe('6. terrain-chokepoint fixture (variant C)', () => {
     expect(measured.westServed).toBe(true)
     expect(measured.eastServed).toBe(true)
     expect(measured.westCanReachEastFarm).toBe(true)
-    expect(merged.resources.construction).toBe(30 - ROAD_CONSTRUCTION_COST)
+    expect(merged.resources.construction).toBe(31)
   })
 
   it('case B — the connector cell as a building severs the colony', () => {

@@ -31,6 +31,7 @@ import {
   getWaterCoverage,
   hasOperationalWell,
   hashCanonicalState,
+  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
   MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
   MATERIAL_PER_WORKER_PER_TICK,
@@ -38,6 +39,7 @@ import {
   materialStoredProductionForTick,
   materialUpkeepDueForTick,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   produceWater,
   progressPlacedRoads,
@@ -201,8 +203,9 @@ const stepMirror = (state: SimulationState, opts: MirrorOptions): SimulationStat
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
+  const withIncome = creditMaterialIncome(materialized)
   // Hypothetical ongoing demand, applied at the existing upkeep position.
-  let demanded = materialized
+  let demanded = withIncome
   const extraDue =
     (opts.materialPerColonist ?? 0) * getPopulationCount(materialized) +
     (opts.materialPerBuilding ?? 0) *
@@ -313,29 +316,41 @@ const drivePlan = (
 // ---------------------------------------------------------------------------
 
 describe('§3/§4 — current Material loop and equilibrium', () => {
-  it('documents the loop constants and the W-scaling', () => {
+  it('documents the loop constants, the income lift and the W-scaling (Step 10CQ.1)', () => {
     const rows = [1, 2, 3].map((w) => {
       const start = world({ residences: w, workshops: w, colonists: w })
       const settled = advance(start, 200)
+      const later = advance(start, 210)
+      const stockEnd = settled.resources.construction
+      const growth = (later.resources.construction - stockEnd) / 10
+      const income = MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK * w
+      const upkeep = MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK * w
       return {
         workshops: w,
         grossPerTick: MATERIAL_PER_WORKER_PER_TICK * w,
-        upkeepPerTick: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK * w,
-        netPerTick: MATERIAL_PER_WORKER_PER_TICK * w - MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK * w,
+        incomePerTick: income,
+        upkeepPerTick: upkeep,
+        netAboveCapPerTick: income - upkeep,
         storageCap: materialStorageCapacityForTick(start),
-        equilibrium: settled.resources.construction,
+        stockT200: stockEnd,
+        measuredGrowthPerTick: growth,
       }
     })
     audit('MATERIAL_EQUILIBRIUM', rows)
     for (const row of rows) {
       expect(row.storageCap).toBe(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP * row.workshops)
-      expect(row.equilibrium).toBe(24 * row.workshops)
+      // Step 10CQ: employed workers earn income that bypasses the storage cap,
+      // so the old 24W production equilibrium is now unbounded accumulation.
+      expect(row.stockT200).toBeGreaterThan(row.storageCap)
+      expect(row.measuredGrowthPerTick).toBe(row.netAboveCapPerTick)
+      expect(row.netAboveCapPerTick).toBe(row.workshops)
     }
     audit('MATERIAL_LOOP', {
       gross: `${MATERIAL_PER_WORKER_PER_TICK} per staffed Workshop`,
+      income: `${MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK} per employed Workshop worker (Step 10CQ, uncapped)`,
       upkeep: `${MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK} per staffed Workshop`,
-      net: 'net +1 per staffed Workshop below storage cap',
-      storage: `${MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP} per operational Workshop`,
+      net: 'below cap: stored production + income − upkeep; above cap: income − upkeep (+1 per staffed Workshop worker)',
+      storage: `${MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP} per operational Workshop (bounds production only, not income)`,
       construction: '25 per building, 5 per road cell',
       negativeMaterial: 'impossible (deductions clamp; build rejected when unaffordable)',
       overflow: 'stored production is clamped to free space; excess is discarded',
@@ -345,16 +360,24 @@ describe('§3/§4 — current Material loop and equilibrium', () => {
     expect(true).toBe(true)
   })
 
-  it('the bounded surplus is real: stock never exceeds capacity and settles at 24W', () => {
+  it('the cap bounds production inflow while income accumulates above it (Step 10CQ.1)', () => {
     const start = world({ residences: 2, workshops: 2, colonists: 2, material: 0 })
     const settled = advance(start, 240)
+    const later = advance(start, 250)
+    const growth = (later.resources.construction - settled.resources.construction) / 10
     audit('MATERIAL_CAP', {
-      capacity: settled.resources.construction >= 0 ? materialStorageCapacityForTick(settled) : 0,
-      equilibrium: settled.resources.construction,
-      atCap: settled.resources.construction <= materialStorageCapacityForTick(settled),
+      capacity: materialStorageCapacityForTick(settled),
+      stock: settled.resources.construction,
+      storedInflow: materialStoredProductionForTick(settled),
+      aboveCap: settled.resources.construction > materialStorageCapacityForTick(settled),
+      growthPerTick: growth,
     })
-    expect(settled.resources.construction).toBeLessThanOrEqual(materialStorageCapacityForTick(settled))
-    expect(settled.resources.construction).toBe(48)
+    // The storage cap still clamps production to zero once the stock is full…
+    expect(materialStoredProductionForTick(settled)).toBe(0)
+    // …but Step 10CQ income is credited outside storage and keeps growing:
+    // 2 workers × 2 income − 2 staffed Workshops × 1 upkeep = +2/tick.
+    expect(settled.resources.construction).toBeGreaterThan(materialStorageCapacityForTick(settled))
+    expect(growth).toBe(2)
   })
 })
 
@@ -393,18 +416,22 @@ describe('§5 — long-run Material pressure', () => {
     audit('MATERIAL_PRESSURE', out)
   })
 
-  it('shows Material reaches the cap and then stops mattering without construction', () => {
+  it('shows Material keeps accumulating past the cap: income outgrows upkeep (Step 10CQ.1)', () => {
     const start = world({ residences: 2, workshops: 2, colonists: 2, material: 0 })
     const t60 = advance(start, 60)
     const t1200 = advance(start, 1200)
+    const capacity = materialStorageCapacityForTick(start)
     audit('MATERIAL_PLATEAU', {
       t60: t60.resources.construction,
       t1200: t1200.resources.construction,
-      capacity: materialStorageCapacityForTick(start),
+      capacity,
       growsAfterCap: t1200.resources.construction > t60.resources.construction,
     })
-    expect(t1200.resources.construction).toBe(48)
-    expect(t1200.resources.construction).toBe(t60.resources.construction)
+    // Post-cap, the only inflow is Step 10CQ income: 2 workers × 2 income
+    // − 2 staffed Workshops × 1 upkeep = +2/tick, so the old plateau is gone.
+    expect(t60.resources.construction).toBeGreaterThan(capacity)
+    expect(t1200.resources.construction).toBeGreaterThan(t60.resources.construction)
+    expect(t1200.resources.construction - t60.resources.construction).toBe(2 * (1200 - 60))
   })
 })
 
@@ -478,7 +505,7 @@ describe('§6 — construction as the existing sink', () => {
 // ---------------------------------------------------------------------------
 
 describe('§7 — storage cap analysis', () => {
-  it('shows the cap bounds production inflow and creates a crest-timing decision', () => {
+  it('shows the cap bounds production inflow while income bypasses it (Step 10CQ.1)', () => {
     const start = world({ residences: 1, workshops: 1, colonists: 1, material: 0 })
     const trace: MaterialRecord[] = []
     let state = start
@@ -487,16 +514,22 @@ describe('§7 — storage cap analysis', () => {
       trace.push(record(state))
     }
     audit('STORAGE_CAP_TRACE', trace.filter((_, i) => i % 5 === 0 || i < 4))
-    // At the cap, stored production is 0 and the stock drains by upkeep.
+
     const atCap = record(advance(start, 30))
+    const later = advance(start, 40)
     audit('STORAGE_CAP_SUMMARY', {
       capacity: materialStorageCapacityForTick(start),
-      equilibrium: atCap.material,
-      storedAtEquilibrium: atCap.stored,
-      upkeepAtEquilibrium: atCap.upkeep,
+      stockT30: atCap.material,
+      storedInflow: atCap.stored,
+      upkeep: atCap.upkeep,
+      growthPerTick: (later.resources.construction - atCap.material) / 10,
     })
     expect(materialStorageCapacityForTick(start)).toBe(25)
-    expect(atCap.material).toBe(24)
+    // Production is fully clamped at the cap…
+    expect(atCap.stored).toBe(0)
+    // …while income (2/tick) minus upkeep (1/tick) adds exactly +1/tick.
+    expect(atCap.material).toBeGreaterThan(25)
+    expect(later.resources.construction - atCap.material).toBe(10)
   })
 
   it('capacity counts operational Workshops regardless of staffing', () => {

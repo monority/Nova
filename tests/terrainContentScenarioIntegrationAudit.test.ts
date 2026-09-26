@@ -490,11 +490,11 @@ describe('1. variant C: the three connector roles', () => {
     expect(rows.connectorAsRoad.waterServedResidences).toBe(2)
     expect(rows.connectorAsRoad.servedColonists).toBe(2)
     expect(rows.connectorAsRoad.waterCapacity).toBe(2)
-    expect(rows.connectorAsRoad.material).toBe(25)
+    expect(rows.connectorAsRoad.material).toBe(31)
     // B — connector = building: two networks, the WEST Residence unserved.
     expect(rows.connectorAsBuilding.networks).toBe(2)
     expect(rows.connectorAsBuilding.waterServedResidences).toBe(1)
-    expect(rows.connectorAsBuilding.material).toBe(5)
+    expect(rows.connectorAsBuilding.material).toBe(11)
     // C — connector blocked: identical severance, no command can ever fix it.
     expect(rows.connectorBlocked.networks).toBe(2)
     expect(rows.connectorBlocked.waterServedResidences).toBe(1)
@@ -1072,8 +1072,8 @@ describe('7. constrained Water recovery', () => {
     // the Well itself stays UNSTAFFED (jobs 2/4): the west Residence is served
     // on paper because an operational Well grants coverage whether or not
     // anyone works it. That is existing 10P semantics, reached through terrain.
-    expect(rows.solutionConnectorRoad.material).toBe(25)
-    expect(rows.solutionWellOnConnector.material).toBe(5)
+    expect(rows.solutionConnectorRoad.material).toBe(67)
+    expect(rows.solutionWellOnConnector.material).toBe(47)
     expect(rows.solutionWellOnConnector.waterCapacity).toBe(
       rows.solutionConnectorRoad.waterCapacity
     )

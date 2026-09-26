@@ -150,7 +150,7 @@ describe('1. start state', () => {
 // ---------------------------------------------------------------------------
 
 describe('2. spatial solutions', () => {
-  it('solution A — a cell that touches both networks completes for 25 Material', () => {
+  it('solution A — a cell that touches both networks completes for 25 Material plus income (Step 10CQ.1)', () => {
     const state = run(
       [{ type: 'placeBuilding', x: 2, y: 1, buildingType: 'residence' }],
       20
@@ -161,12 +161,14 @@ describe('2. spatial solutions', () => {
     expect(measured.servedResidences).toBe(2)
     expect(measured.employed).toBe(2)
     expect(measured.foodPerTick).toBe(2)
-    expect(measured.material).toBe(5)
+    // Step 10CQ.1: the 25-cost placement leaves 5, then two workers earn
+    // 2/tick over 20 ticks: 5 + 40 = 45.
+    expect(measured.material).toBe(45)
     expect(measured.stage).toBe('village')
     expect(outcome(state)).toBe('completed')
   })
 
-  it('solution B — housing on the far network plus a joining road completes for 30', () => {
+  it('solution B — housing on the far network plus a joining road completes for 30 plus income (Step 10CQ.1)', () => {
     const state = run(
       [
         { type: 'placeBuilding', x: 0, y: 1, buildingType: 'residence' },
@@ -180,7 +182,9 @@ describe('2. spatial solutions', () => {
     expect(measured.population).toBe(2)
     expect(measured.employed).toBe(2)
     expect(measured.foodPerTick).toBe(2)
-    expect(measured.material).toBe(0)
+    // Step 10CQ.1: the 30-cost solution leaves 0, then two workers earn
+    // 2/tick to 42 by the end of the run.
+    expect(measured.material).toBe(42)
     expect(outcome(state)).toBe('completed')
   })
 
@@ -271,8 +275,9 @@ describe('3. failure and recovery', () => {
     )
     audit('RECOVERY_FROM_UNSERVED', read(recovered))
     expect(outcome(recovered)).toBe('completed')
-    // The recovery is exactly the remaining budget: no artificial terminal state.
-    expect(recovered.resources.construction).toBe(0)
+    // Step 10CQ.1: the same recovery succeeds and workers earn income on the
+    // way, so the stock ends at 42 rather than 0.
+    expect(recovered.resources.construction).toBe(42)
   })
 
   it('recovery is also possible after the serviced-but-stranded mistake', () => {

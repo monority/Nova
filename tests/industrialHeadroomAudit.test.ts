@@ -378,8 +378,9 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     expect(c.waterNet).toBe(-2)
     expect(c.foodNet).toBe(0) // the Farm keeps feeding both colonists
     expect(after20.resources.water).toBeLessThan(waterStart)
-    // Material is capped by the Workshop storage, not by time.
-    expect(after20.resources.construction).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    // Step 10CQ.1: +4/tick up to tick 6 (24), clamp tick 7 reaches 27, then
+    // income (3) - upkeep (1) = +2/tick to 53 at tick 20.
+    expect(after20.resources.construction).toBe(53)
   })
 
   it('measures state E (industrial recovery) and the temporary-industry loop', () => {
@@ -418,8 +419,9 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     })
     // 50 Water drained at 2/tick (both colonists are served): 25 ticks.
     expect(industrialTicks).toBe(25)
-    expect(materialGained).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
-    expect(materialGained).toBeGreaterThanOrEqual(20)
+    // Step 10CQ.1: 25 ticks of industry gain 63 Material (climbing past the cap
+    // via 3 income - 1 upkeep = +2/tick).
+    expect(materialGained).toBe(63)
     expect(e.wellWorkers).toBe(1)
     expect(e.waterProduction).toBe(2)
     expect(e.waterNet).toBe(0)
@@ -541,9 +543,10 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
     // The scenario has only 10 Water and both colonists are served: ~5 ticks.
     expect(ticks).toBeLessThanOrEqual(6)
     expect(aggressiveFlow.wellWorkers).toBe(1)
-    // Above the storage cap (stock 75 > capacity 25) the industrial output is
-    // discarded, so each industrial tick only pays the upkeep (-1 Material).
-    expect(materialGained).toBe(-ticks)
+    // Step 10CQ.1: above the storage cap (stock 75 > capacity 25) stored production is
+    // 0, but 1 Farm worker (1) + 1 Workshop worker (2) earn 3 income against 1 upkeep,
+    // netting +2 Material per industrial tick: 5 * 2 = 10.
+    expect(materialGained).toBe(ticks * 2)
   })
 
   it('audits five openings from the real initial state', () => {

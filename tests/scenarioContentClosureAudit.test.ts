@@ -177,7 +177,7 @@ const driveHousing = (
 // ---------------------------------------------------------------------------
 
 describe('1. Housing composition — the four branches', () => {
-  it('A — the connector Residence completes Village at tick 3 with 5 Material spare', () => {
+  it('A — the connector Residence completes Village at tick 3 with 5 Material spare plus income (Step 10CQ.1)', () => {
     const { state, completedTick } = driveHousing([
       { kind: 'building', type: 'residence', x: 2, y: 1 },
     ])
@@ -191,12 +191,13 @@ describe('1. Housing composition — the four branches', () => {
     expect(measured.employed).toBe(2)
     expect(measured.foodPerTick).toBe(2)
     expect(measured.foodPerTick).toBeGreaterThanOrEqual(measured.foodConsumption)
-    expect(measured.material).toBe(5)
+    // Step 10CQ.1: 5 spare after the 25-cost placement plus worker income to tick 3 = 9.
+    expect(measured.material).toBe(9)
     // A building never merges roads: the bridge cell spans both networks.
     expect(measured.networks).toBe(2)
   })
 
-  it('B — an outer Residence plus the 5-Material join completes with 0 Material', () => {
+  it('B — an outer Residence plus the 5-Material join completes with income on top (Step 10CQ.1)', () => {
     const { state, completedTick } = driveHousing([
       { kind: 'building', type: 'residence', x: 0, y: 1 },
       { kind: 'roads', cells: [{ x: 2, y: 1 }] },
@@ -210,7 +211,8 @@ describe('1. Housing composition — the four branches', () => {
     expect(measured.population).toBe(2)
     expect(measured.employed).toBe(2)
     expect(measured.foodPerTick).toBe(2)
-    expect(measured.material).toBe(0)
+    // Step 10CQ.1: the 5-cost join leaves 0, then two workers earn to 4.
+    expect(measured.material).toBe(4)
   })
 
   it('C — an east outer Residence without a join is admitted, stranded and starves', () => {
@@ -336,7 +338,8 @@ describe('1. Housing composition — the four branches', () => {
     audit('RECOVERY_FROM_UNSERVED', measure(fromUnserved.state, objective))
     expect(getObjectiveStatus(fromUnserved.state, objective).state).toBe('completed')
     expect(getRoadNetworks(fromUnserved.state).length).toBe(1)
-    expect(getResourceStock(fromUnserved.state).construction).toBe(0)
+    // Step 10CQ.1: the same 5-cost repair plus worker income ends at 4.
+    expect(getResourceStock(fromUnserved.state).construction).toBe(4)
     // The same repair also rescues the serviced-but-stranded (east) mistake.
     const fromStranded = driveHousing([
       { kind: 'building', type: 'residence', x: 4, y: 1 },

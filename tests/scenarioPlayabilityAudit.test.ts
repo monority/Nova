@@ -298,8 +298,11 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     audit('FIRST_SETTLEMENT', { compact, extended, waterFirst })
     expect(compact.settlementTick).not.toBeNull()
     expect(compact.final.roads).toBe(1)
-    expect(compact.final.stage).toBe('settlement')
-    expect(compact.final.material).toBe(20) // 100 - 25 res - 5 road - 25 farm - 25 residence - 25 well (rejected)
+    // Step 10CQ.1: worker income funds the Well at tick 10 (rejected before),
+    // so the compact policy now reaches Village at tick 12 and accrues to 400.
+    expect(compact.final.stage).toBe('village')
+    expect(compact.villageTick).toBe(12)
+    expect(compact.final.material).toBe(400)
     expect(extended.settlementTick).not.toBeNull()
     expect(extended.final.roads).toBe(4)
     expect(waterFirst.final.stage).toBe('wilderness')
@@ -413,7 +416,10 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     )
     audit('SPATIAL_EFFICIENCY', { minimal, oneRoadTooMany })
     expect(minimal.final.stage).toBe('settlement')
-    expect(minimal.final.material).toBe(0)
+    // Step 10CQ.1: the Farm worker earns 1/tick, so the minimal run ends at
+    // 199. The one-road-too-many run still never reaches the 25 it needs
+    // (it ends at 20, wiped at tick 104): the 5-Material margin still decides.
+    expect(minimal.final.material).toBe(199)
     expect(minimal.final.roads).toBe(1)
     expect(oneRoadTooMany.final.stage).toBe('wilderness')
     expect(oneRoadTooMany.wipeTick).not.toBeNull()
@@ -471,12 +477,14 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     audit('RECOVERY', { repair, replace, inaction })
     expect(repair.final.stage).toBe('settlement')
     expect(repair.final.roads).toBe(4)
-    expect(repair.final.material).toBe(15)
+    // Step 10CQ.1: the staffed Farm earns 1/tick, so both repairs accrue
+    // Material (215 and 204) instead of hovering near the old 15/5.
+    expect(repair.final.material).toBe(215)
     expect(repair.final.staffedFarms).toBe(1)
     expect(replace.final.stage).toBe('settlement')
     expect(replace.final.roads).toBe(1)
     expect(replace.final.buildings).toBe(3)
-    expect(replace.final.material).toBe(5)
+    expect(replace.final.material).toBe(204)
     expect(inaction.final.stage).toBe('wilderness')
     expect(inaction.wipeTick).not.toBeNull()
   })
@@ -491,7 +499,7 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
         primaryConstraint: 'Material 100',
         secondaryConstraint: 'Food sustainability',
         settlementPath: 'Residence + road + Farm (55 of 100)',
-        villagePath: 'none: 2 Residences + Well + Farm + road = 105 > 100',
+        villagePath: 'none from the 100 grant (2 Residences + Well + Farm + road = 105 > 100); Step 10CQ income now funds it (compact reaches Village at tick 12)',
         failureMode: 'Water/industry before Food starves the only worker',
         recovery: 'n/a (a wiped colony is terminal)',
         distinctive: 'the construction order alone decides Settlement vs starvation',
@@ -577,7 +585,7 @@ const audit = (label: string, value: unknown): void => {
 // ---------------------------------------------------------------------------
 
 describe('5. Carried-forward findings', { timeout: 30000 }, () => {
-  it('A — measures the opening budget: order matters, Village is out of reach', () => {
+  it('A — measures the opening budget: order matters, income closes the Village gap (Step 10CQ.1)', () => {
     const farmFirst = playScenario(
       'first-settlement',
       'Farm before Well',
@@ -608,12 +616,14 @@ describe('5. Carried-forward findings', { timeout: 30000 }, () => {
       farmFirst: { stage: farmFirst.final.stage, materials: farmFirst.final.material, roads: farmFirst.final.roads, population: farmFirst.final.population },
       wellFirst: { stage: wellFirst.final.stage, wipeTick: wellFirst.wipeTick },
       conclusion:
-        'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell): an intentional pressure of the existing economy, not a bug; the construction order alone decides Settlement vs starvation, and no order reaches Village from 100 Material',
+        'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell); the construction order alone decides Settlement vs starvation, and Step 10CQ income now funds what the grant alone could not (farm-first accrues to 201)',
     })
     expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
     expect(minimumVillageCost).toBe(105)
     expect(farmFirst.final.stage).toBe('settlement')
-    expect(farmFirst.final.material).toBeLessThan(25)
+    // Step 10CQ.1: Farm + Well workers earn 2/tick, so the run that stalled
+    // below 25 now accrues to 201 — the Village funding gap is gone.
+    expect(farmFirst.final.material).toBe(201)
     expect(wellFirst.final.stage).toBe('wilderness')
     expect(wellFirst.wipeTick).not.toBeNull()
   })

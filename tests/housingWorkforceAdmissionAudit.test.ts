@@ -495,7 +495,7 @@ describe('8 — F,F,W,W recovery', () => {
     expect(r.vacantHousing).toBe(0)
   })
 
-  it('B — waiting does not recover: 240 ticks keep Material and staffing flat', () => {
+  it('B — waiting recovers Material through income but not Workshop staffing (Step 10CQ.1)', () => {
     const start = stuckState()
     const trace: Snapshot[] = []
     let state = start
@@ -509,7 +509,9 @@ describe('8 — F,F,W,W recovery', () => {
       staffedWorkshops: trace[239]!.staffedWorkshops,
       changed: trace[239]!.material !== 5,
     })
-    expect(trace[239]!.material).toBe(5)
+    // Step 10CQ.1: two employed Farm workers earn 2/tick with no upkeep, so
+    // waiting accrues 5 + 240 x 2 = 485. Staffing still does not recover.
+    expect(trace[239]!.material).toBe(485)
     expect(trace[239]!.staffedWorkshops).toBe(0)
   })
 
@@ -637,11 +639,19 @@ describe('10 — construction order', () => {
       }
     }
     audit('CONSTRUCTION_ORDER_100', out)
-    // Material-first sequences finish; Farm-first sequences stall.
+    // Step 10CQ.1: employment income lets every sequence finish all six
+    // placements from the bootstrap budget; Farm-first sequences still place
+    // later and end staffed differently (C: no Workshop; D: no Food/population).
+    expect((out['A'] as { complete: boolean }).complete).toBe(true)
     expect((out['B'] as { complete: boolean }).complete).toBe(true)
+    expect((out['C'] as { complete: boolean }).complete).toBe(true)
     expect((out['D'] as { complete: boolean }).complete).toBe(true)
-    expect((out['A'] as { complete: boolean }).complete).toBe(false)
-    expect((out['C'] as { complete: boolean }).complete).toBe(false)
+    expect((out['A'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 28, 63, 88])
+    expect((out['B'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 12, 23, 31])
+    expect((out['C'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 28, 63, 88])
+    expect((out['D'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 12, 23, 31])
+    expect((out['C'] as { final: { staffedWorkshops: number } }).final.staffedWorkshops).toBe(0)
+    expect((out['D'] as { final: { population: number } }).final.population).toBe(0)
   })
 
   it('runs the same sequences with a 400 Material budget to isolate allocation', () => {

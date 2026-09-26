@@ -346,7 +346,9 @@ describe('§4 — 10K/10L dead-end recovery', () => {
     const workshops = idsOf(stuck, 'workshop')
     const preRun = advance(stuck, 10)
     audit('DEADEND_BEFORE', { ...(snapshot(preRun) as object), materialStart: 5 })
-    expect(preRun.resources.construction).toBe(5)
+    // Step 10CQ.1: the farm-first state is no longer Material-flat — the two
+    // Farm workers earn 2/tick with no upkeep: 5 + 10 × 2 = 25.
+    expect(preRun.resources.construction).toBe(25)
     expect(countStaffedOperationalWorkshops(preRun)).toBe(0)
 
     const manual = reassign(stuck, 'colonist-2', workshops[0]!)

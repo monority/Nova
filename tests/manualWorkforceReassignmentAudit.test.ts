@@ -42,6 +42,7 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -187,7 +188,8 @@ const stepWithHook = (state: SimulationState, hook: AssignmentHook): SimulationS
   const staffed = assignJobs(populated)
   const adjusted = hook(staffed)
   const materialized = produceMaterial(adjusted)
-  const commanded = applyCommand(materialized, undefined)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(maintained)
@@ -401,7 +403,7 @@ describe('5 — canonical problematic scenario', () => {
     expect(countStaffedOperationalWorkshops(state)).toBe(0)
   })
 
-  it('runs 60 ticks and confirms the state stays inefficient', () => {
+  it('runs 60 ticks: the farm-first state now accumulates Material (Step 10CQ.1)', () => {
     const trace = runHook(problemState(), 60, identityHook)
     const last = trace.snapshots[59]!
     audit('PROBLEM_60_TICKS', {
@@ -410,8 +412,12 @@ describe('5 — canonical problematic scenario', () => {
       staffedWorkshopsEnd: last.staffedWorkshops,
       staffedFarmsEnd: last.staffedFarms,
       foodEnd: last.food,
+      note: 'Step 10CQ.1: two Farm workers earn 2/tick with no upkeep, so the stock grows from 5 to 125 even while no Workshop is staffed',
     })
-    expect(last.material).toBe(5)
+    // Step 10CQ.1: 5 + 60 × 2 (two Farm workers) = 125; the Workshops stay
+    // unstaffed, so the state is still staffingly inefficient — just not
+    // Material-starved anymore.
+    expect(last.material).toBe(125)
     expect(last.staffedWorkshops).toBe(0)
   })
 })
@@ -441,11 +447,15 @@ describe('6 — manual reassignment counterfactual', () => {
       manual: changed.snapshots[0],
       delta,
     })
-    // Farm -> Workshop: -2 Food/tick, +1 net Material/tick, +1 Workshop.
+    // Farm -> Workshop: -2 Food/tick, +1 Workshop, and a +2 Material tick:
+    // the Workshop worker's income (2) and stored production (2) outweigh the
+    // lost Farm income (1) plus the new upkeep (1).
     expect(delta.staffedFarms).toBe(-1)
     expect(delta.staffedWorkshops).toBe(1)
     expect(delta.food).toBe(-2)
-    expect(delta.material).toBe(1)
+    // Step 10CQ.1: current = +2 (two Farm incomes); changed = +2 stored
+    // + 3 income (1 Farm + 2 Workshop) − 1 upkeep = +4 → delta +2.
+    expect(delta.material).toBe(2)
   })
 })
 
@@ -509,10 +519,13 @@ describe('8 — reverse reassignment (Workshop -> Farm)', () => {
         staffedFarms: changed.staffedFarms - current.staffedFarms,
       },
     })
-    // Workshop -> Farm: +2 Food/tick production (pop 2 -> net +2), -1 net Material.
+    // Workshop -> Farm: +2 Food/tick production (pop 2 -> net +2), -2 Material:
+    // the swap loses 1 Workshop income (2 -> 1) and 2 stored production while
+    // saving 1 upkeep.
     expect(changed.staffedFarms - current.staffedFarms).toBe(1)
     expect(changed.food - current.food).toBe(2)
-    expect(changed.material - current.material).toBe(-1)
+    // Step 10CQ.1: stored −2, income −1, upkeep +1 → delta −2.
+    expect(changed.material - current.material).toBe(-2)
   })
 })
 

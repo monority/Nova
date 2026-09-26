@@ -248,8 +248,10 @@ describe('§3 — baseline bootstrap trajectory', () => {
     expect(history[9]!.food).toBe(107)
     expect(history[9]!.population).toBe(1)
     // Material: bootstrap 100 - residence 25 - 2 roads 10 - farm 25 = 40.
-    expect(history[0]!.material).toBe(40)
-    expect(history[9]!.material).toBe(40)
+    // Step 10CQ.1: Farm worker earns +1 Material/tick, so tick 4 has 41, and
+    // after 10 ticks (history[9]) stock reaches 50.
+    expect(history[0]!.material).toBe(41)
+    expect(history[9]!.material).toBe(50)
   })
 
   it('stable food-positive state is reachable: 1 staffed residence + farm never famines', () => {
@@ -623,9 +625,10 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     const last = series[series.length - 1]!
     expect(last.population).toBe(1)
     expect(last.food).toBeLessThan(INITIAL_FOOD) // decaying: no farm
-    // Material is throttled by the storage cap: bootstrap stock exceeds it and
-    // only staffed upkeep drains it (-1/tick).
-    expect(last.material).toBe(INITIAL_FOOD - 25 - 10 - 25 - 8)
+    // Step 10CQ.1: above the cap (40 > 25) stored production is 0, but the
+    // Workshop worker earns 2 income against 1 upkeep, netting +1/tick:
+    // 40 + 8 = 48.
+    expect(last.material).toBe(INITIAL_FOOD - 25 - 10 - 25 + 8)
     expect(materialUpkeepDueForTick(industry)).toBe(1)
 
     // The measured tradeoff: the housing colony fed two colonists on food it

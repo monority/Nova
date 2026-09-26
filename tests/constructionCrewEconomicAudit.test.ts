@@ -348,15 +348,15 @@ describe('§4 — build-vs-produce opportunity cost', () => {
     expect((result['opportunityCost'] as { food: number }).food).toBe(2)
   })
 
-  it('Workshop: one crew tick costs gross output but saves the upkeep it would have paid', () => {
+  it('Workshop: one crew tick costs gross output plus income but saves the upkeep (Step 10CQ.1)', () => {
     const result = costOf('workshop')
     audit('COST_WORKSHOP', {
       ...result,
-      note: 'a vacant Workshop pays no upkeep, so the NET Material opportunity cost is smaller than the gross loss',
+      note: 'a crewed Workshop neither produces nor earns Step 10CQ income and pays no upkeep; the control nets gross + income − upkeep',
     })
-    // net = +2 gross - 1 upkeep = +1 in the control; 0 in the crewed tick.
-    expect((result['opportunityCost'] as { material: number }).material).toBe(1)
-    expect((result['controlDelta'] as { material: number }).material).toBe(1)
+    // control: +2 gross + 2 income − 1 upkeep = +3; crewed tick: 0.
+    expect((result['opportunityCost'] as { material: number }).material).toBe(3)
+    expect((result['controlDelta'] as { material: number }).material).toBe(3)
     expect((result['crewedDelta'] as { material: number }).material).toBe(0)
   })
 
@@ -535,7 +535,7 @@ describe('§3 — expansion throughput', () => {
 // ---------------------------------------------------------------------------
 
 describe('§5 — constrained states', () => {
-  it('material-rich: a free timing gain, because surplus output was clamped away anyway', () => {
+  it('material-rich: a timing gain that costs one income-tick of Material (Step 10CQ.1)', () => {
     const base = world({ residences: 1, workshops: 1, colonists: 1, material: 1000 })
     const site = placed(base, 'well', 11, 2)
     const workerId = colonistAt(site.state, buildingIdOfType(site.state, 'workshop'))
@@ -552,10 +552,12 @@ describe('§5 — constrained states', () => {
         uncrewed: control.resources.construction,
         crewed: withCrew.resources.construction,
       },
-      note: 'stock sits above the 25 storage cap, so the crew member output was already discarded; the crew tick also avoids one upkeep, so the crewed run ends 1 Material AHEAD',
+      note: 'stock sits above the 25 storage cap, so stored production is discarded either way; the crew tick skips one upkeep but also skips one Step 10CQ income credit (2), so the crewed run ends exactly 1 Material BEHIND while still completing the Well a tick earlier',
     })
     expect(crewedTick).toBeLessThan(uncrewedTick)
-    expect(withCrew.resources.construction).toBeGreaterThanOrEqual(control.resources.construction)
+    // Control: +2 income − 1 upkeep = +1/tick × 6. Crewed: tick 0 earns no
+    // income and pays no upkeep (0), ticks 1-5 run +1 → exactly 1 behind.
+    expect(withCrew.resources.construction).toBe(control.resources.construction - 1)
   })
 
   it('material-constrained: a crew tick costs the next 25-cost build a tick of Material', () => {

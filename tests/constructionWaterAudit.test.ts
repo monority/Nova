@@ -40,6 +40,7 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   produceWater,
   progressPlacedRoads,
@@ -248,7 +249,8 @@ const stepMirror = (
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommandWithWater(materialized, lateCommand, rule)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommandWithWater(withIncome, lateCommand, rule)
 
   // `end` payment: the Water is charged when the building becomes operational.
   let paid = commanded.state

@@ -46,6 +46,7 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   produceWater,
   progressPlacedRoads,
@@ -281,11 +282,10 @@ const stepMirror = (
   const staffed = assignJobs(populated)
   const gated = preGate.unpaid ? idleWorkersAt(staffed, staffedWorkshopIds(staffed)) : staffed
   const produced2 = produceMaterial(gated)
+  const withIncome = creditMaterialIncome(produced2)
   // An idle plant keeps its worker assigned: the idle is a production gate for
   // this tick only, never a persisting unemployment that could leak forward.
-  const materialized: SimulationState =
-    gated === staffed ? produced2 : { ...produced2, colonists: staffed.colonists }
-  const commanded = applyCommand(materialized, lateCommand)
+  const commanded = applyCommand(withIncome, lateCommand)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
 
@@ -388,10 +388,11 @@ describe('§1/§3 — starting-state bootstrap matrix', () => {
         staffedWorkshops: r.readings.staffedWorkshops,
         water: r.readings.water,
       })),
-      note: 'with no Well there is no Water; with no Water the Workshop idles; with no Workshop output a 25-Material Well can never be built',
+      note: 'with income (Step 10CQ), even 0-Material colonies accumulate +1/net/tick from the staffed Workshop; the strict gate no longer deadlocks',
     })
-    expect(rows[0]!.recovered).toBe(false)
-    expect(rows[4]!.recovered).toBe(false)
+    // Income drives accumulation past the Well price for every starting stock.
+    expect(rows[0]!.recovered).toBe(true)
+    expect(rows[4]!.recovered).toBe(true)
   })
 
   it('Model A: a colony that keeps 25 Material can always build the Well itself', () => {
@@ -512,9 +513,10 @@ describe('§5 — permanent free producer test (delayed Well)', () => {
         material: fLate.resources.construction,
         staffedWorkshops: countStaffedOperationalWorkshops(fLate),
       },
-      note: 'E bounds the free window in TIME (so a late 0-Material colony still deadlocks); F bounds it in STOCK (so it expires exactly where the deadlock would occur) — a hidden 25-Material subsidy',
+      note: 'E bounds the free window in TIME; F bounds it in STOCK — but Step 10CQ income adds +1/net/tick from the staffed Workshop, so material keeps growing',
     })
-    expect(f.resources.construction).toBeLessThanOrEqual(MATERIAL_FLOOR_WELL_PRICE + 1)
+    // Income drives accumulation above the old 26 cap.
+    expect(f.resources.construction).toBeGreaterThan(MATERIAL_FLOOR_WELL_PRICE)
   })
 })
 
@@ -583,9 +585,9 @@ describe('§2 — Models C and D', () => {
         material: withWell.resources.construction,
         staffedWells: operationalIdsOfType(withWell, 'well').filter((id) => countWorkersAt(withWell, id) > 0).length,
       },
-      note: 'the grant needs a completed Well, and a Well needs 25 Material: the deadlock is untouched (the bootstrap root would still be the initial Material). It also creates Water outside production, bounded only by how many Wells are built',
+      note: 'the grant needs a completed Well, and a Well needs 25 Material: but income (Step 10CQ) lets the colony accumulate past the Well price without the grant',
     })
-    expect(probe.recovered).toBe(false)
+    expect(probe.recovered).toBe(true)
   })
 })
 

@@ -409,9 +409,10 @@ describe('3 — production interaction', () => {
       material: 10,
     })
     const wellId = idsOf(base, 'well')[0]!
-    // Control: without a crew the Workshop produces 2 and pays 1 upkeep.
+    // Control: without a crew the Workshop produces 2, earns 2 Step 10CQ
+    // income and pays 1 upkeep: 10 + 2 + 2 − 1 = 13.
     const control = stepSimulation(base)
-    expect(control.resources.construction).toBe(11)
+    expect(control.resources.construction).toBe(13)
 
     const assigned = crew(base, 'colonist-1', wellId)
     const afterTick = stepSimulation(assigned)
@@ -420,10 +421,11 @@ describe('3 — production interaction', () => {
     expect(afterTick.buildings[wellId]!.status).toBe('operational')
     expect(afterTick.resources.construction).toBe(10)
     expect(countWorkersAt(afterTick, idsOf(base, 'workshop')[0]!)).toBe(0)
-    // The release happens at the end of that tick, so the next tick produces.
+    // The release happens at the end of that tick, so the next tick produces
+    // (2 stored + 2 income − 1 upkeep = +3 over the crewing tick's 10).
     expect(afterTick.colonists['colonist-1']!.constructionAssignmentId).toBeNull()
     const nextTick = stepSimulation(afterTick)
-    expect(nextTick.resources.construction).toBe(11)
+    expect(nextTick.resources.construction).toBe(13)
   })
 
   it('stops Well output while the well worker crews another site', () => {

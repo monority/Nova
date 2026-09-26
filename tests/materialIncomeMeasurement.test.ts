@@ -33,7 +33,7 @@ import {
 const config: SimulationConfig = { world: { seed: 'nova-step10cq', width: 12, height: 12 } }
 
 const operational = (state: SimulationState, type: string, x: number, y: number): SimulationState => {
-  const created = createBuilding(state, type as any, x, y, 2)
+  const created = createBuilding(state, type as unknown as 'workshop' | 'farm' | 'well' | 'residence', x, y, 2)
   const building = created.state.buildings[created.buildingId]
   if (building === undefined) throw new Error('10cq: missing building')
   return {
@@ -99,7 +99,7 @@ describe('10CQ — material income rates', () => {
   })
 
   it('earns zero when unemployed', () => {
-    let state = createInitialState(config)
+    const state = createInitialState(config)
     // Create a farm but no colonist assigned to it
     const created = createBuilding(state, 'farm', 0, 2, 2)
     const farm = created.state.buildings[created.buildingId]
@@ -127,7 +127,7 @@ describe('10CQ — workforce income aggregation', () => {
   })
 
   it('returns zero when no colonists are employed', () => {
-    let state = createInitialState(config)
+    const state = createInitialState(config)
     expect(getWorkforceIncome(state)).toBe(0)
   })
 })
@@ -194,7 +194,7 @@ describe('10CQ — persistence', () => {
 
 describe('10CQ — edge cases', () => {
   it('earns zero for under-construction workplaces', () => {
-    let state = createInitialState(config)
+    const state = createInitialState(config)
     // Create an under-construction farm (constructionRemaining = 2)
     const created = createBuilding(state, 'farm', 0, 2, 2)
     const withColonist = createColonist(created.state, created.buildingId).state

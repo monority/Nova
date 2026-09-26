@@ -34,6 +34,7 @@ import {
   loadSave,
   produceFood,
   produceMaterial,
+  creditMaterialIncome,
   produceWater,
   progressOneBuilding,
   progressOneRoad,
@@ -279,7 +280,8 @@ const stepAudited = (
   )
   const staffed = excludeCrew(assignJobs(populated), busy)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, command)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, command)
   // Step 10Y removed the building placement catch-up from stepSimulation.
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
@@ -328,6 +330,7 @@ describe('§1 — current causal graph', () => {
         'updatePopulation',
         'assignJobs',
         'produceMaterial',
+        'creditMaterialIncome',
         'applyCommand',
         'progressPlacedRoads',
         'progressPlacedRoads',

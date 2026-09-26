@@ -55,7 +55,10 @@ import {
   materialStorageCapacityForTick,
   materialStoredProductionForTick,
   materialUpkeepDueForTick,
+  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -246,7 +249,8 @@ const stepWithMetrics = (
   const staffedWorkshops = countStaffedOperationalWorkshops(staffed)
   const materialProduction = materialStoredProductionForTick(staffed)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, command)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, command)
   const crestStock = commanded.state.resources.construction
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
@@ -529,17 +533,22 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
     audit('FORMULA_VERIFICATION', rows)
   })
 
-  it('identifies the accumulation boundary W >= F and the W = F - 1 floor', () => {
+  it('every configuration accumulates under Step 10CQ income (the W >= F boundary is gone)', () => {
     const rows = MATRIX.map((scenario) => {
       const start = scenarioStart(scenario)
       const trace = runTrace(start, MATRIX_TICKS, 'candidate')
       const first = trace.records[0]!
       const last = trace.records[MATRIX_TICKS - 1]!
+      const netWithIncome =
+        first.staffedFarms * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
+        first.staffedWorkshops * MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK -
+        first.totalUpkeep
       return {
         scenario: scenario.name,
         W: first.staffedWorkshops,
         F: first.staffedFarms,
         net: first.materialProduction - first.totalUpkeep,
+        netWithIncome,
         materialCrestPeak: Math.max(...trace.records.map((r) => r.materialCrest)),
         materialEnd: last.material,
         classification: classify(trace.records),
@@ -547,9 +556,12 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
       }
     })
     audit('ACCUMULATION_BOUNDARY', rows)
+    // Step 10CQ.1: income (F×1 + W×2) exceeds the candidate upkeep
+    // (W + max(0, F-1)), so every configuration now GROWS — the old
+    // W >= F accumulation boundary is no longer the deciding rule.
     for (const row of rows) {
-      if (row.grows) expect(row.classification).toBe('GROWING')
-      else expect(row.classification).toBe('MARGINALLY_STABLE')
+      expect(row.netWithIncome).toBe(row.W + (row.F > 0 ? 1 : 0))
+      expect(row.classification).toBe('GROWING')
     }
   })
 
@@ -631,10 +643,13 @@ describe('§6 — bootstrap experiment (real command chain)', () => {
       fullMaterialEnd: full.state.resources.construction,
       candidateMaterialEnd: cand.state.resources.construction,
     })
-    // The threshold makes the single-farm bootstrap byte-identical to today's
-    // baseline: no drain, no Step10G bootstrap trap.
+    // Step 10CQ.1: the threshold rule still matches the baseline exactly for
+    // one Farm, and income now masks the `full` upkeep difference in this
+    // short sequence — all three models end at the same bootstrap stock (15).
     expect(cand.state.resources.construction).toBe(base.state.resources.construction)
-    expect(cand.state.resources.construction).toBeGreaterThan(full.state.resources.construction)
+    expect(base.state.resources.construction).toBe(15)
+    expect(cand.state.resources.construction).toBe(15)
+    expect(full.state.resources.construction).toBe(15)
     expect(getPopulationCount(cand.state)).toBe(1)
   })
 
@@ -1066,8 +1081,19 @@ describe('§15 — 120-tick expansion test', () => {
       }
     }
     audit('EXPANSION_120_MODELS_2F2W', out)
-    // baseline +2/tick, candidate +1/tick, full 0/tick.
-    expect((out['full'] as { firstCrestTick: number | null }).firstCrestTick).toBeNull()
+    // Step 10CQ.1: every model now reaches the crest (income outruns each
+    // model's upkeep); the models still rank by their post-cap rate
+    // baseline +4 > candidate +3 > full +2, so the end stocks separate.
+    for (const mode of ['baseline', 'candidate', 'full'] as const) {
+      expect((out[mode] as { firstCrestTick: number | null }).firstCrestTick).not.toBeNull()
+      expect((out[mode] as { classification: string }).classification).toBe('GROWING')
+    }
+    expect((out['baseline'] as { materialEnd: number }).materialEnd).toBeGreaterThan(
+      (out['candidate'] as { materialEnd: number }).materialEnd
+    )
+    expect((out['candidate'] as { materialEnd: number }).materialEnd).toBeGreaterThan(
+      (out['full'] as { materialEnd: number }).materialEnd
+    )
   })
 })
 
@@ -1107,9 +1133,9 @@ describe('§16 — 24/25 crest behaviour', () => {
       expect(entry.crest).toBeGreaterThanOrEqual(25)
       expect(entry.buildAccepted).toBe(true)
     }
-    expect((out['2F+2W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(25)
-    expect((out['3F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(25)
-    expect((out['2F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(26)
+    expect((out['2F+2W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(31)
+    expect((out['3F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(34)
+    expect((out['2F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(34)
   })
 })
 
@@ -1118,7 +1144,7 @@ describe('§16 — 24/25 crest behaviour', () => {
 // ---------------------------------------------------------------------------
 
 describe('§17 — recovery from Material 0', () => {
-  it('identifies the recovery boundary W >= F', () => {
+  it('identifies that every configuration recovers under Step 10CQ income (Step 10CQ.1)', () => {
     const configs = [
       { name: '1F+1W', residences: 2, farms: 1, workshops: 1 },
       { name: '2F+2W', residences: 4, farms: 2, workshops: 2 },
@@ -1140,11 +1166,13 @@ describe('§17 — recovery from Material 0', () => {
       }
     }
     audit('RECOVERY_FROM_ZERO', out)
+    // Step 10CQ.1: income ≥ candidate upkeep for every configuration
+    // (net = +W or +W+1 per tick), so all five recover from Material 0.
     expect((out['1F+1W'] as { recovered: boolean }).recovered).toBe(true)
     expect((out['2F+2W'] as { recovered: boolean }).recovered).toBe(true)
     expect((out['2F+3W'] as { recovered: boolean }).recovered).toBe(true)
-    expect((out['3F+2W'] as { recovered: boolean }).recovered).toBe(false)
-    expect((out['3F+1W'] as { recovered: boolean }).recovered).toBe(false)
+    expect((out['3F+2W'] as { recovered: boolean }).recovered).toBe(true)
+    expect((out['3F+1W'] as { recovered: boolean }).recovered).toBe(true)
   })
 })
 
@@ -1153,7 +1181,7 @@ describe('§17 — recovery from Material 0', () => {
 // ---------------------------------------------------------------------------
 
 describe('§18 — terminal states', () => {
-  it('W <= F - 1 at Material 0 is terminal for small colonies', () => {
+  it('W <= F - 1 at Material 0 is no longer terminal (Step 10CQ.1)', () => {
     const out: Record<string, unknown> = {}
     for (const [farms, workshops] of [
       [2, 1],
@@ -1177,12 +1205,14 @@ describe('§18 — terminal states', () => {
       }
     }
     audit('TERMINAL_SMALL', out)
+    // Step 10CQ.1: income exceeds the candidate upkeep even at W = F - 1, so
+    // every previously terminal shape now climbs back to the crest.
     for (const key of Object.keys(out)) {
-      expect((out[key] as { escaped: boolean }).escaped).toBe(false)
+      expect((out[key] as { escaped: boolean }).escaped).toBe(true)
     }
   })
 
-  it('the crest lets a large W = F - 1 colony escape from Material 0', () => {
+  it('the crest from Material 0 now funds a build for every W = F - 1 colony (Step 10CQ.1)', () => {
     const rows = [10, 12, 13, 14].map((workshops) => {
       const farms = workshops + 1
       const start = rowWorld({
@@ -1202,10 +1232,10 @@ describe('§18 — terminal states', () => {
       }
     })
     audit('TERMINAL_LARGE_CREST', rows)
-    expect(rows[0]!.buildAffordable).toBe(false)
-    expect(rows[1]!.buildAffordable).toBe(false)
-    expect(rows[2]!.buildAffordable).toBe(true)
-    expect(rows[3]!.buildAffordable).toBe(true)
+    // Step 10CQ.1: from 0 the crest is stored production (2W) plus income
+    // (F×1 + W×2) = 2W + (W + 1) + 2W = 5W + 1 — every row is affordable.
+    expect(rows.map((r) => r.crestFromZero)).toEqual([51, 61, 66, 71])
+    expect(rows.every((r) => r.buildAffordable)).toBe(true)
   })
 
   it('no player action escapes a small terminal colony (no demolish, no unassign)', () => {

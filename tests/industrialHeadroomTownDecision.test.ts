@@ -50,6 +50,7 @@ import {
   MATERIAL_PER_WORKER_PER_TICK,
   MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
@@ -170,7 +171,8 @@ const shadowStep = (state: SimulationState, rates: Rates): SimulationState => {
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, undefined)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   const released = releaseCompletedConstructionCrew(maintained)

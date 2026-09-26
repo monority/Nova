@@ -420,7 +420,11 @@ describe('2. player decision and recovery', () => {
     // Both options are legal, both cost exactly 25 Material.
     expect(rows.optionA.legal).toBe(true)
     expect(rows.optionB.legal).toBe(true)
-    expect(rows.optionA.material).toBe(rows.optionB.material)
+    // Step 10CQ.1: the end stocks diverge because option A staffs two workers
+    // (income 2/tick -> 40) while option B staffs one (income 1/tick -> 21).
+    expect(rows.optionA.material).toBe(40)
+    expect(rows.optionB.material).toBe(21)
+    expect(rows.optionA.material).toBeGreaterThan(rows.optionB.material)
     // Option A: the bridge Residence is served AND reaches the Farm, so the
     // second colonist is admitted and both workplaces are staffed -> Village.
     expect(rows.optionA.population).toBe(2)
@@ -542,9 +546,12 @@ describe('2. player decision and recovery', () => {
     audit('RECOVERY_PATHS', rows)
     // The road join makes the Farm-network Residence served AND reachable, so
     // the second colonist is admitted and the Farm is staffed -> Village for 5.
-    expect(rows.wrong.material).toBe(5)
+    // Step 10CQ.1: 30 - 25 plus one Well-worker income over the command and
+    // 3 following ticks: 5 + 4 = 9.
+    expect(rows.wrong.material).toBe(9)
     expect(rows.repairCellIsFree).toBe(true)
-    expect(rows.joinNetworks.material).toBe(0)
+    // Step 10CQ.1: 9 + income along the 1 placement + 6 repair ticks = 17.
+    expect(rows.joinNetworks.material).toBe(17)
     expect(rows.joinNetworks.roads).toBe(3)
     expect(rows.joinNetworks.networks).toBe(1)
     expect(rows.joinNetworks.servedResidences).toBe(2)
@@ -557,11 +564,11 @@ describe('2. player decision and recovery', () => {
     expect(rows.bridgeResidence.stage).toBe('village')
     // Doing nothing is fatal: the unreachable Farm means no Food at all.
     expect(rows.nothing.population).toBe(0)
-    // The cheapest recovery is the 5-Material road, not a new building: it
-    // leaves 0 of the 30 Material spent on the Residence + the repair, while
-    // the bridge Residence route needs 50 for the same outcome.
-    expect(rows.joinNetworks.material).toBe(0)
-    expect(rows.bridgeResidence.material).toBe(25)
+    // The cheapest recovery is the 5-Material road, not a new building: the
+    // repair costs 5 up front (vs 25 for the bridge Residence). End stocks
+    // now include worker income on the way (join 17, bridge 37).
+    expect(rows.joinNetworks.material).toBe(17)
+    expect(rows.bridgeResidence.material).toBe(37)
   })
 })
 

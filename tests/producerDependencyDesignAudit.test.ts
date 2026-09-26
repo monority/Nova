@@ -42,8 +42,11 @@ import {
   hashCanonicalState,
   iterateBuildings,
   loadSave,
+  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
+  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
   produceFood,
   produceMaterial,
+  creditMaterialIncome,
   produceWater,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
@@ -278,7 +281,8 @@ const stepMirror = (
   // unpaid plant must also be idle AFTER employment.
   const gated = preGate.unpaid ? idleConsumers(staffed, rule) : staffed
   const materialized = produceMaterial(gated)
-  const commanded = applyCommand(materialized, lateCommand)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, lateCommand)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   return advanceTime(releaseCompletedConstructionCrew(maintained))
@@ -533,10 +537,19 @@ describe('§3 — counterfactual matrix', () => {
     })
     audit('MATRIX_WORKSHOP_WATER', {
       rows,
-      note: 'all-or-nothing: with 0 Water the staffed Workshop runs idle (no Material, no upkeep)',
+      note: 'all-or-nothing: with 0 Water the staffed Workshop runs idle (no Material production, no upkeep); its Farm/Well coworkers still earn Step 10CQ income',
     })
     expect((rows['sufficientInput'] as Reading).material).toBeGreaterThan(0)
-    expect((rows['depletedInput'] as Reading).material).toBe(0)
+    // Step 10CQ.1: the gate idles the Workshop worker (no production), but the
+    // Farm and Well workers keep their employment, so the stock after one tick
+    // is pure income: 1 (Farm) + 1 (Well).
+    expect((rows['depletedInput'] as Reading).staffedWorkshops).toBe(0)
+    expect((rows['depletedInput'] as Reading).material).toBe(
+      MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK + MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
+    )
+    expect((rows['depletedInput'] as Reading).material).toBeLessThan(
+      (rows['noInput'] as Reading).material
+    )
   })
 
   it('B2 Farm <- Water: full counterfactual matrix', () => {

@@ -306,20 +306,22 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
     audit('OPENING_SEQUENCES', {
       rows,
       reading:
-        'same 100 Material, same world: three outcome classes — a stable but stalled Settlement, a slow starvation, and (with the industrial bootstrap) a Village',
+        'same 100 Material, same world: three outcome classes (Step 10CQ.1) — a stable but stalled Settlement, a slow starvation, and (with the industrial bootstrap) a Village',
     })
     const [s1, s2, s3, , s5, s6] = rows
     // S1: the canonical safe core.
     expect(s1!.settlementTick).not.toBeNull()
     expect(s1!.wipeTick).toBeNull()
     expect(s1!.final.population).toBe(1)
-    expect(s1!.final.material).toBe(45)
+    // Step 10CQ.1: S1 ends at 347 (45 left after the core + Farm income over the horizon).
+    expect(s1!.final.material).toBe(347)
     // S2: Well-first starves (no Farm) at the measured tick.
     expect(s2!.wipeTick).toBe(104)
     expect(s2!.final.food).toBe(0)
     // S3: the safe package stalls with 20 Material and one idle colonist.
     expect(s3!.final.population).toBe(2)
-    expect(s3!.final.material).toBe(20)
+    // Step 10CQ.1: S3 ends at 326 (20 left after the package + income).
+    expect(s3!.final.material).toBe(326)
     expect(s3!.final.employed).toBe(1)
     expect(s3!.final.supply).toBe('inactive')
     // S5/S6: the 5-Material shortfall is fatal in these orders.
@@ -566,17 +568,18 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
         supply: afterBurst.supply,
       },
       reading:
-        'the stock (100) is four times the 25-per-Workshop storage, so the burst discards its output and only the 1/tick upkeep moves the number: running the Workshop immediately LOSES Material',
+        'the stock (100) is four times the 25-per-Workshop storage, so burst production is discarded above the cap, but employment income (3) outruns the upkeep (1): running the Workshop immediately GAINS Material at +2/tick (Step 10CQ.1)',
     })
     expect(startReading.material).toBe(100)
     expect(startReading.storage).toBe(0)
-    expect(afterWorkshop.material).toBe(75)
+    // Step 10CQ.1: 100 - 25 plus income over the 1 placement + 3 build ticks = 83.
+    expect(afterWorkshop.material).toBe(83)
     expect(afterWorkshop.storage).toBe(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
     expect(waterGone.water).toBe(0)
     expect(waterGone.supply).toBe('shortage')
-    expect(afterBurst.material).toBeLessThan(materialAtBurst)
-    // Exactly one Material lost per staffed tick: production is discarded.
-    expect(materialAtBurst - afterBurst.material).toBe(ticks)
+    expect(afterBurst.material).toBeGreaterThan(materialAtBurst)
+    // Above the cap income (3) minus upkeep (1) = +2/tick: 84 + 2 x 25 = 134.
+    expect(afterBurst.material - materialAtBurst).toBe(2 * ticks)
     expect(afterBurst.storage).toBe(25)
     expect(getMaterialStoredProductionPerTick(state)).toBe(0)
     expect(afterBurst.supply).toBe('shortage')
@@ -633,14 +636,16 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
       reading:
         'below the cap the SAME Workshop output is stored (stored > 0) instead of discarded, which is why the scenario teaches the storage rule rather than being broken by it',
     })
-    expect(atWorkshop.material).toBe(75)
+    expect(atWorkshop.material).toBe(83)
     expect(stocksAfterEach).toHaveLength(3)
     expect(gross).toBe(2)
     // The contrast with the as-is case (stored === 0): the same output is
     // STORED below the cap. At the cap-1 rest the net is 0 by upkeep, which is
     // the 08F/08C equilibrium, not a loss.
+    // Step 10CQ.1: the burst gains +26 over 10 ticks (stored + income - upkeep).
     expect(stored).toBeGreaterThan(0)
     expect(after.material).toBeGreaterThanOrEqual(before.material)
+    expect(after.material - before.material).toBe(26)
   })
 
   it('tests the reframing candidates and rejects them', () => {
@@ -704,11 +709,13 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
     audit('INDUSTRIAL_REFRAMING', {
       candidates,
       verdict:
-        'R2 makes the burst visibly positive (0 -> 24) but adds no decision: the objective (build the Workshop) is complete before industry runs, and funding a BUILDING with the burst is water-reserve-industry (Water 51). R3 keeps the stock above the cap and duplicates that Water budget. Neither is better than making the existing rule visible, so the state stays unchanged.',
+        'R2 makes the burst more visibly positive than R1 (+11 via income) but adds no decision: the objective (build the Workshop) is complete before industry runs, and funding a BUILDING with the burst is water-reserve-industry (Water 51). R3 keeps the stock above the cap and duplicates that Water budget. Neither is better than making the existing rule visible, so the state stays unchanged.',
     })
-    expect(candidates[0]!.gained).toBeLessThan(0)
+    // Step 10CQ.1: even the as-is burst now gains (+11) via income.
+    expect(candidates[0]!.gained).toBe(11)
     expect(candidates[1]!.gained).toBeGreaterThan(0)
-    expect(candidates[2]!.gained).toBeLessThan(0)
+    // Step 10CQ.1: R3 also gains via income (stock stays above cap)
+    expect(candidates[2]!.gained).toBeGreaterThan(0)
     // The version that would make the burst fund a building is the other scenario.
     const wri = findScenario('water-reserve-industry')
     expect(wri?.resources.water).toBe(51)
@@ -720,11 +727,11 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
       class: 'A — keep unchanged (readability fix only)',
       startingMaterial: 100,
       storageInteraction:
-        'the stock is 4x the 25-per-Workshop storage, so the Workshop output is discarded and only its upkeep moves the number (measured -25 Material over 25 ticks)',
+        'the stock is 4x the 25-per-Workshop storage, so Workshop production is discarded above the cap while employment income adds +2/tick (measured +50 Material over 25 ticks, Step 10CQ.1)',
       objective:
         'Reach Village + build a Workshop: reachable at tick 1 from the stock, with no industry needed — which is the scenario\'s honest framing (a Workshop that cannot be run at this scale)',
       excessMaterialRelevance:
-        'the excess is irrelevant to the objective but IS the scenario\'s lesson: 25-per-Workshop storage bounds what industry can add, and spending below the cap makes the same burst productive (+1/tick)',
+        'the excess is irrelevant to the objective but IS the scenario\'s lesson: 25-per-Workshop storage bounds what industry can add, and spending below the cap makes the same burst productive (+4/tick: 2 stored + 3 income - 1 upkeep, Step 10CQ.1)',
       defect: 'the cap is invisible: the HUD showed only the stock, so "Material 75 with a Workshop that produces 2/tick" appeared to do nothing',
       fix: 'show the storage cap (and the discard) next to the Material stock; name the cap in the scenario copy — no resource, requirement or rule change',
       reframed: 'no',
@@ -747,7 +754,7 @@ describe('6-7. Comparison and tuning gate', () => {
       {
         scenario: 'Default opening (free play)',
         firstDecision: 'Residence first, then Farm or Well (the Well-first order dies)',
-        bottleneck: 'Material 100 vs the 105 Village package: 5 short, and no Material producer exists',
+        bottleneck: 'Material 100 vs the 105 Village package: 5 short from the grant; employment income now manufactures Material (Step 10CQ.1)',
         constructionSequence: 'Residence -> road -> Farm -> (second Residence | Well) -> the last 20 stall',
         timing: 'the industrial bootstrap needs ~116 ticks and 41 Food',
         failure: 'starvation at tick 104 (Well-first, no road, buildings-first)',
@@ -758,8 +765,8 @@ describe('6-7. Comparison and tuning gate', () => {
         firstDecision: 'build the Workshop (nothing else is required)',
         bottleneck: 'a worker + Water: the colony has 2 workers, 2 workplaces and 10 Water',
         constructionSequence: 'Workshop at tick 1; the objective completes with it',
-        timing: 'the burst is optional and currently counter-productive above the cap',
-        failure: 'a permanently draining Workshop if it is left staffed (measured -1 Material/tick)',
+        timing: 'the burst is optional and accrues income above the cap (+2/tick, Step 10CQ.1)',
+        failure: 'a permanently accruing Workshop if it is left staffed (measured +1 Material/tick via income, Step 10CQ.1)',
         objective: 'Reach Village + build a Workshop',
       },
       {
@@ -767,15 +774,15 @@ describe('6-7. Comparison and tuning gate', () => {
         firstDecision: 'spend the last 25 Material on the Workshop (the converter) or on the Well',
         bottleneck: 'Material 25 with Water 51 as the only budget',
         constructionSequence: 'Workshop -> burst -> second Well -> recovery',
-        timing: 'the burst is mandatory and its order is terminal if reversed',
-        failure: 'a terminal Material lock (spending the budget before the converter)',
+        timing: 'the burst is mandatory but its order is no longer terminal: income recovers the reversed budget (Step 10CQ.1)',
+        failure: 'a Material delay (spending the budget before the converter still recovers via income)',
         objective: 'Reach Village + Workshop + a second Well',
       },
     ]
     audit('SCENARIO_COMPARISON', {
       rows,
       verdict:
-        'the three demand different reasoning: the default opening is a budget/order puzzle with a discovered industrial answer; Industrial expansion is a limit tutorial (buildable, not runnable); Water reserve industry is a conversion/naming puzzle with a terminal order',
+        'the three demand different reasoning: the default opening is a budget/order puzzle with a discovered industrial answer; Industrial expansion is a limit tutorial (buildable, not runnable); Water reserve industry is a conversion/naming puzzle with a costly order',
     })
     expect(rows).toHaveLength(3)
     expect(new Set(rows.map((r) => r.objective)).size).toBe(3)

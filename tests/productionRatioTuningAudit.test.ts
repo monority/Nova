@@ -59,7 +59,9 @@ import {
   MATERIAL_PER_WORKER_PER_TICK,
   MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  materialStoredProductionForTick,
   produceMaterial,
+  creditMaterialIncome,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
   SAVE_VERSION,
@@ -192,7 +194,8 @@ const shadowStepResult = (
   )
   const staffed = assignJobs(populated)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, command)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, command)
   const progressed = progressPlacedRoads(commanded.state, commanded)
   const maintained = upkeepBuildings(progressed)
   const released = releaseCompletedConstructionCrew(maintained)
@@ -774,11 +777,15 @@ describe('4. Qualitative headroom test', { timeout: 120000 }, () => {
     audit('TEMPORARY_LOOP_2_2', {
       start,
       rows,
-      note: 'material is banked only while the displaced Well is empty: the storage cap (25) then makes the loop non-productive',
+      note: 'material is banked only while the displaced Well is empty: the storage cap (25) then makes production non-productive, while Step 10CQ income keeps accumulating above the cap',
     })
     const last = rows[rows.length - 1]!
     expect(last.water).toBe(0)
-    expect(last.material).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    // Step 10CQ.1: the cap still clamps production to zero at the end of the
+    // run — only the pre-cap buildup was production; everything past 25 is
+    // employment income credited outside storage.
+    expect(materialStoredProductionForTick(current)).toBe(0)
+    expect(last.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
     expect(last.material).toBeGreaterThanOrEqual(20)
     expect(last.waterNet).toBe(-2)
     expect(last.population).toBe(6)
@@ -894,7 +901,13 @@ describe('5. Industrial phase policies', { timeout: 120000 }, () => {
       rows,
       objective: 'does the freed worker create a new strategic choice, or merely bigger numbers?',
     })
-    expect(rows.survival.at600.material).toBe(0)
+    // Step 10CQ.1: the survival policy runs NO Workshop, yet its 3 Well +
+    // 2 Farm workers still earn 1 Material each per tick — no Workshop
+    // upkeep applies, so the stock after 600 ticks is exactly income.
+    expect(rows.survival.at600.material).toBe(
+      (rows.survival.at600.staffedWells + rows.survival.at600.staffedFarms) * 600
+    )
+    expect(rows.survival.at600.material).toBe(3000)
     expect(rows.survival.at600.staffedWorkshops).toBe(0)
     expect(rows.industry.at600.staffedWorkshops).toBe(1)
     expect(rows.industry.at600.material).toBeGreaterThan(20)
@@ -1455,7 +1468,11 @@ describe('12. Design decision', () => {
     expect(marks[3]!.food).toBeLessThan(marks[0]!.food)
     // The Workshop output is banked (bounded by the 25-per-Workshop cap).
     expect(marks[1]!.material).toBeGreaterThan(marks[0]!.material)
-    expect(marks[3]!.material).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    // Step 10CQ.1: the Workshop output itself stays bounded by the 25-per-
+    // Workshop cap (stored production is 0 at the final mark); the stock
+    // above the cap is accumulated Step 10CQ income from the forced roles.
+    expect(marks[3]!.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(materialStoredProductionForTick(state)).toBe(0)
   })
 })
 

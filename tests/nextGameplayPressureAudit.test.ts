@@ -139,7 +139,9 @@ describe('Step 10CA — current gameplay pressure map', () => {
     const later = metrics(advance(state, 12))
     expect(later.foodStock).toBeLessThanOrEqual(first.foodStock)
     expect(later.waterStock).toBeLessThanOrEqual(first.waterStock)
-    expect(later.materialStock).toBeLessThanOrEqual(first.materialStock)
+    // Step 10CQ.1: Material is no longer flat — employment income exceeds
+    // upkeep, so the stock grows while the production/upkeep RATES stay equal.
+    expect(later.materialStock).toBeGreaterThan(first.materialStock)
     expect(later.foodRate).toBe(first.foodRate)
     expect(later.waterRate).toBe(first.waterRate)
     expect(later.materialRate).toBe(first.materialRate)

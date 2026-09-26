@@ -477,7 +477,7 @@ describe('§5 — Food-side pressure', () => {
 // ---------------------------------------------------------------------------
 
 describe('§6 — Material-side pressure', () => {
-  it('a staffed Workshop is the only path to Material; the Farm branch never grows', () => {
+  it('Material now has two sources: Workshop production and employment income (Step 10CQ.1)', () => {
     const shop = advance(rowWorld({ residences: 1, farms: 0, workshops: 1, material: 10, food: 100 }), 15)
     const farm = advance(rowWorld({ residences: 1, farms: 1, workshops: 0, material: 10, food: 100 }), 15)
     const rs = read(shop)
@@ -501,18 +501,21 @@ describe('§6 — Material-side pressure', () => {
     // One staffed Workshop: +2 gross, -1 upkeep, capacity 25.
     expect(rs.upkeep).toBe(1)
     expect(rs.storage).toBe(25)
-    expect(rs.material).toBe(24)
-    // Farm branch: no Material inflow, and Farm staffing costs no upkeep.
-    expect(rf.material).toBe(10)
+    // Step 10CQ.1: 10 + 3/tick (2 stored + 2 income − 1 upkeep) to 25 at t5,
+    // then +1/tick (income − upkeep): 35 after 15 ticks.
+    expect(rs.material).toBe(35)
+    // Farm branch: no Material production, but the Farm worker earns +1/tick:
+    // 10 + 15 = 25 (Farm staffing still costs no upkeep).
+    expect(rf.material).toBe(25)
     expect(rf.upkeep).toBe(0)
     expect(rf.food).toBe(100 + 15 * (2 - 1))
     // Food is the mirror image: the Workshop branch burns it.
     expect(rs.food).toBe(100 - 15)
   })
 
-  it('CRITICAL: one staffed Workshop equilibrates at 24, one unit below the 25 build cost', () => {
-    // Capacity 25, stock approaches it from below at +1/tick and then stalls:
-    // at 24 the free space is 1, so stored production is 1 and upkeep 1 cancel.
+  it('CRITICAL: one staffed Workshop now funds the 25 build cost (Step 10CQ.1)', () => {
+    // Capacity 25, stock 0: Step 10CQ.1 income (+2) exceeds upkeep (1), so the
+    // old 24 equilibrium is gone and the stock keeps climbing.
     let state = rowWorld({ residences: 1, farms: 0, workshops: 1, material: 0, food: 200 })
     const trace: number[] = []
     for (let i = 0; i < 40; i += 1) {
@@ -529,10 +532,12 @@ describe('§6 — Material-side pressure', () => {
       buildCost: 25,
       affordable: state.resources.construction >= 25,
     })
-    expect(trace[19]).toBe(20)
-    expect(trace[23]).toBe(24)
-    expect(trace[39]).toBe(24)
-    expect(state.resources.construction).toBeLessThan(25)
+    // Step 10CQ.1: +3/tick to 24 at t8, 26 at t9, then +1/tick:
+    // t20 = 37, t24 = 41, t40 = 57 — always above the 25 build cost.
+    expect(trace[19]).toBe(37)
+    expect(trace[23]).toBe(41)
+    expect(trace[39]).toBe(57)
+    expect(state.resources.construction).toBeGreaterThanOrEqual(25)
   })
 
   it('a second operational Workshop raises capacity to 50 and breaks the deadlock', () => {
@@ -963,11 +968,11 @@ describe('§10 — greedy assignment audit', () => {
 // ---------------------------------------------------------------------------
 
 describe('§11 — construction feedback loops', () => {
-  it('Loop A does NOT close from bootstrap: a farm-first colony cannot buy the 2nd residence', () => {
+  it('Loop A now closes from bootstrap: Farm income buys the 2nd Residence (Step 10CQ.1)', () => {
     // Real command chain, bootstrap budget 100. Farm-first order:
-    // R1 25 + road 5 + Farm 25 + Workshop 25 = 80, leaving 20 < the 25 a
-    // second Residence costs. The Farm feeds the colony but Food is not a
-    // construction input, so the loop stops here.
+    // R1 25 + road 5 + Farm 25 + Workshop 25 = 80, leaving 20. Step 10CQ.1:
+    // the Farm worker then earns 1/tick, so 20 + 6 = 26 at the check and the
+    // second Residence is affordable — the loop closes.
     let state = createTestState()
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }] })
@@ -993,9 +998,9 @@ describe('§11 — construction feedback loops', () => {
     expect(r.farmWorkers).toBe(1)
     expect(r.foodProd).toBe(2)
     expect(r.netFood).toBe(1)
-    expect(materialBefore).toBeLessThan(25)
-    // Rejected: the population cannot grow, so no second worker ever appears.
-    expect(Object.keys(state.buildings).length).toBe(buildingsBefore)
+    expect(materialBefore).toBe(26)
+    // Accepted now: Farm income crossed the 25 cost, so the loop closes.
+    expect(Object.keys(state.buildings).length).toBe(buildingsBefore + 1)
     expect(getPopulationCount(state)).toBe(1)
   })
 
@@ -1068,9 +1073,9 @@ describe('§11 — construction feedback loops', () => {
     expect(withFarm.netFood).toBe(0)
   })
 
-  it('Loop B is BROKEN at one Workshop: labour income stalls at 24 < 25', () => {
-    // A real command chain: the single staffed Workshop cannot fund the next
-    // Residence, because its equilibrium equals build cost minus one.
+  it('Loop B now closes at one Workshop: income crosses the 25 build cost (Step 10CQ.1)', () => {
+    // A real command chain: the single staffed Workshop now funds the next
+    // Residence, because income (+2) exceeds upkeep (1).
     let state = createTestState()
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }] })
@@ -1086,7 +1091,10 @@ describe('§11 — construction feedback loops', () => {
       canAffordResidence: r.material >= 25,
     })
     expect(r.workshopWorkers).toBe(1)
-    expect(r.material).toBeLessThan(25)
+    // Step 10CQ.1: the bootstrap stock of 40 grows at income (2) − upkeep (1)
+    // = +1/tick, ending at 79 after 40 ticks — above the 25 build cost.
+    expect(r.material).toBe(79)
+    expect(r.material).toBeGreaterThanOrEqual(25)
   })
 
   it('Loop B closes once capacity is 50 (two operational Workshops)', () => {
@@ -1245,8 +1253,9 @@ describe('§15 — Farm vs Workshop production timing', () => {
     }
     audit('TIMING_MATERIAL_STOCK', shopSeries)
     audit('TIMING_FOOD_STOCK', farmSeries)
-    // Material: +2 on the first tick the Workshop is staffed (capacity 25, upkeep 1).
-    expect(shopSeries[0]!.material).toBe(1)
+    // Material: +2 stored + 2 income − 1 upkeep = +3 on the first staffed tick
+    // (Step 10CQ.1), so the four ticks are [3, 6, 9, 12].
+    expect(shopSeries.map((s) => s.material)).toEqual([3, 6, 9, 12])
     // Food: the first staffed tick shows NO increase (delta -1: eaten, nothing produced).
     expect(farmSeries[0]!.stockDelta).toBe(-1)
     expect(farmSeries[1]!.stockDelta).toBe(1)

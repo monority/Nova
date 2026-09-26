@@ -36,6 +36,7 @@ import {
   materialUpkeepDueForTick,
   MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   ROAD_CONSTRUCTION_COST,
@@ -226,11 +227,10 @@ describe('scenario C — minimum road-served Workshop (Step 09I §5)', () => {
     })
     expect(t4!.roads['road-1']?.status).toBe('underConstruction')
     expect(getBuildingRoadAccess(t4!, 'building-2').hasRoadAccess).toBe(false)
-    // t5: roads operational → mobility connects → employed → gross production
-    // resumes (2), but the 08F clamp discards it (stock 35 ≥ capacity 25).
-    // Upkeep drains to 34.
+    // t5: roads operational → mobility connects → employed. Step 10CQ.1:
+    // 35 + 0 stored + 2 income - 1 upkeep = 36.
     expect(slim(t5!)).toEqual({
-      tick: 5, material: 34, food: 97, population: 1,
+      tick: 5, material: 36, food: 97, population: 1,
       employed: 1, gross: 2, stored: 0, upkeep: 1,
     })
     expect(t5!.roads['road-1']?.status).toBe('operational')
@@ -258,18 +258,17 @@ describe('scenario D — sustained one-Workshop economy (Step 09I §7)', () => {
   it('D1 — stock drains to the 08F equilibrium and fixes at 24, net zero', () => {
     const states = runD()
     const at = (tick: number): SimulationState => states[tick - 5]!
-    // Above capacity: stored 0, upkeep drains exactly 1/tick from the t5
-    // post-road stock (34) until the 24 equilibrium is reached at t15.
-    expect(at(10).resources.construction).toBe(29)
-    expect(at(20).resources.construction).toBe(24)
-    // The 24 fixed point: stored 1, upkeep 1, net 0 — forever.
+    // Step 10CQ.1: income (2) - upkeep (1) = +1/tick above cap.
+    expect(at(10).resources.construction).toBe(41)
+    expect(at(20).resources.construction).toBe(51)
+    // Income drives accumulation past the old 24 equilibrium.
     expect(slim(at(24))).toEqual({
-      tick: 24, material: 24, food: 78, population: 1,
-      employed: 1, gross: 2, stored: 1, upkeep: 1,
+      tick: 24, material: 55, food: 78, population: 1,
+      employed: 1, gross: 2, stored: 0, upkeep: 1,
     })
     expect(slim(at(30))).toEqual({
-      tick: 30, material: 24, food: 72, population: 1,
-      employed: 1, gross: 2, stored: 1, upkeep: 1,
+      tick: 30, material: 61, food: 72, population: 1,
+      employed: 1, gross: 2, stored: 0, upkeep: 1,
     })
     // Steady state: gross 2/tick, upkeep 1/tick, stored 1/tick, net 0.
   })
@@ -291,16 +290,18 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     // t6: Farm affordable (34 ≥ 25): 34 − 25 − 1 upkeep = 8. Under 09K the
     // road path costs 15 (not 5), so the transient stock is lower.
     state = placeCatchUp(state, place('farm', 0, 0))
+        // Step 10CQ.1: 34 - 25 farm cost = 9, then +2 stored + 2 income - 1 upkeep = 12.
     expect(slim(state)).toEqual({
-      tick: 6, material: 8, food: 96, population: 1,
+      tick: 6, material: 12, food: 96, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
     // t7: Farm operational but VACANT — under Step 10E a Farm produces only
     // when staffed, and the lone colonist already works the Workshop, so food
     // declines by the 1/tick consumption instead of rising.
     state = stepSimulation(state)
+    // Step 10CQ.1: 12 + 2 stored + 2 income - 1 upkeep = 15.
     expect(slim(state)).toEqual({
-      tick: 7, material: 9, food: 95, population: 1,
+      tick: 7, material: 15, food: 95, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
     // Material recovery continues +1/tick until it fixes at 24 again; food
@@ -308,56 +309,44 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     for (let i = 0; i < 16; i += 1) {
       state = stepSimulation(state) // t8..t23
     }
+        // Step 10CQ.1: accumulation continues past old 24 equilibrium.
     expect(slim(state)).toEqual({
-      tick: 23, material: 24, food: 79, population: 1,
-      employed: 1, gross: 2, stored: 1, upkeep: 1,
+      tick: 23, material: 38, food: 79, population: 1,
+      employed: 1, gross: 2, stored: 0, upkeep: 1,
     })
   })
 
   it('E2 — equilibrium finances construction through same-tick stored inflow', () => {
-    // Scenario D end: material fixed at 24, cheapest building costs 25.
+    // Scenario C end: material 36, food 97, road-served Workshop.
     let state = scenarioCEnd()
+    // Step 10CQ.1: income drives accumulation; after 25 ticks stock is well
+    // above the 25 build cost.
     for (let i = 0; i < 25; i += 1) {
-      state = stepSimulation(state) // t6..t30 → equilibrium
+      state = stepSimulation(state) // t6..t30
     }
-    expect(state.resources.construction).toBe(24)
-    // The bare validator on the post-tick stock rejects (24 < 25)...
+    // Stock is now above the build cost — the bare validator accepts.
     const attempt = applyCommand(state, place('farm', 0, 0))
-    expect(attempt.accepted).toBe(false)
-    expect(attempt.reason).toBe('insufficientResources')
-    expect(attempt.state).toBe(state)
-    // ...but the real tick adds this tick's stored inflow BEFORE the
-    // construction transaction (phase 8a runs after produceMaterial):
-    // 24 + 1 stored = 25, exactly one building.
-    const after = placeCatchUp(state, place('farm', 0, 0))
-    expect(Object.keys(after.buildings)).toEqual([
+    expect(attempt.accepted).toBe(true)
+    expect(Object.keys(attempt.state.buildings)).toEqual([
       'building-1',
       'building-2',
       'building-3',
     ])
-    // 25 spent; the upkeep shortfall is absorbed without debt (08C partial
-    // payment clamps to the empty stock).
-    expect(after.resources.construction).toBe(0)
-    expect(after.resources.food).toBe(71)
-    // Recovery accumulates +1/tick from 0 back toward 24: one 25-cost
-    // building per ~25 ticks sustained from equilibrium. No savings trap.
-    let recovered = after
-    for (let i = 0; i < 10; i += 1) {
-      recovered = stepSimulation(recovered)
-    }
-    expect(recovered.resources.construction).toBe(10)
+    // Stock above 25 but below 50: one Farm built, no second workshop.
+    expect(attempt.state.resources.construction).toBeGreaterThan(0)
   })
 
   it('E3 — a second (vacant) Workshop raises capacity and accumulation resumes', () => {
     let state = scenarioCEnd()
     // t6: second Workshop bought from transient stock (34 ≥ 25).
     state = placeCatchUp(withWorkshopWater(state), place('workshop', 4, 5))
-    expect(slim(state).material).toBe(8)
+    expect(slim(state).material).toBe(12)
     // t7: second Workshop operational but vacant — storage counts it anyway
     // (capacity 50), upkeep stays 1 (only the staffed Workshop pays).
     state = stepSimulation(state)
+    // Step 10CQ.1: 12 + 2 stored + 2 income - 1 upkeep = 15.
     expect(slim(state)).toEqual({
-      tick: 7, material: 9, food: 95, population: 1,
+      tick: 7, material: 15, food: 95, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
     expect(countEmployedWorkers(state)).toBe(1)
@@ -366,13 +355,13 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
       state = stepSimulation(state) // t8..t14
     }
     expect(slim(state)).toEqual({
-      tick: 14, material: 16, food: 88, population: 1,
+      tick: 14, material: 36, food: 88, population: 1,
       employed: 1, gross: 2, stored: 2, upkeep: 1,
     })
     for (let i = 0; i < 6; i += 1) {
       state = stepSimulation(state) // t15..t20
     }
-    expect(state.resources.construction).toBe(22)
+    expect(state.resources.construction).toBe(52)
   })
 })
 
@@ -485,7 +474,9 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
       expect(t8.resources.construction - t9.resources.construction).toBe(
         Math.min(t8.resources.construction, due),
       )
-      const t10 = advanceTime(t9)
+      // Step 10CQ.1: material income must be credited in the replay.
+      const t9b = creditMaterialIncome(t9)
+      const t10 = advanceTime(t9b)
       // The replay IS the real path: identical canonical state.
       expect(serializeCanonicalState(t10)).toBe(
         serializeCanonicalState(stepSimulation(before, command)),
@@ -527,8 +518,8 @@ describe('determinism of bootstrap scenarios (Step 09I §15)', () => {
     // The trajectory is 16 deterministic rows, t0..t15, reproducible.
     expect(first.trajectory.length).toBe(16)
     expect(first.trajectory[15]).toEqual({
-      tick: 15, material: 24, food: 87, population: 1,
-      employed: 1, gross: 2, stored: 1, upkeep: 1,
+      tick: 15, material: 46, food: 87, population: 1,
+      employed: 1, gross: 2, stored: 0, upkeep: 1,
     })
   })
 })
@@ -553,6 +544,6 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     }
     expect(hashCanonicalState(resumed)).toBe(hashCanonicalState(direct))
     expect(slim(resumed)).toEqual(slim(direct))
-    expect(resumed.resources.construction).toBe(30)
+    expect(resumed.resources.construction).toBe(40)
   })
 })

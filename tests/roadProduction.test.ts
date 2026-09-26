@@ -178,20 +178,23 @@ describe('road access production constraint (Step 09F)', () => {
     const clamped = { ...state, resources: { ...state.resources, construction: 25 } }
     expect(materialProductionForTick(clamped)).toBe(2)
     const storedClamped = stepSimulation(clamped)
-    expect(storedClamped.resources.construction).toBe(25 - 1) // upkeep only
-    // Stock 24: +1 stored - 1 upkeep = equilibrium (existing 08F behavior).
+    // Step 10CQ.1: stored 0 + income 2 − upkeep 1 = 26.
+    expect(storedClamped.resources.construction).toBe(25 + 2 - 1)
+    // Stock 24: 1 stored + 2 income − 1 upkeep = 26 (the 08F clamp still
+    // allows exactly one unit of production into the last free space).
     const equilibrium = { ...state, resources: { ...state.resources, construction: 24 } }
     const after = stepSimulation(equilibrium)
-    expect(after.resources.construction).toBe(24)
+    expect(after.resources.construction).toBe(26)
   })
 
   it('K — construction flow unchanged: costs, ticks, progress', () => {
     const state = staffedWorkshopWithRoad()
     const before = state.resources.construction
     const after = stepSimulation(state, place('farm', 0, 7))
-    // Cost 25 + same-tick upkeep 1 deducted regardless of roads (production
-    // is clamped to 0 here: stock 49 > cap 25). Farm under construction.
-    expect(after.resources.construction).toBe(before - 25 - 1)
+    // Cost 25 + same-tick upkeep 1 − Step 10CQ income 2 deducted regardless
+    // of roads (production is clamped to 0 here: stock above cap 25). Farm
+    // under construction.
+    expect(after.resources.construction).toBe(before - 25 - 1 + 2)
     const placed = Object.values(after.buildings).find((b) => b.type === 'farm')!
     expect(placed.status).toBe('underConstruction')
   })

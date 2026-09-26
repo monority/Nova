@@ -317,10 +317,13 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     state = { ...state, resources: { ...state.resources, construction: 24 } }
     expect(materialProductionForTick(state)).toBe(0)
     state = stepSimulation(state)
-    // Gross production 2, one unit stored, upkeep 1 paid: equilibrium 24.
+    // Roads complete → the worker is employed the same tick: gross 2, exactly
+    // 1 unit stored (the one free space at 24), income 2, upkeep 1:
+    // 24 + 1 + 2 − 1 = 26. The stored-1 evidence is the exact stock: a stored
+    // 2 would have landed 27. The next tick is fully clamped (stock ≥ 25).
     expect(materialProductionForTick(state)).toBe(2)
-    expect(materialStoredProductionForTick(state)).toBe(1)
-    expect(state.resources.construction).toBe(24)
+    expect(state.resources.construction).toBe(26)
+    expect(materialStoredProductionForTick(state)).toBe(0)
   })
 
   it('P — under-construction road keeps employment unchanged (09K)', () => {

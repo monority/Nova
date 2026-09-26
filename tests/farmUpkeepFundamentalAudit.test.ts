@@ -50,6 +50,7 @@ import {
   materialStoredProductionForTick,
   materialUpkeepDueForTick,
   produceFood,
+  creditMaterialIncome,
   produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -270,7 +271,8 @@ const stepWithMetrics = (
   const staffedWorkshops = countStaffedOperationalWorkshops(staffed)
   const materialProduction = materialStoredProductionForTick(staffed)
   const materialized = produceMaterial(staffed)
-  const commanded = applyCommand(materialized, command)
+  const withIncome = creditMaterialIncome(materialized)
+  const commanded = applyCommand(withIncome, command)
   const crestStock = commanded.state.resources.construction
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
@@ -391,14 +393,17 @@ describe('2 — baseline rules', () => {
     expect(materialStorageCapacityForTick(state)).toBe(25)
   })
 
-  it('reproduces the 24 x W baseline Material equilibrium', () => {
+  it('reproduces the post-cap accumulation at 97 x W after 80 ticks (Step 10CQ.1)', () => {
     const equilibria = [1, 2, 3].map((w) => {
       const start = rowWorld({ residences: w, farms: 0, workshops: w, material: 0, food: 4000 })
       const final = advance(start, 80).resources.construction
       return { W: w, equilibrium: final, storage: materialStorageCapacityForTick(start) }
     })
     audit('BASELINE_EQUILIBRIUM', equilibria)
-    expect(equilibria.map((e) => e.equilibrium)).toEqual([24, 48, 72])
+    // Step 10CQ.1 (per Workshop): +3/tick (2 stored + 2 income − 1 upkeep)
+    // up to 24 at t8, one clamp tick reaches 26 at t9, then +1/tick
+    // (income − upkeep): 26 + 71 = 97 after 80 ticks, linear in W.
+    expect(equilibria.map((e) => e.equilibrium)).toEqual([97, 194, 291])
   })
 })
 
@@ -1062,18 +1067,27 @@ describe('12 — counterfactual expansion strategies', () => {
     // (Farm, Farm, Workshop, Workshop) stalls because the two Farms claim both
     // workers, the Workshop is built but never staffed, and no Material income
     // exists to pay for roads + the fourth building.
-    for (const name of ['A', 'B', 'D'] as const) {
-      const entry = out[name] as { placementTicks: (number | null)[] }
-      expect(entry.placementTicks.every((t) => t !== null)).toBe(true)
-    }
+    // Step 10CQ.1: every strategy now finishes its four placements — Farm
+    // workers earn income, so C is no longer blocked by affordability. C still
+    // stalls economically (no staffed Workshop), which shows in its later
+    // fourth placement and lower final stock.
+    expect(out['A']).toMatchObject({ placementTicks: [0, 1, 3, 7], materialEnd: 490 })
+    expect(out['B']).toMatchObject({ placementTicks: [0, 1, 3, 7], materialEnd: 490 })
     const c = out['C'] as { placementTicks: (number | null)[]; materialEnd: number; staffedWorkshops: number; staffedFarms: number }
-    expect(c.placementTicks.some((t) => t === null)).toBe(true)
+    expect(c.placementTicks).toEqual([0, 1, 3, 12])
+    expect(c.materialEnd).toBe(455)
     expect(c.staffedWorkshops).toBe(0)
     expect(c.staffedFarms).toBe(2)
     // The finished strategies diverge in staffing and Material too.
     const ends = Object.values(out).map((v) => (v as { materialEnd: number }).materialEnd)
     expect(new Set(ends).size).toBeGreaterThan(1)
+    expect((out['D'] as { placementTicks: number[]; staffedFarms: number; materialEnd: number }).placementTicks).toEqual([0, 1, 3, 5])
     expect((out['D'] as { staffedFarms: number }).staffedFarms).toBe(0)
+    expect((out['D'] as { materialEnd: number }).materialEnd).toBe(502)
+    // Food evidence: C (two Farms) ends food-rich, D (two Workshops) food-poor.
+    expect((out['C'] as { foodEnd: number }).foodEnd).toBeGreaterThan(
+      (out['D'] as { foodEnd: number }).foodEnd
+    )
   })
 })
 
@@ -1082,35 +1096,50 @@ describe('12 — counterfactual expansion strategies', () => {
 // ---------------------------------------------------------------------------
 
 describe('13 — storage and construction pressure', () => {
-  it('measures storage capacity, equilibrium and time-to-construction vs W', () => {
+  it('measures storage capacity, accumulation rate and time-to-construction vs W (Step 10CQ.1)', () => {
     const rows: unknown[] = []
     for (const w of [1, 2, 3]) {
       for (const f of [1, 2, 3]) {
         const start = rowWorld({ residences: f + w, farms: f, workshops: w, material: 0, food: 4000 })
+        const at200 = advance(start, 200).resources.construction
+        const at210 = advance(start, 210).resources.construction
         rows.push({
           farms: f,
           workshops: w,
           storage: materialStorageCapacityForTick(start),
-          equilibrium: advance(start, 200).resources.construction,
+          equilibrium: at200,
+          growthPerTick: (at210 - at200) / 10,
           ticksTo25: ticksToAfford(start),
         })
       }
     }
     audit('STORAGE_CONSTRUCTION', rows)
-    // Equilibrium is 24 x W across all Farm counts; only W sets capacity.
-    for (const row of rows as { workshops: number; equilibrium: number; storage: number }[]) {
+    // Step 10CQ.1: the cap (25 × W) still bounds stored production, but the
+    // stock no longer rests at 24 × W — income keeps raising it at exactly
+    // (F + W)/tick above the cap (income F + 2W minus upkeep W).
+    for (const row of rows as {
+      farms: number
+      workshops: number
+      equilibrium: number
+      growthPerTick: number
+      storage: number
+    }[]) {
       expect(row.storage).toBe(25 * row.workshops)
-      expect(row.equilibrium).toBe(24 * row.workshops)
+      expect(row.equilibrium).toBeGreaterThan(24 * row.workshops)
+      expect(row.growthPerTick).toBe(row.farms + row.workshops)
     }
   })
 
-  it('shows Workshop expansion is the only way to raise the Material ceiling', () => {
+  it('shows Workshop expansion raises the storage ceiling and the accumulation rate (Step 10CQ.1)', () => {
     const rows = [1, 2, 3, 4].map((w) => {
       const start = rowWorld({ residences: 2 + w, farms: 2, workshops: w, material: 0, food: 4000 })
       return { workshops: w, storage: materialStorageCapacityForTick(start), equilibrium: advance(start, 200).resources.construction }
     })
     audit('WORKSHOP_CEILING', rows)
-    expect(rows.map((r) => r.equilibrium)).toEqual([24, 48, 72, 96])
+    // Step 10CQ.1: each additional Workshop adds 25 to the cap and +1/tick to
+    // the post-cap rate (F + W); the measured 200-tick stocks reflect both.
+    expect(rows.map((r) => r.storage)).toEqual([25, 50, 75, 100])
+    expect(rows.map((r) => r.equilibrium)).toEqual([610, 826, 1042, 1258])
   })
 })
 

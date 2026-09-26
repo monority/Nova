@@ -885,14 +885,15 @@ describe('7. candidate E: production timing', () => {
     // The Workshop can only run by displacing a survival worker: the burst buys
     // Material for a bounded number of ticks and cannot be sustained (10AQ).
     expect(withWorkshop.resources.water).toBe(50)
-    expect(withWorkshop.resources.construction).toBe(0)
+    // Step 10CQ.1: income is credited before the command: 25 + 2 − 25 = 2.
+    expect(withWorkshop.resources.construction).toBe(2)
     expect(after40.population).toBeGreaterThan(0)
     // Food or Water (or both) end in deficit at 40 ticks: industry is funded by
     // a reserve, never by a surplus.
     expect(after40.foodNet <= 0 || after40.waterCapacity < after40.population).toBe(true)
   })
 
-  it('measures the storage clamp as a bound, not a phenomenon', () => {
+  it('measures the storage clamp as a bound: Farm income bypasses it (Step 10CQ.1)', () => {
     const state = scene({
       residences: [[0, 0]],
       buildings: [
@@ -914,9 +915,10 @@ describe('7. candidate E: production timing', () => {
       return { ticks, material: settled.material, materialPerTick: settled.materialPerTick }
     })
     audit('STORAGE_CLAMP', rows)
-    // A lone staffed Workshop with a Farm is impossible at P=1 (one workplace),
-    // so measured Material stays 0: the clamp never even engages here.
-    expect(rows.every((row) => row.material === 0)).toBe(true)
+    // Step 10CQ.1: a lone staffed Farm has no storage capacity (0 cap) yet
+    // earns 1 Material/tick — the clamp only bounds Workshop production.
+    expect(rows.map((row) => row.material)).toEqual([1, 10, 60])
+    expect(rows.every((row) => row.materialPerTick === 0)).toBe(true)
   })
 })
 

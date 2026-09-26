@@ -8,6 +8,7 @@ import {
   getMaterialUpkeepPerTick,
   getNetMaterialPerTick,
   getProductiveWorkerCount,
+  getWorkforceIncome,
   getResourceStock,
   hashCanonicalState,
   isEmployed,
@@ -228,8 +229,11 @@ describe('productive labor constraint (Step 08E)', () => {
     const upkeep = materialUpkeepDueForTick(state)
     const before = getResourceStock(state).construction
     const after = stepSimulation(state)
-    // No build commanded: delta is exactly production minus upkeep paid.
-    expect(getResourceStock(after).construction).toBe(before + expected - upkeep)
+    // No build commanded: delta is production plus Step 10CQ income minus
+    // upkeep paid (stock stays below the cap here, so stored = production).
+    expect(getResourceStock(after).construction).toBe(
+      before + expected + getWorkforceIncome(state) - upkeep
+    )
   })
 
   it('upkeep unchanged by 08E (staffed 1=>1, 2=>2)', () => {

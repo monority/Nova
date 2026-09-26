@@ -170,15 +170,16 @@ describe('operational upkeep (Step 08C)', () => {
     expect(materialProductionForTick(state)).toBe(2)
     expect(materialUpkeepDueForTick(state)).toBe(1)
     expect(getNetMaterialPerTick(state)).toBe(1)
-    // Step 08F: bootstrap stock (49) covers the 25 capacity, so stored
-    // production is 0 and only upkeep drains the stock.
+    // Step 08F: bootstrap stock (51: 50 − 1 upkeep + 2 Step 10CQ income)
+    // covers the 25 capacity, so stored production is 0.
     expect(materialStoredProductionForTick(state)).toBe(0)
     const before = getResourceStock(state).construction
     const after = stepSimulation(state)
-    expect(getResourceStock(after).construction).toBe(before - 1)
-    // Below capacity the full net flow lands: 0 + 2 − 1 = 1.
+    // Step 10CQ.1: stored 0 + income 2 − upkeep 1 = +1.
+    expect(getResourceStock(after).construction).toBe(before + 1)
+    // Below capacity: 0 + 2 stored + 2 income − 1 upkeep = 3.
     const low = stepSimulation(withConstruction(state, 0))
-    expect(getResourceStock(low).construction).toBe(1)
+    expect(getResourceStock(low).construction).toBe(3)
   })
 
   it('H — insufficient material: partial payment, never negative', () => {
@@ -200,8 +201,9 @@ describe('operational upkeep (Step 08C)', () => {
   it('J — buildings stay operational after a deficit', () => {
     const state = withConstruction(workshopState(), 0)
     const after = stepSimulation(state)
-    // Production (+2) refills before upkeep (−1) in the same tick.
-    expect(getResourceStock(after).construction).toBe(1)
+    // Step 08C/10CQ.1: production (+2) and income (+2) land before upkeep
+    // (−1) in the same tick: 0 + 2 + 2 − 1 = 3.
+    expect(getResourceStock(after).construction).toBe(3)
     for (const building of Object.values(after.buildings)) {
       expect(building.status).toBe('operational')
     }
@@ -211,12 +213,14 @@ describe('operational upkeep (Step 08C)', () => {
   it('K — recovery: production continues and material turns positive', () => {
     let state = withConstruction(workshopState(), 0)
     state = stepSimulation(state)
-    // Net is +1 per tick, so one tick suffices from an empty stock.
-    expect(getResourceStock(state).construction).toBe(1)
+    // Step 10CQ.1: from an empty stock one tick lands 2 stored + 2 income
+    // − 1 upkeep = 3.
+    expect(getResourceStock(state).construction).toBe(3)
     expect(materialProductionForTick(state)).toBe(2)
     expect(getMaterialUpkeepPerTick(state)).toBe(1)
     state = stepSimulation(state)
-    expect(getResourceStock(state).construction).toBe(2)
+    // Below the cap the flow stays +3/tick: 3 + 2 + 2 − 1 = 6.
+    expect(getResourceStock(state).construction).toBe(6)
   })
 
   it('L — starvation purges jobs: upkeep 0, no double penalty', () => {
