@@ -359,7 +359,7 @@ async function main() {
     // ---------------------------------------------------------------------
     const payload = await page.evaluate(() => window.__nova.serialize());
     const parsed = JSON.parse(payload);
-    assert(parsed.version === 7, `save version expected 7, got ${parsed.version}`);
+    assert(parsed.version === 8, `save version expected 8, got ${parsed.version}`);
     const colonists = Object.values(parsed.state.colonists);
     assert(colonists.length >= 1, `save should contain colonists, got ${colonists.length}`);
     assert(

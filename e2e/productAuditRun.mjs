@@ -151,6 +151,20 @@ try {
       const canvas = document.querySelector('canvas#nova-canvas')
       const rect = canvas ? canvas.getBoundingClientRect() : null
       const objective = document.querySelector('[data-testid="progression-objective"]')
+      let minX = Infinity
+      let maxX = -Infinity
+      let minY = Infinity
+      let maxY = -Infinity
+      for (let x = 0; x < 12; x += 1) {
+        for (let y = 0; y < 12; y += 1) {
+          const p = window.__nova.cellToScreen({ x, y })
+          if (p === null) continue
+          minX = Math.min(minX, p.x)
+          maxX = Math.max(maxX, p.x)
+          minY = Math.min(minY, p.y)
+          maxY = Math.max(maxY, p.y)
+        }
+      }
       return {
         scrollWidth: doc.scrollWidth,
         clientWidth: doc.clientWidth,
@@ -158,8 +172,10 @@ try {
         canvasHeight: rect ? rect.height : 0,
         objective: objective?.textContent?.length ?? 0,
         hudExpanded: !document.querySelector('#nova-ui')?.classList.contains('collapsed'),
+        board: { minX: Math.round(minX), maxX: Math.round(maxX), minY: Math.round(minY), maxY: Math.round(maxY) },
       }
     })
+    note(`${viewport.width}x${viewport.height} board bounds: ${JSON.stringify(metrics.board)} hudExpanded=${metrics.hudExpanded}`)
     if (metrics.scrollWidth > metrics.clientWidth + 1) {
       fail(`horizontal overflow at ${viewport.width}x${viewport.height}`)
     } else if (metrics.canvasWidth <= 0 || metrics.canvasHeight <= 0) {
@@ -167,21 +183,16 @@ try {
     } else if (metrics.objective === 0) {
       fail(`objective invisible at ${viewport.width}x${viewport.height}`)
     } else {
-      // Controls remain usable: toggle the palette, then collapse/expand the HUD.
+      // Controls remain usable without collapsing: the default layout fits the
+      // panel into the board margin, so the palette is reachable (Playwright
+      // scrolls it into view when the panel is capped).
       await page.click('[data-testid="build-farm"]')
       const pressed = await page.getAttribute('[data-testid="build-farm"]', 'aria-pressed')
-      await page.click('[data-testid="hud-toggle"]')
-      await wait(120)
-      const collapsed = await page.evaluate(() =>
-        document.querySelector('#nova-ui')?.classList.contains('collapsed')
-      )
-      await page.click('[data-testid="hud-toggle"]')
-      await wait(120)
       if (pressed !== 'true') fail(`palette not usable at ${viewport.width}x${viewport.height}`)
-      else if (collapsed !== true) fail(`HUD toggle not usable at ${viewport.width}x${viewport.height}`)
+      else if (!metrics.hudExpanded) fail(`default HUD collapsed at ${viewport.width}x${viewport.height}`)
       else
         ok(
-          `${viewport.width}x${viewport.height}: no overflow, canvas ${Math.round(metrics.canvasWidth)}x${Math.round(metrics.canvasHeight)}, objective + palette + HUD usable`
+          `${viewport.width}x${viewport.height}: no overflow, canvas ${Math.round(metrics.canvasWidth)}x${Math.round(metrics.canvasHeight)}, objective + palette usable, HUD default open`
         )
     }
     // HUD occlusion: board cells whose projected centre falls under the open
@@ -207,8 +218,15 @@ try {
       return { width: Math.round(panel.width), covered }
     })
     note(
-      `HUD occlusion at ${viewport.width}x${viewport.height}: panelWidth=${occlusion.width}px coveredCells=${occlusion.covered.length} ${JSON.stringify(occlusion.covered)}`
+      `HUD default panel ${occlusion.width}px covers ${occlusion.covered.length} board cells at ${viewport.width}x${viewport.height}`
     )
+    if (occlusion.covered.length > 0) {
+      fail(
+        `default HUD covers playable cells at ${viewport.width}x${viewport.height}: ${JSON.stringify(occlusion.covered)}`
+      )
+    } else {
+      ok(`${viewport.width}x${viewport.height}: default HUD covers 0 playable cells`)
+    }
     await page.screenshot({ path: resolve(ART, `02-${viewport.width}.png`) })
   }
 

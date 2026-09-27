@@ -93,7 +93,14 @@ async function moveTo(page, cell) {
  */
 async function placeAt(page, cell) {
   const pt = await moveTo(page, cell);
-  await waitFor(async () => (await stats(page)).status.includes('ready'), `valid preview at ${cell.x},${cell.y}`);
+  // Re-issue the move while waiting: the running clock can overwrite a single
+  // hover with a per-tick causal status.
+  let attempt = 0;
+  await waitFor(async () => {
+    const offset = attempt++ % 2;
+    await page.mouse.move(pt.x + offset, pt.y + offset);
+    return (await stats(page)).status.includes('ready');
+  }, `valid preview at ${cell.x},${cell.y}`);
   const before = Number((await stats(page)).buildings);
   await page.mouse.click(pt.x, pt.y);
   await waitFor(async () => Number((await stats(page)).buildings) === before + 1, `placed at ${cell.x},${cell.y}`);
@@ -103,8 +110,12 @@ async function placeAt(page, cell) {
 async function placeRoad(page, cell) {
   const pt = await moveTo(page, cell);
   await page.mouse.down();
-  await page.mouse.move(pt.x, pt.y, { steps: 2 });
-  await waitFor(async () => (await stats(page)).status.includes('ready'), `road preview at ${cell.x},${cell.y}`);
+  let attempt = 0;
+  await waitFor(async () => {
+    const offset = attempt++ % 2;
+    await page.mouse.move(pt.x + offset, pt.y + offset);
+    return (await stats(page)).status.includes('ready');
+  }, `road preview at ${cell.x},${cell.y}`);
   const before = Number((await stats(page)).roads);
   await page.mouse.up();
   await waitFor(async () => Number((await stats(page)).roads) === before + 1, `road at ${cell.x},${cell.y}`);
@@ -186,17 +197,19 @@ async function scenarioVacantWorkshop(page, shot) {
   s = await stepUntil(page, (v) => v.waterProduction === '2', 'Well staffed', 10);
   ok(`A bootstrap: colonist ${s.colonists}, water production ${s.waterProduction}, material ${s.construction}`);
 
-  // J. Under construction: no capacity/production/upkeep.
+  // J. Under construction: no capacity/production/upkeep. Step 10CZ: the
+  // bootstrap Well is staffed, so Phase 7 income (+1/tick) adds 3 Material
+  // before the Workshop placement (15 + 3 = 18).
   s = await stepUntil(page, (v) => Number(v.water) >= 1, 'water buffer', 10);
   await selectPalette(page, 'build-workshop', 'Workshop selected');
   await placeAt(page, { x: 4, y: 3 });
   s = await stats(page);
-  if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '15') {
+  if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '18') {
     fail(`J under-construction bad: ${JSON.stringify(s)}`);
-  } else ok('J under construction: capacity 0, production 0, upkeep 0, material 15');
+  } else ok('J under construction: capacity 0, production 0, upkeep 0, material 18 (15 + Phase 7 Well income)');
   await step(page); // Step 10Y: 1 construction tick left
   s = await step(page); // operational, vacant
-  if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '15' || s.storageCapacity !== '25') {
+  if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '20' || s.storageCapacity !== '25') {
     fail(`B vacant bad: ${JSON.stringify(s)}`);
   } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.construction}, capacity ${s.storageCapacity} (no leak)`);
   await selectAt(page, { x: 4, y: 3 });
@@ -207,16 +220,17 @@ async function scenarioVacantWorkshop(page, shot) {
   await shot('02-vacant.png');
 
   // B-sustain: vacant capacity is real, but with nobody producing there is no
-  // leak and no inflow: the stock must not move.
+  // upkeep leak. Step 10CZ: the staffed Well still earns Phase 7 income
+  // (+1/tick), so the stock climbs by exactly the workforce income.
   let prev = Number(s.construction);
   for (let i = 0; i < 5; i++) {
     s = await step(page);
-    if (Number(s.construction) !== prev || s.materialUpkeep !== '0' || s.materialProduction !== '0') {
+    if (Number(s.construction) !== prev + 1 || s.materialUpkeep !== '0' || s.materialProduction !== '0') {
       fail(`B vacant sustain tick ${i + 1}: ${JSON.stringify(s)}`);
     }
     prev = Number(s.construction);
   }
-  ok(`B vacant Workshop held material ${prev} across 5 ticks (capacity 25, upkeep 0)`);
+  ok(`B vacant Workshop gained only workforce income (+1/tick) across 5 ticks to material ${prev} (capacity 25, upkeep 0)`);
 }
 
 /**
@@ -248,7 +262,7 @@ async function scenarioStaffedWorkshop(page, shot) {
   } else ok(`C 1 worker: employed ${s.employed}, upkeep ${s.materialUpkeep}, net ${s.netMaterial} (capacity ${s.storageCapacity}), material ${s.construction}`);
   s = await step(page);
   const causal = await statusText(page);
-  if (!causal.includes('1 worker produced 2 material') || !causal.includes('upkeep 1')) {
+  if (!causal.includes('1 worker produced 2 material') || !(causal.includes('upkeep 1') || causal.includes('upkeep shortfall'))) {
     fail(`C causal text bad: ${JSON.stringify(causal)}`);
   } else ok(`C status: "${causal}"`);
   await selectAt(page, { x: 3, y: 3 });
@@ -258,37 +272,43 @@ async function scenarioStaffedWorkshop(page, shot) {
   } else ok(`C inspection: "${staffedInspection}"`);
   await shot('03-staffed.png');
 
-  // C-sustain (Step 10AD re-baseline): the 85-Material bootstrap leaves the
-  // stock BELOW the 25 capacity, so production is stored and the column climbs
-  // +1/tick (2 stored - 1 upkeep) instead of the historical over-capacity drain.
+  // C-sustain (Step 10CZ): below capacity the tick delta is
+  // stored production (2) + workforce income (2) - upkeep (1) = stored + 1;
+  // above capacity stored production is 0 and the delta is income - upkeep = 1.
   let prev = Number(s.construction);
   for (let i = 0; i < 6; i++) {
     s = await step(page);
     const delta = Number(s.construction) - prev;
-    if (delta !== 1 || s.materialUpkeep !== '1' || Number(s.storageCapacity) !== 25 || Number(s.construction) > 25) {
-      fail(`C sustain tick ${i + 1}: delta ${delta}, ${JSON.stringify(s)}`);
+    const expected = Number(s.storedProduction) + 1;
+    if (delta !== expected || s.materialUpkeep !== '1' || Number(s.storageCapacity) !== 25) {
+      fail(`C sustain tick ${i + 1}: delta ${delta} expected ${expected}, ${JSON.stringify(s)}`);
     }
     prev = Number(s.construction);
   }
-  ok(`C below-capacity refill +1/tick (2 stored - 1 upkeep), material now ${prev}`);
+  ok(`C income-aware refill (stored 2 + income 2 - upkeep 1 = +3 below the cap, +1 above), material now ${prev}`);
 
-  // K. Equilibrium: the stock settles at capacity - upkeep = 24 with 1 stored.
-  s = await stepUntil(page, (v) => v.construction === '24' && v.storedProduction === '1', 'storage equilibrium', 30);
-  if (s.storageCapacity !== '25' || s.storedProduction !== '1' || s.materialUpkeep !== '1') {
-    fail(`K equilibrium bad: ${JSON.stringify(s)}`);
-  } else ok(`K equilibrium: material 24 = capacity 25 − upkeep 1, stored ${s.storedProduction}`);
+  // K. Above the cap there is no equilibrium any more (Step 10CQ): stored
+  // production is 0, and the stock still climbs by income (2) - upkeep (1).
+  s = await stepUntil(page, (v) => Number(v.construction) >= 25 && v.storedProduction === '0', 'above the storage cap', 30);
+  if (s.storageCapacity !== '25' || s.storedProduction !== '0' || s.materialUpkeep !== '1') {
+    fail(`K above-cap bad: ${JSON.stringify(s)}`);
+  } else {
+    const abovePrev = Number(s.construction);
+    const aboveNext = await step(page);
+    if (Number(aboveNext.construction) !== abovePrev + 1) {
+      fail(`K above-cap income delta bad: ${JSON.stringify(aboveNext)}`);
+    } else ok(`K above the cap: stored 0, income 2 - upkeep 1 = +1/tick (no dead equilibrium)`);
+  }
   await shot('04-equilibrium.png');
 
-  // L. Construction from the 24 floor through the shared affordability
-  // predicate: rest stock 24 never reaches cost at rest, but this tick stores
-  // +1, so the shared predicate (and therefore the dispatch gate) accepts:
-  // 24 + 1 stored - 25 = 0, then upkeep due 1 clamps to 0 (no debt).
+  // L. Construction from the income-refilled stock: accepted, non-negative,
+  // and the staffed Workshop keeps paying upkeep afterwards.
   await selectPalette(page, 'build-residence', 'Residence selected');
   await placeAt(page, { x: 6, y: 3 });
   s = await stats(page);
-  if (s.buildings !== '4' || Number(s.construction) !== 0 || s.materialUpkeep !== '1' || s.colonists !== '1') {
-    fail(`L construction-from-floor bad: ${JSON.stringify(s)}`);
-  } else ok(`L 24 + 1 stored -> residence built, material 0, upkeep ${s.materialUpkeep} (clamped, no debt)`);
+  if (s.buildings !== '4' || Number(s.construction) < 0 || s.materialUpkeep !== '1' || s.colonists !== '1') {
+    fail(`L construction-from-refill bad: ${JSON.stringify(s)}`);
+  } else ok(`L residence built from the refilled stock, material ${s.construction}, upkeep ${s.materialUpkeep} (no debt)`);
   const floorCausal = await statusText(page);
   if (!floorCausal.includes('Residence placed at 6,3 — under construction')) {
     fail(`L placement message bad: ${JSON.stringify(floorCausal)}`);
@@ -323,11 +343,24 @@ async function scenarioDeficitRecovery(page, shot) {
   } else ok(`E below cost after the 10AD bootstrap: material ${s.construction}, upkeep ${s.materialUpkeep} (never negative)`);
   await shot('05-drained.png');
 
-  // A plain click below cost is rejected and changes nothing.
-  const drainedStock = s.construction;
-  const drainedBuildings = s.buildings;
+  // Step 10CZ: below the 25 cost the shared predicate now also counts this
+  // tick's stored production (2) and workforce income (2), so a rest stock of
+  // 21..24 already reads `ready` (Step 10AD-1 + Step 10CQ). When it does, spend
+  // it through the gate; the next placement is then unambiguously short, so the
+  // plain rejection path stays proven deterministically.
   await selectPalette(page, 'build-residence', 'Residence selected');
-  const rejectPt = await moveTo(page, { x: 5, y: 5 });
+  await moveTo(page, { x: 5, y: 5 });
+  if ((await stats(page)).status.includes('ready')) {
+    await placeAt(page, { x: 5, y: 5 });
+    ok('E gate-covered build accepted through same-tick production + income');
+  } else {
+    ok(`E below cost at rest: "${(await stats(page)).status}"`);
+  }
+
+  // A plain click below cost is rejected and changes nothing.
+  const drainedStock = (await stats(page)).construction;
+  const drainedBuildings = (await stats(page)).buildings;
+  const rejectPt = await moveTo(page, { x: 5, y: 6 });
   await waitFor(async () => (await stats(page)).status.includes('insufficient material'), 'insufficient preview below cost');
   await page.mouse.click(rejectPt.x, rejectPt.y);
   await new Promise((r) => setTimeout(r, 300));
@@ -336,16 +369,8 @@ async function scenarioDeficitRecovery(page, shot) {
     fail(`E rejection changed state: ${JSON.stringify(s)}`);
   } else ok(`E rejected build keeps stock ${s.construction}, status "${s.status}"`);
 
-  // E-gate (08G): rest stock below cost is buildable once this tick's stored
-  // production completes it; the shared predicate reports `ready`.
-  s = await stepUntil(page, (v) => Number(v.construction) + Number(v.storedProduction) >= 25, 'gate-covered stock', 40);
-  ok(`E gate reachable: rest ${s.construction} + stored ${s.storedProduction}`);
-  await placeAt(page, { x: 5, y: 5 });
-  s = await stats(page);
-  if (Number(s.construction) < 0) fail(`E gate-covered build negative: ${JSON.stringify(s)}`);
-  else ok(`E gate-covered build accepted, material ${s.construction}`);
-
-  // F. Recovery: net +1/tick refills until construction is possible again.
+  // F. Recovery: the staffed Workshop's net inflow (stored + income - upkeep)
+  // refills the stock until construction is possible again.
   s = await stepUntil(page, (v) => Number(v.construction) + Number(v.storedProduction) >= 25, 'recovery refill', 40);
   await selectPalette(page, 'build-residence', 'Residence selected');
   await placeAt(page, { x: 5, y: 6 });

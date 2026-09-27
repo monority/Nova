@@ -167,9 +167,12 @@ async function main() {
       ['west', { x: 0, y: 1 }],
     ]) {
       await pointAt(page, cell);
+      // Step 10CZ: assert the status names THIS cell, so a stale preview from a
+      // previously hovered cell (or a HUD-covered cell that never receives the
+      // pointer) can no longer satisfy the wait.
       previews[label] = await waitFor(async () => {
         const text = (await stats(page)).status;
-        return text.includes('ready') ? text : null;
+        return text.includes(`cell ${cell.x},${cell.y}`) ? text : null;
       }, `preview ${label}`);
     }
     assert(/water: served/.test(previews.bridge) && /2 workplaces reachable/.test(previews.bridge),
@@ -195,7 +198,10 @@ async function main() {
     assert(s.colonists === '2', `bridge population: ${s.colonists}`);
     assert(s.staffedFarmIds !== '' && s.vacantOperationalFarms === '0',
       `bridge farm staffing: "${s.staffedFarmIds}" / vacant ${s.vacantOperationalFarms}`);
-    assert(s.construction === '5', `bridge leftover material: ${s.construction}`);
+    // Step 10CZ: Phase 7 income credits the staffed Farm/Well workers, so the
+    // 30 - 25 = 5 budget leftover grows by the income earned during the
+    // completion ticks that reach Village. Measured: +4 -> 9.
+    assert(s.construction === '9', `bridge leftover material: ${s.construction}`);
     ok(`bridge solution: Village at tick ${s.tick}, population ${s.colonists}, staffed Farm "${s.staffedFarmIds}", material left ${s.construction}`);
     await page.screenshot({ path: `${ART}/03-village.png` });
 
@@ -232,7 +238,10 @@ async function main() {
     assert(recovered.state === 'completed', `recovery objective: ${recovered.state}`);
     assert(recoveredProgression.stage === 'village', `recovery stage: ${recoveredProgression.stage}`);
     assert(s.roadNetworks === '1', `recovery networks: ${s.roadNetworks}`);
-    assert(s.construction === '0', `recovery material: ${s.construction}`);
+    // Step 10CZ: same Phase 7 income effect. The 30 Material budget is fully
+    // spent (25 Residence + 5 road), and the completion ticks to Village add
+    // the staffed workers' income. Measured: 6.
+    assert(s.construction === '6', `recovery material: ${s.construction}`);
     ok(`recovery: road join at tick ${s.tick} → ${recoveredProgression.stage}, networks ${s.roadNetworks}, material ${s.construction}`);
     await page.screenshot({ path: `${ART}/05-recovery.png` });
 

@@ -181,7 +181,7 @@ async function main() {
       options.map((o) => o.value).filter((v) => v !== 'default')
     );
     evidence('SCENARIO_IDS', scenarioIds);
-    assert(scenarioIds.length === 8, `expected 8 catalogue scenarios (7 from 10AL-10AQ plus 10BE housing-composition), got ${scenarioIds.length}`);
+    assert(scenarioIds.length === 11, `expected 11 catalogue scenarios (10AL-10AQ + 10BE housing-composition + 10CJ Town entries), got ${scenarioIds.length}`);
     const catalogue = [];
     for (const id of scenarioIds) {
       await loadScenario(page, id);
@@ -217,12 +217,17 @@ async function main() {
     const villagePanel = await panel(page);
     evidence('VILLAGE_PANEL', villagePanel);
     assert(villagePanel.stage === 'Village', 'the Well must reach Village');
+    // Step 10CJ added the Town stage: Village's next stage is now Town.
     assert(
-      villagePanel.next.toLowerCase().includes('not yet defined') &&
-        villagePanel.next.includes('final stage'),
-      `Village must mark the next stage as undefined AND final, got "${villagePanel.next}"`
+      villagePanel.next.includes('Town'),
+      `Village must name Town as its next stage, got "${villagePanel.next}"`
     );
-    assert(villagePanel.blocked === '', `Village must have no blockers, got "${villagePanel.blocked}"`);
+    // Step 10CJ: after Village the next stage is Town, whose condition is a
+    // Staffed Workshop, so Village legitimately names that blocker now.
+    assert(
+      villagePanel.blocked.includes('Staffed Workshop'),
+      `Village must name its Town blocker, got "${villagePanel.blocked}"`
+    );
     assert(villagePanel.objectiveStatus.includes('Objective complete'), 'the objective must read complete');
     assert(villagePanel.progress.length > 0, 'Village must still explain what it has achieved');
     ok(`progression legible: Wilderness → Settlement → Village, next "${villagePanel.next}"`);

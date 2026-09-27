@@ -45,8 +45,15 @@ const stats = (page) => page.evaluate(() => window.__nova.stats());
 async function clickCell(page, cell) {
   const pt = await page.evaluate((c) => window.__nova.cellToScreen(c), cell);
   if (!pt) throw new Error(`cellToScreen null for ${cell.x},${cell.y}`);
-  await page.mouse.move(pt.x, pt.y);
-  await waitFor(async () => (await stats(page)).status.includes('ready'), `valid preview at ${cell.x},${cell.y}`);
+  // The simulation clock keeps running here, so a per-tick causal status can
+  // overwrite a single hover. Re-issue the move while waiting (a real player
+  // keeps moving the pointer), so the wait observes the real preview.
+  let attempt = 0;
+  await waitFor(async () => {
+    const offset = attempt++ % 2;
+    await page.mouse.move(pt.x + offset, pt.y + offset);
+    return (await stats(page)).status.includes('ready');
+  }, `valid preview at ${cell.x},${cell.y}`);
   await page.mouse.click(pt.x, pt.y);
 }
 

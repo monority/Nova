@@ -181,11 +181,12 @@ async function main() {
     ok(`default start: Wilderness -> Settlement, blockers ${JSON.stringify(status.blockers)}`);
     await shot('01-free-play-wilderness.png');
 
-    // --- Step 10AS: the 100 -> 105 opening boundary -------------------------
-    // Four purchases spend 80 of the 100; the minimum Village package needs one
-    // more building (a Well, 25) and the stock is exactly 5 short. The hover
-    // must say so, and the Material row must NOT claim a storage cap while no
-    // Workshop exists.
+    // --- Step 10AS: the 100 -> 105 opening boundary (Phase 7 aware) --------
+    // Four purchases spend 80 of the 100; the three steps then staff the
+    // operational Farm, and Step 10CQ credits +1 Material/tick income, so the
+    // stock is 23 (not 20) and the Well is 2 Material short. The hover must say
+    // so, and the Material row must NOT claim a storage cap while no Workshop
+    // exists.
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 1, y: 0 });
     await selectPalette(page, 'build-road', 'Road selected');
@@ -196,11 +197,11 @@ async function main() {
     await placeAt(page, { x: 1, y: 2 });
     for (let i = 0; i < 3; i += 1) await step(page);
     const opening = await stats(page);
-    assert(opening.construction === '20', `opening stock expected 20 after four purchases, got ${opening.construction}`);
+    assert(opening.construction === '23', `opening stock expected 23 after four purchases plus Phase 7 income, got ${opening.construction}`);
     await moveTo(page, { x: 2, y: 1 });
     await waitFor(
-      async () => (await stats(page)).status.includes('insufficient material (20/25)'),
-      'the Well must be reported 5 Material short'
+      async () => (await stats(page)).status.includes('insufficient material (23/25)'),
+      'the Well must be reported 2 Material short'
     );
     const shortStatus = (await stats(page)).status;
     assert(
@@ -296,10 +297,13 @@ async function main() {
     const village = await progression(page);
     text = await progressionText(page);
     assert(village.stage === 'village', `Well must reach Village, got ${village.stage}`);
-    assert(text.next.startsWith('not yet defined') && text.next.includes('final stage'), `deferred next label expected, got "${text.next}"`);
-    assert(village.deferred === true, 'village must report deferred progression');
-    assert(village.blockers.length === 0, `village must have no blockers, got ${JSON.stringify(village.blockers)}`);
-    assert(text.blocked === '', `village blockers line must be empty, got "${text.blocked}"`);
+    // Step 10CJ added Town: Village's next stage is Town, not a deferred label.
+    assert(text.next.includes('Town'), `Village next stage expected Town, got "${text.next}"`);
+    assert(village.deferred === false, 'village must not report deferred progression once Town exists');
+    // Step 10CJ: Village's next stage is Town, whose condition is a Staffed
+    // Workshop, so Village names that as its only blocker now.
+    assert(JSON.stringify(village.blockers) === JSON.stringify(['Staffed Workshop']), `village Town blocker expected, got ${JSON.stringify(village.blockers)}`);
+    assert(text.blocked.includes('Staffed Workshop'), `village blockers line must name the Town requirement, got "${text.blocked}"`);
     const villageObjective = await objective(page);
     const villageObjectiveText = await page.locator('[data-testid="progression-objective-status"]').textContent();
     assert(villageObjective?.state === 'completed', `water-constraint objective expected completed, got ${JSON.stringify(villageObjective)}`);
@@ -326,7 +330,7 @@ async function main() {
     assert(industrialStats.storageCapacity === '25', `Workshop storage expected 25, got ${industrialStats.storageCapacity}`);
     assert(Number(industrialStats.construction) > 25, `the stock must exceed the cap: ${industrialStats.construction}`);
     const storageNote = await materialStatusText(page);
-    assert(storageNote.includes('storage 25'), `Material row must name the cap, got "${storageNote}"`);
+    assert(storageNote.includes('cap 25'), `Material row must name the cap, got "${storageNote}"`);
     ok(`industrial storage display: Material ${industrialStats.construction}, "${storageNote}"`);
     ok('objective evaluation: Industrial expansion completes when the Workshop is built (in progress -> complete)');
 
@@ -335,13 +339,13 @@ async function main() {
     const second = JSON.stringify(await progression(page));
     assert(first === second, 'progression must be recomputed identically');
     const saved = JSON.parse(await page.evaluate(() => window.__nova.serialize()));
-    assert(saved.version === 7, `save version expected 7, got ${saved.version}`);
-    assert(Object.keys(saved.state).length === 7, `save must keep 7 top-level keys, got ${Object.keys(saved.state).length}`);
+    assert(saved.version === 8, `save version expected 8, got ${saved.version}`);
+    assert(Object.keys(saved.state).length === 8, `save must keep 8 top-level keys, got ${Object.keys(saved.state).length}`);
     const serialized = JSON.stringify(saved);
     for (const term of ['scenario', 'progression', 'stage', 'objective', 'blocker']) {
       assert(!serialized.includes(term), `save must not contain "${term}"`);
     }
-    ok('progression recomputed deterministically; save keeps version 7 with 7 keys and no scenario state');
+    ok('progression recomputed deterministically; save keeps version 8 with 8 keys and no scenario state');
     await shot('05-persistence.png');
 
     // --- Return to free play: the default game is unchanged ----------------

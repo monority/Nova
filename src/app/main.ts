@@ -1091,8 +1091,74 @@ const setHudCollapsed = (collapsed: boolean): void => {
 }
 
 ui.hudToggle?.addEventListener('click', () => {
+  hudUserOverride = true
+  // The explicit choice wins: drop the auto-fit inline constraints so the CSS
+  // (including the narrow-viewport media query) governs the panel again.
+  if (ui.panel !== null) {
+    ui.panel.style.maxWidth = ''
+    ui.panel.style.maxHeight = ''
+  }
   setHudCollapsed(!(ui.panel?.classList.contains('collapsed') ?? false))
 })
+
+// --- HUD non-occlusion layout (Step 10CZ) ------------------------------------
+// A board cell under the open HUD receives no canvas pointer event, so the
+// default HUD must not cover any playable cell. Rather than hiding the HUD by
+// default (which would remove the palette and the objective), the panel is
+// fitted into the board's free margin from the live projection:
+//   - prefer a width that keeps the whole panel left of the board's leftmost
+//     cell (the board is centred, so there is usually room at desktop sizes);
+//   - otherwise cap its height above the board's topmost cell (the camera
+//     leaves a top band);
+//   - only when neither fits does the existing collapsed state apply.
+// Presentation-only: DOM classes and inline max-width/max-height. No
+// simulation state, no persistence. The player's explicit HIDE/SHOW choice is
+// respected and never overwritten by a resize.
+const HUD_GAP = 8
+const HUD_MIN_WIDTH = 220
+const HUD_MIN_HEIGHT = 150
+
+let hudUserOverride = false
+let hudLayoutKey = ''
+
+const fitHudToBoard = (): void => {
+  const panel = ui.panel
+  if (panel === null) return
+  const key = `${container.clientWidth}x${container.clientHeight}`
+  if (hudLayoutKey === key) return
+  hudLayoutKey = key
+  if (hudUserOverride) return
+
+  let boardLeft = Number.POSITIVE_INFINITY
+  let boardTop = Number.POSITIVE_INFINITY
+  for (let x = 0; x < grid.width; x += 1) {
+    for (let y = 0; y < grid.height; y += 1) {
+      const point = novaRenderer.cellToScreen({ x, y })
+      if (point === null) continue
+      boardLeft = Math.min(boardLeft, point.x)
+      boardTop = Math.min(boardTop, point.y)
+    }
+  }
+
+  const rect = panel.getBoundingClientRect()
+  const widthFit = boardLeft - rect.left - HUD_GAP
+  const heightFit = boardTop - rect.top - HUD_GAP
+  if (Number.isFinite(widthFit) && widthFit >= HUD_MIN_WIDTH) {
+    panel.style.maxHeight = ''
+    panel.style.maxWidth = `${Math.floor(widthFit)}px`
+    setHudCollapsed(false)
+  } else if (Number.isFinite(heightFit) && heightFit >= HUD_MIN_HEIGHT) {
+    panel.style.maxWidth = ''
+    panel.style.maxHeight = `${Math.floor(heightFit)}px`
+    setHudCollapsed(false)
+  } else {
+    panel.style.maxWidth = ''
+    panel.style.maxHeight = ''
+    setHudCollapsed(true)
+  }
+}
+
+fitHudToBoard()
 
 // --- Simulation controls -----------------------------------------------------
 
@@ -1453,6 +1519,7 @@ const frame = (time: number): void => {
   lastFrameTime = time
   clock.accumulate(elapsed)
   novaScene.resize(container.clientWidth, container.clientHeight)
+  fitHudToBoard()
   novaScene.renderer.render(novaScene.scene, novaScene.camera)
   requestAnimationFrame(frame)
 }

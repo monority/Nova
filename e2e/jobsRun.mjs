@@ -292,18 +292,25 @@ async function main() {
     ok(`workshop staffed at tick ${s.tick}: jobs "${await jobsText(page)}", inspection "${operationalJobs}", material ${s.construction}`);
     await shot('03-employed-workshop.png');
 
-    // Phase D (Step 10AD re-baseline): the 85-Material bootstrap leaves the
-    // stock BELOW the 25 capacity, so the flow is +1/tick (2 stored - 1
-    // upkeep) up to the 24 equilibrium instead of the historical over-capacity
-    // -1/tick drain. Gross production stays exactly 2.
+    // Phase D (Step 10CZ): the 85-Material bootstrap leaves the stock BELOW the
+    // 25 capacity, so the flow is stored production (2) + Phase 7 workforce
+    // income (2) - upkeep (1) = +3/tick near the floor. There is no equilibrium
+    // any more: above the cap, stored is 0 and income keeps the stock climbing.
+    // Gross production stays exactly 2.
     let materialBefore = Number(s.construction);
-    s = await step(page);
-    assert(Number(s.construction) - materialBefore === 1, `below-capacity tick expected +1 (2 stored - 1 upkeep), got ${Number(s.construction) - materialBefore}`);
-    materialBefore = Number(s.construction);
-    for (let i = 0; i < 3; i++) {
+    const materialCapacity = Number(s.storageCapacity);
+    for (let i = 0; i < 4; i += 1) {
       s = await step(page);
+      const storedDuringTick = Math.min(2, Math.max(0, materialCapacity - materialBefore));
+      const expected = storedDuringTick + 1; // stored + income(2) - upkeep(1)
+      const delta = Number(s.construction) - materialBefore;
+      if (delta !== expected) {
+        fail(`below-capacity tick ${i + 1} expected +${expected} (stored ${storedDuringTick} + income 2 - upkeep 1), got ${delta}`);
+        break;
+      }
+      materialBefore = Number(s.construction);
     }
-    assert(Number(s.construction) - materialBefore === 3, `3 below-capacity ticks expected +3, got ${Number(s.construction) - materialBefore}`);
+    ok(`below-capacity refill income-aware (stored + income 2 - upkeep 1), material ${s.construction}`);
     assert(s.materialProduction === '2', `gross production must stay 2 with one worker, got ${s.materialProduction}`);
     assert(s.status.includes('1 worker produced 2 material'), `steady material feedback missing: ${JSON.stringify(s.status)}`);
     ok(`material deltas exact: +1/tick below capacity, gross stays 2 at tick ${s.tick} (material ${s.construction})`);
@@ -407,12 +414,12 @@ async function main() {
     s = await stats(page);
     assert(s.colonists === '1', `colony must still be alive when PLAY is paused, got ${JSON.stringify(s)}`);
     assert(Number(s.food) > 0, `expected a positive food reserve before starvation, got ${s.food}`);
-    assert(Number(s.construction) <= 25, `long PLAY must respect the 25 storage capacity, got ${s.construction}`);
-    // Step 10AD re-baseline: with the Workshop staffed the flow is +1/tick up
-    // to the 24 equilibrium, so long PLAY settles AT the capacity instead of
-    // the historical over-capacity drain. The capacity bound itself is the
-    // assertion; the starvation consequence below is unchanged.
-    assert(Number(s.construction) >= 15, `long PLAY must stay within the bounded band, got ${s.construction}`);
+    // Step 10CZ: Phase 7 income bypasses the 25-per-Workshop production cap
+    // (Step 10CQ), so long PLAY leaves the stock above the cap while stored
+    // production is 0 and the hub retains the overflow. The starvation
+    // consequence below is unchanged.
+    assert(Number(s.construction) >= 25, `long PLAY must have passed the 25 storage cap via income, got ${s.construction}`);
+    assert(s.storedProduction === '0', `above the cap stored production must be 0, got ${s.storedProduction}`);
     ok(`PLAY 4x consumed the reserve to food ${s.food} at tick ${s.tick} (material ${s.construction}, jobs "${await jobsText(page)}")`);
 
     let previousMaterial = Number(s.construction);
@@ -420,12 +427,14 @@ async function main() {
     for (let i = 0; i < 16 && starvedTick === null; i++) {
       s = await step(page);
       const material = Number(s.construction);
-      assert(material <= 25, `material must never exceed capacity 25, got ${material}`);
       if (s.colonists === '0') {
         starvedTick = Number(s.tick);
-        assert(material <= previousMaterial, `death-tick material must not grow: ${previousMaterial} -> ${material}`);
+        // Starvation removes the worker before production/income, so the
+        // above-cap stock stops moving on the death tick.
+        assert(material === previousMaterial, `death-tick material must not grow: ${previousMaterial} -> ${material}`);
       } else {
-        assert(Math.abs(material - previousMaterial) <= 1, `capped stock must stay within 1 of capacity, got ${material - previousMaterial}`);
+        // Above the cap: stored production 0, income 2 - upkeep 1 = +1/tick.
+        assert(material - previousMaterial === 1, `above-cap alive tick expected +1 (income 2 - upkeep 1), got ${material - previousMaterial}`);
         previousMaterial = material;
       }
     }
