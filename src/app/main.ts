@@ -1227,9 +1227,13 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     definition.constructionWaterCost === 0 ? '' : ` · water ${definition.constructionWaterCost}`
   if (affordability.affordable) {
     const cost = definition.constructionCost
+    // Step 10CS/10CT: name what completes the shortfall — this tick's stored
+    // production + income, or the protected Storage reserve.
     const storedSuffix = affordability.coveredBySameTickInflow
       ? ` (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored + ${getWorkforceIncome(controller.getState())} income)`
-      : ''
+      : affordability.coveredByProtectedReserve
+        ? ` (incl. ${affordability.releasedFromStorage} reserve)`
+        : ''
     return `cell ${cell.x},${cell.y} — ready · material ${cost}${storedSuffix}${waterSuffix}${describeSpatialConsequence(cell, tool.type)}`
   }
   const placement = affordability.placement

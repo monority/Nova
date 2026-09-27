@@ -1,24 +1,32 @@
 /**
- * Placement affordability query (Step 10AD-1).
+ * Placement affordability query (Step 10AD-1, extended Step 10CT).
  *
  * ONE concrete predicate shared by the hover feedback and the authoritative
  * dispatch gate, so the UI can never drift from the domain rule:
  *
  *   affordable = validatePlacement accepts the cell
  *              | the only failure is missing Material
- *                AND this tick's STORED Workshop inflow completes it
+ *                AND this tick's STORED Workshop inflow / workforce income
+ *                    completes it
+ *              | the only failure is missing Material
+ *                AND the Step 10BJ protected Storage release completes it
  *
- * Why the second clause exists (Step 08G §5, Step 10AD): the construction
+ * Why the inflow clause exists (Step 08G §5, Step 10AD): the construction
  * transaction runs mid-tick, AFTER `produceMaterial` stored this tick's output
  * and BEFORE `upkeepBuildings` drains it. A lone staffed Workshop equilibrates
  * at 24 Material (stored 1 − upkeep 1 = net 0), so a 25-cost building is
  * reachable exactly on that tick. The stock query alone would report
  * "insufficient material" for a placement the domain accepts.
  *
- * It is deliberately NOT generalised: it mirrors the existing dispatch check,
- * reads only existing derived queries, and never predicts future ticks. Water
- * (Step 10AD) is part of the placement contract, so it is surfaced here too —
- * but stored Material never covers a Water shortfall.
+ * Why the reserve clause exists (Step 10CT): the dispatch pipeline releases
+ * Material above the protected Storage floor for a valid building command
+ * BEFORE it validates (`releaseMaterialForCommand`, Step 10BJ). The stock
+ * query alone would refuse a placement the domain funds from that reserve.
+ *
+ * It mirrors the existing dispatch check, reads only existing derived queries,
+ * and never predicts future ticks. Water (Step 10AD) is part of the placement
+ * contract, so it is surfaced here too — neither stored Material nor the
+ * reserve ever covers a Water shortfall.
  */
 
 import { getBuildingDefinition, type BuildingType } from '../../domain/building/building.js'
@@ -40,6 +48,7 @@ import {
 } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 import { getWaterCoverage } from '../../domain/water/water.js'
+import { releaseProtectedMaterialReserve } from '../../domain/storage/storage.js'
 import { getWorkforceIncome } from './inspection.js'
 import {
   getMaterialStoredProductionPerTick,
@@ -60,6 +69,16 @@ export interface PlacementAffordability {
   readonly waterAvailable: number
   /** True when the same-tick stored inflow or income completes the Material cost. */
   readonly coveredBySameTickInflow: boolean
+  /**
+   * True when the Step 10BJ protected Storage release is what completes the
+   * Material cost (and the same-tick inflow alone would not).
+   */
+  readonly coveredByProtectedReserve: boolean
+  /**
+   * Material the protected reserve releases for this placement (Storage above
+   * the 15-unit floor, capped at the deficit). 0 when not a Material shortfall.
+   */
+  readonly releasedFromStorage: number
 }
 
 export const getPlacementAffordability = (
@@ -82,14 +101,51 @@ export const getPlacementAffordability = (
     placement.reason === 'insufficientResources' &&
     stock.water >= waterRequired &&
     stock.construction + getMaterialStoredProductionPerTick(state) + getWorkforceIncome(state) >= materialRequired
+  // Step 10CT: the building command releases Material above the protected
+  // Storage floor BEFORE it validates (Step 10BJ `releaseMaterialForCommand`).
+  // Mirror that release here, or the hover gate refuses a placement the
+  // domain builds. The release consumes the deficit from the reserve and also
+  // shrinks this tick's storage clamp, so stored production is derived from the
+  // RELEASED stock — not the current one. Water is checked first: an
+  // insufficient Water investment makes the preflight release fail, so the
+  // reserve must never mask it.
+  let coveredByProtectedReserve = false
+  let releasedFromStorage = 0
+  if (
+    !placement.valid &&
+    placement.reason === 'insufficientResources' &&
+    stock.water >= waterRequired &&
+    !coveredBySameTickInflow
+  ) {
+    const release = releaseProtectedMaterialReserve(
+      state.storage,
+      stock.construction,
+      materialRequired
+    )
+    releasedFromStorage = release.releaseAmount
+    if (release.releaseAmount > 0) {
+      const storedAfterRelease = getMaterialStoredProductionPerTick({
+        ...state,
+        resources: { ...state.resources, construction: release.operationalMaterial },
+      })
+      coveredByProtectedReserve =
+        release.operationalMaterial +
+          storedAfterRelease +
+          getWorkforceIncome(state) >=
+        materialRequired
+    }
+  }
   return {
     placement,
-    affordable: placement.valid || coveredBySameTickInflow,
+    affordable:
+      placement.valid || coveredBySameTickInflow || coveredByProtectedReserve,
     materialRequired,
     materialAvailable: stock.construction,
     waterRequired,
     waterAvailable: stock.water,
     coveredBySameTickInflow,
+    coveredByProtectedReserve,
+    releasedFromStorage,
   }
 }
 
