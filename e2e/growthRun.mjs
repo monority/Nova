@@ -54,6 +54,10 @@ const waitForServer = () =>
   })
 
 const stats = (page) => page.evaluate(() => window.__nova.stats())
+const growthLine = (page) =>
+  page.evaluate(
+    () => document.querySelector('[data-testid="progression-growth"]')?.textContent ?? ''
+  )
 
 const step = async (page) => {
   const before = Number((await stats(page)).tick)
@@ -65,8 +69,8 @@ const step = async (page) => {
   throw new Error(`tick ${before + 1} did not advance`)
 }
 
-const loadTownFixture = (page, material = 100_000) =>
-  page.evaluate(async (materialValue) => {
+const loadTownFixture = (page, material = 100_000, withVacantResidence = false) =>
+  page.evaluate(async ({ materialValue, vacant }) => {
     const nova = await import('/src/index.ts')
     const config = { world: { seed: 'nova-g1-1-browser', width: 16, height: 12 } }
     let state = nova.createInitialState(config)
@@ -111,11 +115,24 @@ const loadTownFixture = (page, material = 100_000) =>
       .sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x))
     for (let i = 0; i < 6; i += 1) state = nova.createColonist(state, residences[i].id).state
     state = nova.assignJobs(state)
+    if (vacant) {
+      // One extra operational Residence on the covered network: a vacancy that
+      // the settlement will fill by admission, changing the growth cause.
+      const created = nova.createBuilding(state, 'residence', 2, 0, 2)
+      const b = created.state.buildings[created.buildingId]
+      state = {
+        ...created.state,
+        buildings: {
+          ...created.state.buildings,
+          [created.buildingId]: { ...b, status: 'operational', constructionRemaining: 0 },
+        },
+      }
+    }
     if (!window.__nova.loadSerialized(nova.serializeSave(state))) {
       throw new Error('fixture load rejected')
     }
     return true
-  }, material)
+  }, { materialValue: material, vacant: withVacantResidence })
 
 let browser
 try {
@@ -149,6 +166,12 @@ try {
   } else {
     fail(`growth should be inactive before Town: ${JSON.stringify(fresh.growthActive)}/${fresh.growthDemand}`)
   }
+  const freshLine = await growthLine(page)
+  if (freshLine === 'Growth — waiting for Town') {
+    ok(`growth line communicates the pre-Town state: "${freshLine}"`)
+  } else {
+    fail(`expected the pre-Town growth line, got ${JSON.stringify(freshLine)}`)
+  }
 
   // 2. Town fixture → derived demand + deterministic cell.
   await loadTownFixture(page)
@@ -163,6 +186,12 @@ try {
   else fail(`expected growth cell 2,0, got ${JSON.stringify(loaded.growthCell)}`)
   if (loaded.growthBlocker === '') ok('growth feedback: ready (no blocker)')
   else fail(`expected no growth blocker when ready, got ${JSON.stringify(loaded.growthBlocker)}`)
+  const readyLine = await growthLine(page)
+  if (readyLine === 'Growth — ready') {
+    ok(`growth line communicates readiness: "${readyLine}"`)
+  } else {
+    fail(`expected the ready growth line, got ${JSON.stringify(readyLine)}`)
+  }
   if (loaded.growthAffordable === 'true') ok('growth is affordable from the main stock')
   else fail(`expected affordable growth, got ${loaded.growthAffordable}`)
 
@@ -235,6 +264,12 @@ try {
   } else {
     fail(`expected an unaffordable growth blocker, got ${JSON.stringify(blocked.growthBlocker)}`)
   }
+  const blockedLine = await growthLine(page)
+  if (blockedLine === 'Growth — needs 25 Material') {
+    ok(`growth line communicates the Material blocker: "${blockedLine}"`)
+  } else {
+    fail(`expected the Material growth line, got ${JSON.stringify(blockedLine)}`)
+  }
   const beforeAffordable = Number(blocked.buildings)
   for (let i = 0; i < 12; i += 1) {
     await step(page)
@@ -246,9 +281,55 @@ try {
   } else {
     fail(`growth did not resume after affordability (${beforeAffordable} -> ${afterAffordable.buildings})`)
   }
+  const afterLine = await growthLine(page)
+  if (afterLine.startsWith('Growth — ')) {
+    // The settlement is Material-limited per home: after growing, the next
+    // Residence is unaffordable again, so the line correctly re-reports it.
+    ok(`growth line stayed valid after growth: "${afterLine}"`)
+  } else {
+    fail(`growth line invalid after affordability: ${JSON.stringify(afterLine)}`)
+  }
   await page.screenshot({ path: resolve(ART, '04-affordability-gate.png') })
 
-  // 7. The player-controlled Residence path still works.
+  // 6b. A visible cause change: a vacant served Residence blocks growth until
+  // admission fills it, then growth becomes ready again.
+  await loadTownFixture(page, 100_000, true)
+  await wait(300)
+  const vacancyLine = await growthLine(page)
+  if (vacancyLine === 'Growth — vacant Residence available') {
+    ok(`growth line communicates the vacancy blocker: "${vacancyLine}"`)
+  } else {
+    fail(`expected the vacancy growth line, got ${JSON.stringify(vacancyLine)}`)
+  }
+  await step(page)
+  const afterAdmission = await growthLine(page)
+  if (afterAdmission !== vacancyLine && afterAdmission.startsWith('Growth — ')) {
+    ok(`growth line changed after admission: "${afterAdmission}"`)
+  } else {
+    fail(`growth line did not reflect admission: ${JSON.stringify(afterAdmission)}`)
+  }
+  await page.screenshot({ path: resolve(ART, '05-cause-change.png') })
+
+  // 7. Responsive: the growth line stays visible and readable, no overflow.
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 420, height: 740 },
+    { width: 360, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await wait(250)
+    const line = await growthLine(page)
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+    )
+    if (line.startsWith('Growth — ') && !overflow) {
+      ok(`${viewport.width}x${viewport.height}: growth line "${line}", no overflow`)
+    } else {
+      fail(`${viewport.width}x${viewport.height}: line ${JSON.stringify(line)}, overflow ${overflow}`)
+    }
+  }
+
+  // 8. The player-controlled Residence path still works.
   await page.selectOption('[data-testid="scenario-select"]', 'default')
   await wait(300)
   await page.click('[data-testid="simulation-pause"]')

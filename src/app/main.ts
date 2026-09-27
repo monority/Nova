@@ -57,6 +57,7 @@ import {
   getRoadsPlacementAffordability,
   getWorkforceIncome,
   getGrowthStatus,
+  getGrowthMessage,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getVacantOperationalFarmCount,
@@ -149,6 +150,7 @@ const ui = {
   objectiveStatus: document.querySelector<HTMLElement>('#ui-objective-status'),
   progress: document.querySelector<HTMLElement>('#ui-progress'),
   blocked: document.querySelector<HTMLElement>('#ui-blocked'),
+  growth: document.querySelector<HTMLElement>('#ui-growth'),
   status: document.querySelector<HTMLDivElement>('#ui-status'),
   insType: document.querySelector<HTMLElement>('#ins-type'),
   insStatus: document.querySelector<HTMLElement>('#ins-status'),
@@ -708,6 +710,11 @@ Constraint — ${currentScenarioObjective.constraint}`
       status.blockers.length === 0
         ? ''
         : `Blocked by — ${status.blockers.join(', ')}`
+  }
+  if (ui.growth !== null) {
+    // Step G1.3: one derived line for the settlement growth state (the single
+    // blocking cause, or ready). Pure projection of the growth query.
+    ui.growth.textContent = getGrowthMessage(controller.getState())
   }
 }
 
