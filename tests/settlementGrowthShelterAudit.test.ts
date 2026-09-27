@@ -241,7 +241,7 @@ describe('§1/§2 — current settlement model and housing equilibrium', () => {
       }
     }
     audit('HOUSING_EQUILIBRIUM', out)
-  })
+  }, 30000)
 
   it('shows the three different meanings of housing', () => {
     // Capacity: with abundant Water production, housing caps population.

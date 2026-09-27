@@ -198,19 +198,21 @@ describe('G1.1 — growth activation and demand', () => {
 })
 
 describe('G1.1 — deterministic eligible cell', () => {
-  it('selects the same cell for identical states, in stable (x, y) order', () => {
+  it('selects the same cell for identical states, nearest the settlement first', () => {
     const a = getGrowthCandidateCell(townFixture())
     const b = getGrowthCandidateCell(townFixture())
     expect(a).toEqual(b)
-    expect(a).toEqual({ x: 0, y: 1 })
+    // (2,0) is adjacent to the covered road (2,1) and one step from the two
+    // network-A Residences; the old (x, y) scan would have picked (0,1).
+    expect(a).toEqual({ x: 2, y: 0 })
   })
 
   it('skips occupied cells and requires an operational covered road adjacency', () => {
     let state = townFixture()
-    // Occupy the first candidate (0,1) with a Residence.
-    state = op(state, 'residence', 0, 1)
+    // Occupy the first candidate (2,0) with a Residence.
+    state = op(state, 'residence', 2, 0)
     const next = getGrowthCandidateCell(state)
-    expect(next).not.toEqual({ x: 0, y: 1 })
+    expect(next).not.toEqual({ x: 2, y: 0 })
     expect(next).not.toBeNull()
 
     // Remove every road → no candidate at all.
@@ -239,7 +241,7 @@ describe('G1.1 — construction reuse and tick semantics', () => {
     // The new Residence missed this tick's advanceConstruction: it starts at
     // the catalog duration like a player placement.
     const grown = Object.values(after.buildings).find(
-      (building) => building.type === 'residence' && building.x === 0 && building.y === 1
+      (building) => building.type === 'residence' && building.x === 2 && building.y === 0
     )
     expect(grown?.status).toBe('underConstruction')
     expect(grown?.constructionRemaining).toBe(BUILDING_CATALOG.residence.constructionTicks)

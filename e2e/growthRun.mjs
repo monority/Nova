@@ -5,9 +5,12 @@
  *
  *   Town fixture (two road networks, Water headroom, 6 occupied Residences)
  *     -> derived growth demand (stats)
- *     -> STEP: one deterministic autonomous Residence on network A at (0,1)
+ *     -> STEP: one deterministic autonomous Residence on network A at (2,0)
+ *        (nearest to the existing settlement)
  *     -> normal construction lifecycle (under construction -> operational)
  *     -> bounded growth (anti-treadmill), never unbounded
+ *     -> derived growthBlocker names a real constraint when growth stops
+ *     -> changing the Material condition changes growth behaviour
  *
  * The fixture is assembled with the same domain constructors the app uses and
  * handed to the sanctioned serialized-load hook. All interaction is the real
@@ -62,14 +65,14 @@ const step = async (page) => {
   throw new Error(`tick ${before + 1} did not advance`)
 }
 
-const loadTownFixture = (page) =>
-  page.evaluate(async () => {
+const loadTownFixture = (page, material = 100_000) =>
+  page.evaluate(async (materialValue) => {
     const nova = await import('/src/index.ts')
     const config = { world: { seed: 'nova-g1-1-browser', width: 16, height: 12 } }
     let state = nova.createInitialState(config)
     state = {
       ...state,
-      resources: { ...state.resources, food: 1_000_000, water: 1_000_000, construction: 100_000 },
+      resources: { ...state.resources, food: 1_000_000, water: 1_000_000, construction: materialValue },
     }
     const op = (current, type, x, y) => {
       const created = nova.createBuilding(current, type, x, y, 2)
@@ -112,7 +115,7 @@ const loadTownFixture = (page) =>
       throw new Error('fixture load rejected')
     }
     return true
-  })
+  }, material)
 
 let browser
 try {
@@ -156,8 +159,10 @@ try {
   } else {
     fail(`expected Town growth demand: ${JSON.stringify({ active: loaded.growthActive, demand: loaded.growthDemand })}`)
   }
-  if (loaded.growthCell === '0,1') ok(`deterministic growth cell ${loaded.growthCell}`)
-  else fail(`expected growth cell 0,1, got ${JSON.stringify(loaded.growthCell)}`)
+  if (loaded.growthCell === '2,0') ok(`deterministic growth cell ${loaded.growthCell}`)
+  else fail(`expected growth cell 2,0, got ${JSON.stringify(loaded.growthCell)}`)
+  if (loaded.growthBlocker === '') ok('growth feedback: ready (no blocker)')
+  else fail(`expected no growth blocker when ready, got ${JSON.stringify(loaded.growthBlocker)}`)
   if (loaded.growthAffordable === 'true') ok('growth is affordable from the main stock')
   else fail(`expected affordable growth, got ${loaded.growthAffordable}`)
 
@@ -178,11 +183,11 @@ try {
   } else {
     fail(`expected Material to be spent, got ${materialBefore} -> ${afterOne.construction}`)
   }
-  const grown = await page.evaluate(() => window.__nova.buildingAt({ x: 0, y: 1 }))
+  const grown = await page.evaluate(() => window.__nova.buildingAt({ x: 2, y: 0 }))
   if (grown !== null && grown.type === 'residence') {
-    ok(`autonomous Residence at 0,1 (${grown.status ?? 'under construction'})`)
+    ok(`autonomous Residence at 2,0 (${grown.status ?? 'under construction'})`)
   } else {
-    fail(`expected a Residence at 0,1, got ${JSON.stringify(grown)}`)
+    fail(`expected a Residence at 2,0, got ${JSON.stringify(grown)}`)
   }
   await page.screenshot({ path: resolve(ART, '02-growth-started.png') })
 
@@ -190,7 +195,7 @@ try {
   await step(page)
   await step(page)
   const afterBuild = await stats(page)
-  const operationalGrown = await page.evaluate(() => window.__nova.buildingAt({ x: 0, y: 1 }))
+  const operationalGrown = await page.evaluate(() => window.__nova.buildingAt({ x: 2, y: 0 }))
   if (operationalGrown?.status === 'operational') {
     ok(`autonomous Residence completed through the normal lifecycle (${afterBuild.operational} operational)`)
   } else {
@@ -215,8 +220,35 @@ try {
     fail(`growth still running: ${buildingsGrown} -> ${stable.buildings}`)
   }
   await page.screenshot({ path: resolve(ART, '03-growth-bounded.png') })
+  if (stable.growthBlocker !== '') {
+    ok(`growth feedback names the real constraint when stopped: ${stable.growthBlocker}`)
+  } else {
+    fail('expected a growth blocker after saturation')
+  }
 
-  // 6. The player-controlled Residence path still works.
+  // 6. Changing the Material condition changes growth behaviour.
+  await loadTownFixture(page, 0)
+  await wait(300)
+  const blocked = await stats(page)
+  if (blocked.growthBlocker === 'unaffordable' && blocked.growthDemand === 'true') {
+    ok('growth demand exists but is blocked by Material (unaffordable)')
+  } else {
+    fail(`expected an unaffordable growth blocker, got ${JSON.stringify(blocked.growthBlocker)}`)
+  }
+  const beforeAffordable = Number(blocked.buildings)
+  for (let i = 0; i < 12; i += 1) {
+    await step(page)
+    if (Number((await stats(page)).buildings) > beforeAffordable) break
+  }
+  const afterAffordable = await stats(page)
+  if (Number(afterAffordable.buildings) > beforeAffordable) {
+    ok(`growth resumed once Material accumulated (${beforeAffordable} -> ${afterAffordable.buildings})`)
+  } else {
+    fail(`growth did not resume after affordability (${beforeAffordable} -> ${afterAffordable.buildings})`)
+  }
+  await page.screenshot({ path: resolve(ART, '04-affordability-gate.png') })
+
+  // 7. The player-controlled Residence path still works.
   await page.selectOption('[data-testid="scenario-select"]', 'default')
   await wait(300)
   await page.click('[data-testid="simulation-pause"]')

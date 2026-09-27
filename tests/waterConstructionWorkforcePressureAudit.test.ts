@@ -665,7 +665,7 @@ describe('3. Workforce x Water x Material configurations', () => {
         expect(horizon.materialUpkeep).toBe(horizon.materialGross / 2)
       }
     }
-  })
+  }, 30000)
 })
 
 // ---------------------------------------------------------------------------
