@@ -28,11 +28,15 @@ import {
   getRoadIdAtCell,
   getRoadNetworks,
   isOperationalRoad,
+  normalizeRoadCells,
+  ROAD_CONSTRUCTION_COST,
 } from '../../domain/road/road.js'
 import type { CellCoordinate } from '../../domain/world/grid.js'
 import {
   validatePlacement,
+  validateRoadsPlacement,
   type PlacementValidation,
+  type RoadPlacementValidation,
 } from '../../domain/simulation/phases.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 import { getWaterCoverage } from '../../domain/water/water.js'
@@ -85,6 +89,63 @@ export const getPlacementAffordability = (
     materialAvailable: stock.construction,
     waterRequired,
     waterAvailable: stock.water,
+    coveredBySameTickInflow,
+  }
+}
+
+/**
+ * Road placement affordability query (Step 10CS).
+ *
+ * The second Material expenditure path gets the same contract as
+ * `getPlacementAffordability`: ONE derived predicate that predicts what the
+ * authoritative dispatch gate will accept, so the hover/commit feedback can
+ * never refuse a road the domain would build.
+ *
+ * Why the same-tick inflow clause exists: the construction transaction runs
+ * mid-tick, AFTER `produceMaterial` stored this tick's output and AFTER
+ * `creditMaterialIncome` credited this tick's income. A road set whose cost is
+ * covered by `stock + stored production + income` is therefore accepted even
+ * when the current stock alone is short.
+ *
+ * Deliberately NOT generalised to the protected Storage reserve: Step 10BJ
+ * releases that reserve for valid BUILDING commands only, and road placement
+ * has no Water cost. The clause mirrors exactly the road pipeline, nothing
+ * more.
+ */
+export interface RoadPlacementAffordability {
+  /** The authoritative validation result for the cell set (unchanged). */
+  readonly placement: RoadPlacementValidation
+  /**
+   * True when the authoritative dispatch gate would accept this road set:
+   * `placement.valid`, or Material covered by this tick's inflow.
+   */
+  readonly affordable: boolean
+  readonly materialRequired: number
+  readonly materialAvailable: number
+  /** True when this tick's stored production or income completes the cost. */
+  readonly coveredBySameTickInflow: boolean
+}
+
+export const getRoadsPlacementAffordability = (
+  state: SimulationState,
+  cells: readonly CellCoordinate[]
+): RoadPlacementAffordability => {
+  const placement = validateRoadsPlacement(state, cells)
+  const materialRequired =
+    normalizeRoadCells(cells).length * ROAD_CONSTRUCTION_COST
+  const materialAvailable = getResourceStock(state).construction
+  const coveredBySameTickInflow =
+    !placement.valid &&
+    placement.reason === 'insufficientResources' &&
+    materialAvailable +
+      getMaterialStoredProductionPerTick(state) +
+      getWorkforceIncome(state) >=
+      materialRequired
+  return {
+    placement,
+    affordable: placement.valid || coveredBySameTickInflow,
+    materialRequired,
+    materialAvailable,
     coveredBySameTickInflow,
   }
 }

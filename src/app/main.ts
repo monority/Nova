@@ -54,6 +54,7 @@ import {
   getMaterialStorageCapacity,
   getMaterialStoredProductionPerTick,
   getPlacementAffordability,
+  getRoadsPlacementAffordability,
   getWorkforceIncome,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
@@ -73,8 +74,8 @@ import {
   WATER_PER_WELL_PER_TICK,
   expandRoadDrag,
   ROAD_CONSTRUCTION_COST,
-  validateRoadsPlacement,
   type CellCoordinate,
+  type RoadPlacementAffordability,
   getRoadNetworkCount,
   getResourceStock,
   INITIAL_CONSTRUCTION_MATERIAL,
@@ -1251,14 +1252,23 @@ const describeCellStatus = (cell: CellCoordinate): string => {
 }
 
 /**
- * Road feedback from the authoritative 09C validator — the UI never
- * re-implements bounds, occupancy, collision, cost or affordability.
+ * Road feedback from the authoritative 09C validator plus the Step 10CS
+ * affordability predicate — the UI never re-implements bounds, occupancy,
+ * collision, cost or affordability.
  */
-const describeRoadCells = (cells: readonly CellCoordinate[]): string => {
-  const validation = validateRoadsPlacement(controller.getState(), cells)
+const describeRoadCells = (
+  cells: readonly CellCoordinate[],
+  affordability: RoadPlacementAffordability
+): string => {
   const prefix = `road ${cells.length} cell${cells.length === 1 ? '' : 's'}`
+  const validation = affordability.placement
   if (validation.valid) {
-    return `${prefix} — ready · material ${validation.totalCost}`
+    return `${prefix} — ready · material ${affordability.materialRequired}`
+  }
+  // Step 10CS: same-tick stored production and workforce income complete a
+  // shortfall exactly as they do for buildings, so the hover says so.
+  if (affordability.coveredBySameTickInflow) {
+    return `${prefix} — ready · material ${affordability.materialRequired} (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored + ${getWorkforceIncome(controller.getState())} income)`
   }
   switch (validation.reason) {
     case 'emptyCells':
@@ -1273,7 +1283,7 @@ const describeRoadCells = (cells: readonly CellCoordinate[]): string => {
     case 'cellOccupiedByRoad':
       return `${prefix} — road already exists here`
     case 'insufficientResources':
-      return `${prefix} — insufficient material (${getResourceStock(controller.getState()).construction}/${cells.length * ROAD_CONSTRUCTION_COST})`
+      return `${prefix} — insufficient material (${affordability.materialAvailable}/${affordability.materialRequired})`
   }
 }
 
@@ -1309,11 +1319,11 @@ const updateHover = (clientX: number, clientY: number): void => {
     )
     return
   }
-  const validation = validateRoadsPlacement(controller.getState(), cells)
-  novaRenderer.showRoadPreview(cells, validation.valid)
-  setStatus(describeRoadCells(cells))
+  const affordability = getRoadsPlacementAffordability(controller.getState(), cells)
+  novaRenderer.showRoadPreview(cells, affordability.affordable)
+  setStatus(describeRoadCells(cells, affordability))
   roadDragCells = cells
-  roadDragValid = validation.valid
+  roadDragValid = affordability.affordable
 }
 
 /**
@@ -1332,9 +1342,9 @@ const commitRoadPlacement = (): void => {
     setStatus('road placement rejected — no valid cells in this gesture')
     return
   }
-  const validation = validateRoadsPlacement(controller.getState(), cells)
-  if (!validation.valid) {
-    setStatus(describeRoadCells(cells))
+  const affordability = getRoadsPlacementAffordability(controller.getState(), cells)
+  if (!affordability.affordable) {
+    setStatus(describeRoadCells(cells, affordability))
     return
   }
   controller.dispatch({ type: 'placeRoads', cells })
