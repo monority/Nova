@@ -3,7 +3,7 @@
  *
  * DERIVED ONLY. An objective is a small declarative spec evaluated against
  * canonical state; nothing is stored, persisted or hashed, and SAVE_VERSION
- * stays 7. This is deliberately not a quest framework: five requirement kinds
+ * stays 8. This is deliberately not a quest framework: five requirement kinds
  * cover every scenario, and each one maps to an existing authoritative query.
  *
  * Semantics (Step 10AN §5, deliberately a closed set of three states):

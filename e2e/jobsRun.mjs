@@ -95,7 +95,14 @@ async function moveTo(page, cell) {
  */
 async function placeAt(page, cell) {
   const pt = await moveTo(page, cell);
-  await waitFor(async () => (await stats(page)).status.includes('ready'), `valid preview at ${cell.x},${cell.y}`);
+  // Re-issue the move while waiting: the running clock can overwrite a single
+  // hover with a per-tick causal status (Step 10DE E2E synchronization fix).
+  let attempt = 0;
+  await waitFor(async () => {
+    const offset = attempt++ % 2;
+    await page.mouse.move(pt.x + offset, pt.y + offset);
+    return (await stats(page)).status.includes('ready');
+  }, `valid preview at ${cell.x},${cell.y}`);
   const before = Number((await stats(page)).buildings);
   await page.mouse.click(pt.x, pt.y);
   await waitFor(async () => Number((await stats(page)).buildings) === before + 1, `placed at ${cell.x},${cell.y}`);
@@ -105,8 +112,12 @@ async function placeAt(page, cell) {
 async function placeRoad(page, cell) {
   const pt = await moveTo(page, cell);
   await page.mouse.down();
-  await page.mouse.move(pt.x, pt.y, { steps: 2 });
-  await waitFor(async () => (await stats(page)).status.includes('ready'), `road preview at ${cell.x},${cell.y}`);
+  let attempt = 0;
+  await waitFor(async () => {
+    const offset = attempt++ % 2;
+    await page.mouse.move(pt.x + offset, pt.y + offset);
+    return (await stats(page)).status.includes('ready');
+  }, `road preview at ${cell.x},${cell.y}`);
   const before = Number((await stats(page)).roads);
   await page.mouse.up();
   await waitFor(async () => Number((await stats(page)).roads) === before + 1, `road at ${cell.x},${cell.y}`);

@@ -3,7 +3,7 @@
  *
  * DERIVED ONLY. The progression layer OBSERVES the simulation; it never
  * modifies it. Nothing here is stored, persisted or hashed, and
- * SAVE_VERSION stays 7 (Step 10AK established that no new persistent state
+ * SAVE_VERSION stays 8 (Step 10AK established that no new persistent state
  * is required).
  *
  * Only the two transitions the design audit could justify are contracted:

@@ -629,7 +629,7 @@ const affordableFirstDecisions = (
 }
 
 describe('4. Entry conditions', () => {
-  it('shows resources, objective and a first decision for all 8 scenarios', () => {
+  it('shows resources, objective and a first decision for every scenario', () => {
     const rows = SCENARIOS.map((definition) => {
       const state = createScenarioState(config, definition)
       const status = getObjectiveStatus(state, definition.objective)
