@@ -344,6 +344,7 @@ describe('1. the current contract, step by step', () => {
       'src/application/queries/progression.ts',
       'src/application/queries/resources.ts',
       'src/domain/resource/resource.ts',
+      'src/domain/simulation/growth.ts',
       'src/domain/simulation/phases.ts',
       'src/domain/water/water.ts',
     ])

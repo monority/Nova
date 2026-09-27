@@ -263,16 +263,19 @@ describe('1. freeze verification', () => {
       saveVersion: SAVE_VERSION,
     }
     audit('SOURCE_DRIFT', rows)
-    expect(rows.domainFiles).toBe(16)
-    expect(rows.srcFiles).toBe(35)
-    expect(rows.terrainReaders).toBe(8)
+    expect(rows.domainFiles).toBe(17)
+    expect(rows.srcFiles).toBe(37)
+    expect(rows.terrainReaders).toBe(9)
     expect(rows.forbidden).toEqual([])
     // Town is now an explicit derived stage, confined to progression logic.
     // Step 10CI adds two data/display mentions, both allowlisted here because
     // they carry no rule: scenarios.ts names the 'town' stage requirement value
     // in catalogue DATA, and objective.ts renders the 'Town' requirement LABEL.
-    expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts'])
-    expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts'])
+    // Step G1.1: the settlement growth phase consumes the derived Town
+    // boundary (it activates only at Town); its Town threshold mirror is
+    // pinned to the progression query by tests/settlementGrowth.test.ts.
+    expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
+    expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/growth.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
     expect(rows.saveVersion).toBe(8)
   })
 })

@@ -31,6 +31,7 @@ import {
   updatePopulation,
   upkeepBuildings,
 } from './phases.js'
+import { growSettlement } from './growth.js'
 import { getWaterCoverage, hasOperationalWell, waterProductionForTick } from '../water/water.js'
 import { WATER_PER_COLONIST_PER_TICK } from '../resource/resource.js'
 import type { SimulationState } from './state.js'
@@ -107,8 +108,13 @@ export const stepSimulation = (
 
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
+  // Phase 8c: demand-driven settlement growth (Step G1.1). Runs after the
+  // player's command (player priority) and after road progress, before upkeep;
+  // at most one autonomous Residence construction per tick.
+  const grown = growSettlement(progressed)
+
   // Phase 8b: operational upkeep.
-  const maintained = upkeepBuildings(progressed)
+  const maintained = upkeepBuildings(grown)
 
   // Release completed construction crews.
   const released = releaseCompletedConstructionCrew(maintained)

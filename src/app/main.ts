@@ -56,6 +56,7 @@ import {
   getPlacementAffordability,
   getRoadsPlacementAffordability,
   getWorkforceIncome,
+  getGrowthStatus,
   getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getVacantOperationalFarmCount,
@@ -1540,7 +1541,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string; readonly residenceService: string; readonly terrainLegend: string; readonly panelCollapsed: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string; readonly residenceService: string; readonly terrainLegend: string; readonly panelCollapsed: string; readonly growthActive: string; readonly growthDemand: string; readonly growthCell: string; readonly growthAffordable: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -1609,6 +1610,7 @@ window.__nova = {
     const state = controller.getState()
     const forecast = getFoodTicksRemaining(state)
     const employment = getEmploymentSummary(state)
+    const growth = getGrowthStatus(state)
     return {
       tick: ui.tick?.textContent ?? '',
       construction: ui.construction?.textContent ?? '',
@@ -1632,6 +1634,11 @@ window.__nova = {
       residenceService: formatResidenceService(getWaterSupplyStatus(state)),
       terrainLegend: ui.terrain?.style.display === 'none' ? '' : (ui.terrain?.textContent ?? ''),
       panelCollapsed: String(ui.panel?.classList.contains('collapsed') ?? false),
+      // Step G1.1: derived settlement-growth status (never persisted).
+      growthActive: String(growth.active),
+      growthDemand: String(growth.demand),
+      growthCell: growth.cell === null ? '' : `${growth.cell.x},${growth.cell.y}`,
+      growthAffordable: String(growth.affordable),
       hasOperationalWell: String(hasOperationalWell(state)),
       // Step 10AV: terrain as spatial input. `blockedCells` is the canonical
       // state projection; `terrainInstances` is what the renderer actually

@@ -1649,6 +1649,7 @@ describe('16. architecture audit', () => {
       'src/application/persistence/save.ts',
       'src/application/queries/renderSnapshot.ts',
       'src/application/scenarios.ts',
+      'src/domain/simulation/growth.ts',
       'src/domain/simulation/phases.ts',
       'src/domain/simulation/state.ts',
       'src/domain/world/grid.ts',

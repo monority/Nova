@@ -1253,6 +1253,6 @@ describe('12. determinism, save/load, frozen architecture', () => {
     }
     audit('FROZEN_ARCHITECTURE', named)
     expect(named.candidateIdentifiers).toEqual([])
-    expect(named.terrainReaders).toBe(8)
+    expect(named.terrainReaders).toBe(9)
   })
 })
