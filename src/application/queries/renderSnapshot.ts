@@ -89,6 +89,13 @@ export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
       workerCounts.set(workplaceId, (workerCounts.get(workplaceId) ?? 0) + 1)
     }
   }
+  const allRoads = [...iterateRoads(state)]
+  const operationalRoadCells = new Set(
+    allRoads
+      .filter((candidate) => candidate.status === 'operational')
+      .map((candidate) => cellKey(candidate))
+  )
+
   return {
     tick: state.time.tick,
     world: {
@@ -114,12 +121,12 @@ export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
             })()
           : null,
     })),
-    roads: [...iterateRoads(state)].map((r) => ({
+    roads: allRoads.map((r) => ({
       id: r.id,
       x: r.x,
       y: r.y,
       status: r.status,
-      connections: roadConnections(state, r),
+      connections: roadConnections(r, operationalRoadCells),
     })),
     blockedCells: listBlockedCells(state.config.world).map((cell) => ({
       x: cell.x,
@@ -133,17 +140,12 @@ export const toRenderSnapshot = (state: SimulationState): RenderSnapshot => {
  * under-construction roads are neither segments nor connectors (09D).
  */
 const roadConnections = (
-  state: SimulationState,
-  road: { readonly x: number; readonly y: number; readonly status: RoadStatus }
+  road: { readonly x: number; readonly y: number; readonly status: RoadStatus },
+  operationalCells: ReadonlySet<string>
 ): RenderRoadConnections => {
   if (road.status !== 'operational') {
     return NO_CONNECTIONS
   }
-  const operationalCells = new Set(
-    [...iterateRoads(state)]
-      .filter((candidate) => candidate.status === 'operational')
-      .map((candidate) => cellKey(candidate))
-  )
   return {
     north: operationalCells.has(cellKey({ x: road.x, y: road.y - 1 })),
     east: operationalCells.has(cellKey({ x: road.x + 1, y: road.y })),

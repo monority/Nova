@@ -177,6 +177,10 @@ export const getConnectedRoadIds = (
   const byId = new Map<string, RoadState>(
     operational.map((roadState) => [roadState.id, roadState])
   )
+  const byCell = new Map<string, RoadState>()
+  for (const roadState of operational) {
+    byCell.set(cellKey(roadState), roadState)
+  }
 
   for (let cursor = 0; cursor < queue.length; cursor++) {
     const currentId = queue[cursor]!
@@ -184,8 +188,20 @@ export const getConnectedRoadIds = (
     if (current === undefined) {
       continue
     }
-    for (const candidate of operational) {
-      if (!visited.has(candidate.id) && areRoadsAdjacent(current, candidate)) {
+    const neighbors: RoadState[] = []
+    const up = byCell.get(cellKey({ x: current.x, y: current.y - 1 }))
+    if (up !== undefined) neighbors.push(up)
+    const down = byCell.get(cellKey({ x: current.x, y: current.y + 1 }))
+    if (down !== undefined) neighbors.push(down)
+    const left = byCell.get(cellKey({ x: current.x - 1, y: current.y }))
+    if (left !== undefined) neighbors.push(left)
+    const right = byCell.get(cellKey({ x: current.x + 1, y: current.y }))
+    if (right !== undefined) neighbors.push(right)
+
+    neighbors.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+    for (const candidate of neighbors) {
+      if (!visited.has(candidate.id)) {
         visited.add(candidate.id)
         queue.push(candidate.id)
       }
@@ -263,6 +279,10 @@ export const getRoadDistance = (
   const byId = new Map<string, RoadState>(
     operational.map((road) => [road.id, road])
   )
+  const byCell = new Map<string, RoadState>()
+  for (const road of operational) {
+    byCell.set(cellKey(road), road)
+  }
   const targets = new Set(targetRoadIds)
   const distanceById = new Map<string, number>()
   const queue: string[] = []
@@ -284,11 +304,20 @@ export const getRoadDistance = (
     if (current === undefined) {
       continue
     }
-    for (const candidate of operational) {
-      if (
-        !distanceById.has(candidate.id) &&
-        areRoadsAdjacent(current, candidate)
-      ) {
+    const neighbors: RoadState[] = []
+    const up = byCell.get(cellKey({ x: current.x, y: current.y - 1 }))
+    if (up !== undefined) neighbors.push(up)
+    const down = byCell.get(cellKey({ x: current.x, y: current.y + 1 }))
+    if (down !== undefined) neighbors.push(down)
+    const left = byCell.get(cellKey({ x: current.x - 1, y: current.y }))
+    if (left !== undefined) neighbors.push(left)
+    const right = byCell.get(cellKey({ x: current.x + 1, y: current.y }))
+    if (right !== undefined) neighbors.push(right)
+
+    neighbors.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+    for (const candidate of neighbors) {
+      if (!distanceById.has(candidate.id)) {
         distanceById.set(candidate.id, distance + 1)
         queue.push(candidate.id)
       }
