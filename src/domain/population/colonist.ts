@@ -18,6 +18,8 @@
  * site, never both. There is no generic Task/Assignment abstraction.
  */
 
+import type { BuildingType } from '../building/building.js'
+
 /**
  * How this colonist's workplace was chosen.
  *
@@ -64,3 +66,16 @@ export interface ColonistState {
 export const MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK = 1
 export const MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK = 1
 export const MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK = 2
+
+/**
+ * Deterministic per-tick Material income rate for a colonist employed at a
+ * given workplace type (Step 10CQ).
+ */
+export const getWorkplaceMaterialIncomeRate = (
+  workplaceType: BuildingType
+): number => {
+  if (workplaceType === 'farm') return MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
+  if (workplaceType === 'well') return MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
+  if (workplaceType === 'workshop') return MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+  return 0
+}

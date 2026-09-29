@@ -66,11 +66,7 @@ import {
   getDistanceBetweenAccesses,
 } from '../mobility/mobility.js'
 import type { ColonistState } from '../population/colonist.js'
-import {
-  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
-} from '../population/colonist.js'
+import { getWorkplaceMaterialIncomeRate } from '../population/colonist.js'
 import {
   getBuildingRoadAccess,
   getBuildingRoadAccessWithNetworks,
@@ -1430,9 +1426,7 @@ export const creditMaterialIncome = (state: SimulationState): SimulationState =>
     if (colonist.constructionAssignmentId !== null) continue
     const workplace = state.buildings[colonist.workplaceId]
     if (workplace === undefined || workplace.status !== 'operational') continue
-    if (workplace.type === 'farm') totalIncome += MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
-    else if (workplace.type === 'well') totalIncome += MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
-    else if (workplace.type === 'workshop') totalIncome += MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+    totalIncome += getWorkplaceMaterialIncomeRate(workplace.type)
   }
   if (totalIncome <= 0) return state
   return {

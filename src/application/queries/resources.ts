@@ -172,7 +172,7 @@ export const isFoodSupplySustainable = (state: SimulationState): boolean => {
  * Derived, never stored, never persisted, never hashed.
  */
 export const getProductiveWorkerCount = (state: SimulationState): number =>
-  countEmployedWorkers(state)
+  countStaffedOperationalWorkshops(state)
 
 /**
  * Deterministic construction-material output per tick (Step 07C §6, gated by
