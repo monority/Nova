@@ -16,11 +16,7 @@ import {
   type ConstructionCrewReason,
   type ReassignmentReason,
 } from '../../domain/simulation/phases.js'
-import {
-  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
-} from '../../domain/population/colonist.js'
+import { getWorkplaceMaterialIncomeRate } from '../../domain/population/colonist.js'
 import { areBuildingsMobilityConnected } from '../../domain/mobility/mobility.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
@@ -194,10 +190,7 @@ export const getBuildingInspection = (
       .reduce((sum, colonist) => {
         if (building.status !== 'operational') return sum
         if (colonist.workplaceId === null) return sum
-        if (building.type === 'farm') return sum + MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
-        if (building.type === 'well') return sum + MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
-        if (building.type === 'workshop') return sum + MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
-        return sum
+        return sum + getWorkplaceMaterialIncomeRate(building.type)
       }, 0),
   }
 }
@@ -248,9 +241,7 @@ export const getColonistInspection = (
   if (colonist.workplaceId !== null && colonist.constructionAssignmentId === null) {
     const workplace = state.buildings[colonist.workplaceId]
     if (workplace !== undefined && workplace.status === 'operational') {
-      if (workplace.type === 'farm') materialIncome = MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
-      else if (workplace.type === 'well') materialIncome = MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
-      else if (workplace.type === 'workshop') materialIncome = MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+      materialIncome = getWorkplaceMaterialIncomeRate(workplace.type)
     }
   }
   return {
@@ -449,9 +440,7 @@ export const getWorkforceIncome = (state: SimulationState): number => {
     if (colonist.workplaceId === null || colonist.constructionAssignmentId !== null) continue
     const workplace = state.buildings[colonist.workplaceId]
     if (workplace === undefined || workplace.status !== 'operational') continue
-    if (workplace.type === 'farm') total += MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
-    else if (workplace.type === 'well') total += MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
-    else if (workplace.type === 'workshop') total += MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
+    total += getWorkplaceMaterialIncomeRate(workplace.type)
   }
   return total
 }
