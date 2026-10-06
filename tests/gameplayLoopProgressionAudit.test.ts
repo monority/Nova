@@ -33,6 +33,7 @@ import {
   getRevenuePerTick,
   getMaintenanceDuePerTick,
   getNetMoneyPerTick,
+  maintenanceDueForTick,
   getPlacementAffordability,
   getPopulationCount,
   getResourceStock,
@@ -155,7 +156,7 @@ interface Snapshot {
   readonly materialProduction: number
   readonly materialUpkeep: number
   readonly materialNet: number
-  readonly storageCapacity: number
+  readonly maintenance: number
   readonly employed: number
   readonly unemployed: number
   readonly jobCapacity: number
@@ -199,7 +200,7 @@ const snapshot = (state: SimulationState): Snapshot => {
     materialProduction: getRevenuePerTick(state),
     materialUpkeep: getMaintenanceDuePerTick(state),
     materialNet: getNetMoneyPerTick(state),
-    storageCapacity: getMaterialStorageCapacity(state),
+    maintenance: maintenanceDueForTick(state),
     employed: employment.employed,
     unemployed: employment.unemployed,
     jobCapacity,
@@ -1160,7 +1161,7 @@ describe('11-14. Failure, readability, content and scenarios', { timeout: 30000 
     const statFields = [
       'tick', 'buildings', 'operational', 'farms', 'workshops', 'colonists', 'jobs', 'employed',
       'unemployed', 'jobCapacity', 'construction', 'materialProduction', 'materialUpkeep',
-      'netMaterial', 'storageCapacity', 'storedProduction', 'accessibleBuildings', 'farmIds',
+      'netMaterial', 'accessibleBuildings', 'farmIds',
       'staffedFarmIds', 'vacantOperationalFarms', 'manualWorkerIds', 'crewWorkerIds',
       'crewedSiteIds', 'contractors', 'roadNetworks', 'buildingsWithRoadAccess',
       'productionBlockedByRoad', 'roads', 'operationalRoads', 'mobilityConnectedColonists',
@@ -1301,8 +1302,8 @@ describe('15-16. Progression signals and architecture boundary', { timeout: 3000
       ),
       stock: getResourceStock(a),
     })
-    expect(saved.version).toBe(8)
-    expect(SAVE_VERSION).toBe(8)
+    expect(saved.version).toBe(9)
+    expect(SAVE_VERSION).toBe(9)
     expect(Object.keys(saved.state)).toHaveLength(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))

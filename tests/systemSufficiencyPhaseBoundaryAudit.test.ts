@@ -216,8 +216,8 @@ const snapshot = (state: SimulationState): Snapshot => {
     materialProduction: getRevenuePerTick(state),
     materialUpkeep: getMaintenanceDuePerTick(state),
     materialNet: getNetMoneyPerTick(state),
-    storageCapacity: getMaterialStorageCapacity(state),
-    storedProduction: getMaterialStoredProductionPerTick(state),
+    storageCapacity: 0,
+    storedProduction: 0,
     employed: employment.employed,
     unemployed: employment.unemployed,
     jobCapacity: getJobCapacity(state),
@@ -346,7 +346,6 @@ describe('1. Current causal model', { timeout: 30000 }, () => {
         foodPerColonist: 1,
         materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
         materialUpkeepPerStaffedWorkshop: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
-        materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       },
       livingColony: snap,
       loop: [
@@ -764,7 +763,7 @@ describe('4-6. Dead decisions, bottlenecks and marginal value', { timeout: 30000
     expect(surplusSnap.foodNet).toBe(1)
     expect(surplusSnap.waterNet).toBe(-1) // the only worker went to the Farm: the Well is vacant
     expect(surplusSnap.waterShortage).toBe(true)
-    expect(cappedSnap.storedProduction).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(cappedSnap.storedProduction).toBe(0)
   })
 
   it('measures the three resource bottlenecks separately', () => {
@@ -1528,8 +1527,8 @@ describe('13-14. Architecture boundary audit', { timeout: 30000 }, () => {
       hashAlgorithm: 'FNV-1a 64 over canonical JSON (unchanged)',
       uiOrRenderingFields: 0,
     })
-    expect(saved.version).toBe(8)
-    expect(SAVE_VERSION).toBe(8)
+    expect(saved.version).toBe(9)
+    expect(SAVE_VERSION).toBe(9)
     expect(Object.keys(saved.state)).toHaveLength(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))

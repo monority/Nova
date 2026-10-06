@@ -38,7 +38,6 @@ import {
   type SimulationConfig,
   type SimulationState,
 } from '@/index'
-import { PROTECTED_MATERIAL_RESERVE } from '@/domain/storage/storage.js'
 
 const config: SimulationConfig = {
   world: { seed: 'nova-step10dd', width: 16, height: 12 },
@@ -238,11 +237,12 @@ describe('10DD — spatial depth: placement and road topology', () => {
 
   it('a roadless workplace produces nothing until a 5-Material road restores it', () => {
     const stranded = build({ residences: 1, workshops: 1, colonists: 1, roads: false, water: 1 })
-    expect(getRevenuePerTick(stranded)).toBe(0)
+    // Roadless: no commerce, but the inhabitant tax still flows.
+    expect(getRevenuePerTick(stranded)).toBe(1)
     expect(getPopulationCount(stranded)).toBe(1)
 
     const connected = build({ residences: 1, workshops: 1, colonists: 1, material: 100, water: 1 })
-    expect(getRevenuePerTick(connected)).toBe(2)
+    expect(getRevenuePerTick(connected)).toBe(3)
   })
 })
 
@@ -254,26 +254,26 @@ describe('10DD — workforce depth', () => {
 
     expect(getFoodProductionPerTick(farm)).toBe(2)
     expect(getWaterProductionPerTick(well)).toBe(2)
-    expect(getRevenuePerTick(workshop)).toBe(2)
+    expect(getRevenuePerTick(workshop)).toBe(3)
 
     // Income and upkeep differ by workplace: the allocation is a real
-    // trade-off. Workshop-only income: only the Workshop worker earns
-    // Material; Farm/Well employment pays in its own resource instead.
-    expect(getRevenuePerTick(farm)).toBe(0)
-    expect(getRevenuePerTick(well)).toBe(0)
-    expect(getRevenuePerTick(workshop)).toBe(2)
-    expect(getMaintenanceDuePerTick(workshop)).toBe(1)
-    expect(getMaintenanceDuePerTick(farm)).toBe(0)
+    // trade-off. Commerce is Workshop-only; the inhabitant tax flows everywhere.
+    expect(getRevenuePerTick(farm)).toBe(1)
+    expect(getRevenuePerTick(well)).toBe(1)
+    expect(getRevenuePerTick(workshop)).toBe(3)
+    expect(getMaintenanceDuePerTick(workshop)).toBe(2)
+    expect(getMaintenanceDuePerTick(farm)).toBe(2)
   })
 
   it('mobility gates assignment: a disconnected workplace stays vacant', () => {
     const disconnected = build({ residences: 1, workshops: 1, colonists: 1, roads: false, water: 1 })
     expect(getEmploymentSummary(disconnected).employed).toBe(0)
-    expect(getRevenuePerTick(disconnected)).toBe(0)
+    // Vacant: no commerce, but the inhabitant tax still flows.
+    expect(getRevenuePerTick(disconnected)).toBe(1)
 
     const connected = build({ residences: 1, workshops: 1, colonists: 1, water: 1 })
     expect(getEmploymentSummary(connected).employed).toBe(1)
-    expect(getRevenuePerTick(connected)).toBe(2)
+    expect(getRevenuePerTick(connected)).toBe(3)
   })
 
   it('the same start with different allocations diverges over time', () => {
@@ -299,30 +299,31 @@ describe('10DD — workforce depth', () => {
 })
 
 describe('10DD — economic and temporal depth', () => {
-  it('Material inflow is bounded by the Workshop cap while income bypasses it', () => {
+  it('treasury is uncapped: revenue lands in full at any balance', () => {
     const base = build({ residences: 1, workshops: 1, colonists: 1, material: 0, water: 1 })
-    expect(getMaterialStorageCapacity(base)).toBe(25)
-    // Below the cap: stored 2 + income 2 - upkeep 1 = +3/tick.
-    expect(getNetMoneyPerTick(base)).toBe(1) // production - upkeep (income is separate)
+    // Uncapped treasury: revenue 3 (1 tax + 2 commerce), maintenance 2.
+    expect(getRevenuePerTick(base)).toBe(3)
+    expect(getMaintenanceDuePerTick(base)).toBe(2)
+    // Net +1/tick: revenue 3 (1 tax + 2 commerce) minus maintenance 2.
+    expect(getNetMoneyPerTick(base)).toBe(1)
     const below = runTicks(base, 1)
-    expect(below.resources.money).toBe(3)
+    // Net +1/tick (revenue 3 − maintenance 2) from a zero stock.
+    expect(below.resources.money).toBe(1)
 
     const atCap = build({ residences: 1, workshops: 1, colonists: 1, material: 25, water: 1 })
     const above = runTicks(atCap, 1)
-    // Stored production is 0 at the cap; income still grows the stock.
+    // No cap: the same +1 net lands above 25 as below it.
     expect(above.resources.money).toBe(26)
   })
 
-  it('the protected reserve funds buildings but never roads', () => {
+  it('an empty treasury funds nothing: buildings and roads both refuse at 0 money', () => {
     let state = createInitialState(config)
     state = {
       ...state,
       resources: { ...state.resources, money: 0 },
-      storage: { ...state.storage, material: 40 },
     }
-    expect(getPlacementAffordability(state, { x: 6, y: 6 }, 'residence').affordable).toBe(true)
+    expect(getPlacementAffordability(state, { x: 6, y: 6 }, 'residence').affordable).toBe(false)
     expect(getRoadsPlacementAffordability(state, [{ x: 6, y: 6 }]).affordable).toBe(false)
-    expect(PROTECTED_MATERIAL_RESERVE).toBe(15)
   })
 
   it('construction costs time and upkeep starts only once operational and staffed', () => {
@@ -336,7 +337,8 @@ describe('10DD — economic and temporal depth', () => {
     })
     const placed = Object.values(state.buildings).find((b) => b.type === 'workshop')
     expect(placed?.status).toBe('underConstruction')
-    expect(getMaintenanceDuePerTick(state)).toBe(0)
+    // The residence is already operational, so its upkeep is due.
+    expect(getMaintenanceDuePerTick(state)).toBe(1)
 
     // Operationally complete after the catalog's two ticks (staffing then applies).
     state = runTicks(state, 2)
@@ -364,8 +366,8 @@ describe('10DD — economic and temporal depth', () => {
 })
 
 describe('10DD — persistence and replay evidence', () => {
-  it('keeps SAVE_VERSION 8 with deterministic divergent states', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('keeps SAVE_VERSION 9 with deterministic divergent states', () => {
+    expect(SAVE_VERSION).toBe(9)
   })
 })
 

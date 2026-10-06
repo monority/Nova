@@ -40,7 +40,6 @@ import {
   getRevenuePerTick,
 
   commerceRevenueForTick,
-  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
 
   assignJobs,
   countStaffedOperationalFarms,

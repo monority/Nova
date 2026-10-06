@@ -14,8 +14,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  payMaintenance,
-
   applyCommand,
   assignJobs,
   countStaffedOperationalWells,

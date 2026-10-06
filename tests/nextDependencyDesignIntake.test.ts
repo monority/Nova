@@ -25,6 +25,7 @@ import {
   hashCanonicalState,
   loadSave,
   SAVE_VERSION,
+  maintenanceDueForTick,
   serializeCanonicalState,
   serializeSave,
   stepSimulation,
@@ -272,7 +273,7 @@ describe('§3 — missing causal dependencies (surface evidence)', () => {
 describe('§17 — baseline health', () => {
   it('SAVE_VERSION, determinism and save/load remain intact', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 5 })
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))
     const a = advance(state, 60)

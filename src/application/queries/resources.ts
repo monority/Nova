@@ -5,19 +5,14 @@
  */
 
 import {
-  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
-  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
-  TAX_PER_INHABITANT_PER_TICK,
   type ResourceStock,
 } from '../../domain/resource/resource.js'
 import { countEmployedWorkers } from '../../domain/jobs/jobs.js'
 import { iterateBuildings } from '../../domain/housing/housing.js'
 import {
   commerceRevenueForTick,
-  countConnectedOperationalWorkshops,
-  countOperationalBuildings,
   countOperationalFarms,
   countStaffedOperationalFarms,
   countStaffedOperationalWorkshops,

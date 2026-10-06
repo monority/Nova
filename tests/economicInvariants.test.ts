@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   commerceRevenueForTick,
   getCommerceRevenuePerTick,
-  payMaintenance,
 
   BUILDING_CATALOG,
   countStaffedOperationalWorkshops,
@@ -489,7 +488,7 @@ describe('economic invariants (Step 08D)', () => {
   })
 
   it('save/hash (§8) — SAVE_VERSION 4, round-trip stable, no upkeep fields', () => {
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     const state = stepSimulation(colony(2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('upkeep')

@@ -890,7 +890,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
       reading:
         'the round-trip guard forbids unknown fields, so terrain inside config.world requires (a) the validator to carry the field and (b) a decision: omit-when-empty (no version bump, terrain-free saves and hashes unchanged) or always-present (SAVE_VERSION 7 -> 8 with a migration). Neither is done here.',
     })
-    expect(raw.version).toBe(8)
+    expect(raw.version).toBe(9)
     expect(Object.keys(raw.state)).toHaveLength(8)
     expect(rejected).not.toBeNull()
   })
@@ -912,7 +912,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
       hashB: hashCanonicalState(b.state),
       identical: hashCanonicalState(a.state) === hashCanonicalState(b.state),
       canonicalJsonHasNoTerrainField: !canonicalJson(a.state).includes('blocked'),
-      storageCapacity: getMaterialStorageCapacity(a.state),
+      storageCapacity: 0,
     })
     expect(hashCanonicalState(a.state)).toBe(hashCanonicalState(b.state))
     expect(canonicalJson(a.state)).not.toContain('blocked')
@@ -955,7 +955,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
     expect(nonGoals).toHaveLength(13)
     expect(frozen.roadCost).toBe(5)
     expect(frozen.scenarioCount).toBe(7)
-    expect(frozen.saveVersion).toBe(8)
+    expect(frozen.saveVersion).toBe(9)
     // Terrain is design-only: the real scenario set is untouched.
     expect(findScenario('partitioned-valley')).toBeUndefined()
     expect(SCENARIOS_UNCHANGED())

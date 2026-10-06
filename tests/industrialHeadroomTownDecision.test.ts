@@ -359,7 +359,6 @@ describe('1. frozen baseline', () => {
       upkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
-      storagePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       saveVersion: SAVE_VERSION,
       scenarios: SCENARIOS.length,
     }
@@ -379,7 +378,7 @@ describe('1. frozen baseline', () => {
     expect(contract.well).toBe(2)
     expect(contract.workshop).toBe(2)
     expect(contract.upkeep).toBe(1)
-    expect(contract.saveVersion).toBe(8)
+    expect(contract.saveVersion).toBe(9)
     // 7 when this audit ran; Step 10BE added one content scenario and Step
     // 10CI added three Town-goal scenarios (rates below untouched).
     expect(contract.scenarios).toBe(11)

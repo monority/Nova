@@ -203,7 +203,7 @@ const snapshot = (state: SimulationState): Snapshot => {
     materialProduction: getRevenuePerTick(state),
     materialUpkeep: getMaintenanceDuePerTick(state),
     materialNet: getNetMoneyPerTick(state),
-    storageCapacity: getMaterialStorageCapacity(state),
+    storageCapacity: 0,
     employed: employment.employed,
     unemployed: employment.unemployed,
     jobCapacity: getJobCapacity(state),
@@ -1218,8 +1218,8 @@ describe('20-22. Final design contract and architecture', { timeout: 30000 }, ()
       ),
       stock: getResourceStock(a),
     })
-    expect(saved.version).toBe(8)
-    expect(SAVE_VERSION).toBe(8)
+    expect(saved.version).toBe(9)
+    expect(SAVE_VERSION).toBe(9)
     expect(Object.keys(saved.state)).toHaveLength(8)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))

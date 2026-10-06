@@ -224,6 +224,7 @@ interface Snapshot {
   readonly materialUpkeep: number
   readonly materialNet: number
   readonly storageCapacity: number
+  readonly maintenance: number
   readonly operationalBuildings: number
   readonly residences: number
   readonly roads: number
@@ -270,7 +271,8 @@ const snapshot = (state: SimulationState): Snapshot => {
     materialProduction,
     materialUpkeep,
     materialNet: getNetMoneyPerTick(state),
-    storageCapacity: getMaterialStorageCapacity(state),
+    storageCapacity: 0,
+    maintenance: getMaintenanceDuePerTick(state),
     operationalBuildings: [...iterateBuildings(state)].filter((b) => b.status === 'operational').length,
     residences: [...iterateBuildings(state)].filter((b) => b.type === 'residence').length,
     roads: Object.keys(state.roads).length,
@@ -1250,8 +1252,8 @@ describe('11. Architecture invariants (src-immutable audit)', { timeout: 30000 }
         present: serializeCanonicalState(a).includes(term),
       })),
     })
-    expect(saved.version).toBe(8)
-    expect(SAVE_VERSION).toBe(8)
+    expect(saved.version).toBe(9)
+    expect(SAVE_VERSION).toBe(9)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serializeCanonicalState(a)).not.toContain('coverage')

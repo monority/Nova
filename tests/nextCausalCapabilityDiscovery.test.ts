@@ -336,7 +336,7 @@ describe('1. delta-only closed capability matrix', () => {
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
       materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
       materialUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
-      materialStorage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+      materialStorage: 0,
       roadCost: ROAD_CONSTRUCTION_COST,
     }
     audit('FROZEN_BASELINE', frozen)
@@ -344,7 +344,7 @@ describe('1. delta-only closed capability matrix', () => {
     // 10CI added three Town-goal scenarios.
     expect(frozen.scenarioCount).toBe(11)
     expect(frozen.catalogueHasTerrain).toBe(false)
-    expect(frozen.saveVersion).toBe(8)
+    expect(frozen.saveVersion).toBe(9)
     expect(frozen.objectiveKinds).toEqual([
       'building',
       'foodBalance',
@@ -879,7 +879,7 @@ describe('7. candidate E: production timing', () => {
       waterAfterPlacement: withWorkshop.resources.water,
       assignment,
       after40,
-      storageCap: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+      storageCap: 0,
     })
     // The Workshop can only run by displacing a survival worker: the burst buys
     // Material for a bounded number of ticks and cannot be sustained (10AQ).
@@ -1223,7 +1223,7 @@ describe('12. determinism, save/load, frozen architecture', () => {
     audit('AUDIT_FIXTURE_DETERMINISM', rows)
     expect(rows.deterministic).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
-    expect(rows.saveVersion).toBe(8)
+    expect(rows.saveVersion).toBe(9)
     expect(rows.terrainFree).toBe(true)
   })
 

@@ -181,7 +181,7 @@ describe('1. freeze verification', () => {
       workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       foodConsumption: FOOD_PER_COLONIST_PER_TICK,
       waterConsumption: WATER_PER_COLONIST_PER_TICK,
-      workshopStorage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+      workshopStorage: 0,
       roadCost: ROAD_CONSTRUCTION_COST,
       roadTicks: ROAD_CONSTRUCTION_TICKS,
       residence: getBuildingDefinition('residence'),
@@ -214,7 +214,7 @@ describe('1. freeze verification', () => {
     expect(frozen.farm).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
-    expect(frozen.saveVersion).toBe(8)
+    expect(frozen.saveVersion).toBe(9)
     // 7 at the freeze; Step 10BE added one curated content scenario and Step
     // 10CI added three Town-goal scenarios
     // (no mechanic, no constant, no objective kind changed).
@@ -275,7 +275,7 @@ describe('1. freeze verification', () => {
     // pinned to the progression query by tests/settlementGrowth.test.ts.
     expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
     expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/growth.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
-    expect(rows.saveVersion).toBe(8)
+    expect(rows.saveVersion).toBe(9)
   })
 })
 
@@ -507,7 +507,7 @@ describe('4. candidate audit', () => {
         ).length,
         storage: [...iterateBuildings(one)].filter(
           (b) => b.type === 'workshop' && b.status === 'operational'
-        ).length * MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+        ).length * 0,
         employed: getEmploymentSummary(one).employed,
         spare: spareWorkers(4),
       },
@@ -518,7 +518,7 @@ describe('4. candidate audit', () => {
         vacantWorkplaces: getEmploymentSummary(two).vacantJobs,
         storage: [...iterateBuildings(two)].filter(
           (b) => b.type === 'workshop' && b.status === 'operational'
-        ).length * MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+        ).length * 0,
         employed: getEmploymentSummary(two).employed,
       },
     }
@@ -527,7 +527,7 @@ describe('4. candidate audit', () => {
     // exist, so the second Workshop (and the survival workplace it displaces)
     // cannot both run. Quantities change, no rule changes.
     expect(rows.one.storage).toBe(0)
-    expect(rows.two.storage).toBe(2 * MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(rows.two.storage).toBe(2 * 0)
     expect(rows.two.staffedWorkshops).toBeLessThanOrEqual(2)
     expect(rows.two.employed).toBeLessThanOrEqual(4)
     expect(spareWorkers(4)).toBe(0)

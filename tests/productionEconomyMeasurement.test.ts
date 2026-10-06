@@ -122,7 +122,6 @@ interface Spec {
   readonly material?: number
   readonly water?: number
   readonly roads?: boolean
-  readonly storageMaterial?: number
 }
 
 const build = (spec: Spec): SimulationState => {
@@ -131,9 +130,6 @@ const build = (spec: Spec): SimulationState => {
     material: spec.material ?? 100,
     water: spec.water ?? 0,
   })
-  if (spec.storageMaterial !== undefined) {
-    state = { ...state, storage: { ...state.storage, material: spec.storageMaterial } }
-  }
   for (let i = 0; i < spec.residences; i += 1) {
     state = op(state, 'residence', 1 + 2 * i, ROW_RESIDENCE)
   }
@@ -170,7 +166,6 @@ interface Row {
   readonly food: number
   readonly water: number
   readonly material: number
-  readonly storageMaterial: number
   readonly foodProd: number
   readonly foodConsumed: number
   readonly waterProd: number
@@ -192,7 +187,6 @@ const snapshot = (state: SimulationState): Row => ({
   food: state.resources.food,
   water: state.resources.water,
   material: state.resources.money,
-  storageMaterial: state.storage.material,
   foodProd: getFoodProductionPerTick(state),
   foodConsumed: getFoodConsumptionPerTick(state),
   waterProd: getWaterProductionPerTick(state),
@@ -201,8 +195,8 @@ const snapshot = (state: SimulationState): Row => ({
   materialGross: getRevenuePerTick(state),
   materialUpkeep: getMaintenanceDuePerTick(state),
   materialNet: getNetMoneyPerTick(state),
-  storageCapacity: getMaterialStorageCapacity(state),
-  storedProduction: getMaterialStoredProductionPerTick(state),
+  storageCapacity: 0,
+  storedProduction: 0,
   workforceIncome: getRevenuePerTick(state),
 })
 
@@ -237,16 +231,17 @@ describe('1. Production dependency (measured from the catalog and the runtime)',
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
     expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
     expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
-    expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(WATER_PER_COLONIST_PER_TICK).toBe(1)
   })
 
-  it('road access gates every productive building (0 without, nominal with)', () => {
-    for (const [type, query, nominal] of [
-      ['farm', getFoodProductionPerTick, 2],
-      ['well', getWaterProductionPerTick, 2],
-      ['workshop', getRevenuePerTick, 2],
+  it('road access gates production (0 without, nominal with); the inhabitant tax flows regardless', () => {
+    for (const [type, query, nominal, roadless] of [
+      ['farm', getFoodProductionPerTick, 2, 0],
+      ['well', getWaterProductionPerTick, 2, 0],
+      // Revenue never hits 0 while inhabited: roadless kills commerce (2)
+      // but the 1/person tax still flows.
+      ['workshop', getRevenuePerTick, 3, 1],
     ] as const) {
       const disconnected = build({
         residences: 1,
@@ -259,19 +254,21 @@ describe('1. Production dependency (measured from the catalog and the runtime)',
         [type === 'farm' ? 'farms' : type === 'well' ? 'wells' : 'workshops']: 1,
         colonists: 1,
       } as Spec)
-      expect(query(disconnected), `${type} roadless`).toBe(0)
+      expect(query(disconnected), `${type} roadless`).toBe(roadless)
       expect(query(connected), `${type} connected`).toBe(nominal)
     }
   })
 
-  it('staffing gates production and upkeep together', () => {
+  it('staffing gates commerce; upkeep follows operational buildings', () => {
     const vacant = build({ residences: 1, workshops: 1, colonists: 0 })
-    expect(getRevenuePerTick(vacant)).toBe(0)
-    expect(getMaintenanceDuePerTick(vacant)).toBe(0)
+    // Vacant counts for commerce: 0 tax + 2 commerce; both buildings bill upkeep.
+    expect(getRevenuePerTick(vacant)).toBe(2)
+    expect(getMaintenanceDuePerTick(vacant)).toBe(2)
 
     const staffed = build({ residences: 1, workshops: 1, colonists: 1 })
-    expect(getRevenuePerTick(staffed)).toBe(2)
-    expect(getMaintenanceDuePerTick(staffed)).toBe(1)
+    // Staffed: 1 tax + 2 commerce; upkeep unchanged (already operational).
+    expect(getRevenuePerTick(staffed)).toBe(3)
+    expect(getMaintenanceDuePerTick(staffed)).toBe(2)
   })
 })
 
@@ -289,7 +286,7 @@ describe('2. Resource flow across representative settlements (measured)', () => 
     },
     {
       name: 'stock-rich',
-      state: build({ residences: 1, farms: 1, colonists: 1, material: 1000, storageMaterial: 40 }),
+      state: build({ residences: 1, farms: 1, colonists: 1, material: 1000 }),
     },
     {
       name: 'stock-poor',
@@ -307,16 +304,16 @@ describe('2. Resource flow across representative settlements (measured)', () => 
     for (const entry of table) expect(entry.rows).toHaveLength(HORIZONS.length)
   })
 
-  it('balanced workforce: Food and Water are at exact break-even, Material accrues nothing (no Workshop)', () => {
+  it('balanced workforce: Food and Water break even; the tax accrues but upkeep outruns it (no Workshop)', () => {
     const rows = trace(build({ residences: 2, farms: 1, wells: 1, colonists: 2 }), [12])
     const row = rows[0]
     if (row === undefined) throw new Error('10cw: missing row')
     expect(row.foodProd).toBe(row.foodConsumed) // 2 = 2
     expect(row.waterProd).toBe(row.waterServed * WATER_PER_COLONIST_PER_TICK) // 2 = 2
-    expect(row.materialGross).toBe(0) // no Workshop
-    expect(row.materialUpkeep).toBe(0)
-    // Workshop-only income: Farm and Well employment earns no Material.
-    expect(row.workforceIncome).toBe(0)
+    // No commerce without a Workshop, but 2 inhabitants pay tax; 4 buildings bill upkeep.
+    expect(row.materialGross).toBe(2)
+    expect(row.materialUpkeep).toBe(4)
+    expect(row.workforceIncome).toBe(2)
   })
 
   it('resource stocks have different ceiling rules: Food/Water uncapped, Material production capped', () => {
@@ -325,13 +322,11 @@ describe('2. Resource flow across representative settlements (measured)', () => 
     if (foodRich === undefined) throw new Error('10cw: missing food row')
     expect(foodRich.food).toBeGreaterThan(DEFAULT_STORAGE_CAPACITIES.food)
     expect(foodRich.storageCapacity).toBe(0) // no operational Workshop
-    expect(foodRich.storageMaterial).toBe(0)
 
     // Water accumulates when a Well out-produces the colonist it serves.
     const waterRich = trace(build({ residences: 1, wells: 1, colonists: 1, water: 0 }), [60])[0]
     if (waterRich === undefined) throw new Error('10cw: missing water row')
     expect(waterRich.water).toBeGreaterThan(DEFAULT_STORAGE_CAPACITIES.water)
-    expect(waterRich.storageMaterial).toBe(0)
   })
 })
 
@@ -372,61 +367,61 @@ describe('3. Input/output coupling (measured)', () => {
     // construction (Material); no building consumes another building output.
     const oneFarm = build({ residences: 1, farms: 1, colonists: 1, food: 0, material: 0 })
     expect(getFoodProductionPerTick(oneFarm)).toBe(2)
-    expect(getRevenuePerTick(oneFarm)).toBe(0)
+    // Tax flows (1 inhabitant); no commerce without a Workshop.
+    expect(getRevenuePerTick(oneFarm)).toBe(1)
     expect(getWaterProductionPerTick(oneFarm)).toBe(0)
   })
 })
 
 describe('4. Production vs workforce income (measured)', () => {
-  it('Material has two independent inflows: Workshop production and per-worker income', () => {
+  it('revenue decomposes into tax plus Workshop commerce; upkeep is per operational building', () => {
     const state = build({ residences: 1, workshops: 1, colonists: 1, material: 0 })
     const before = snapshot(state)
-    expect(before.materialGross).toBe(2) // Workshop production
-    expect(before.workforceIncome).toBe(2) // Workshop worker income
-    expect(before.materialUpkeep).toBe(1)
-    // Below cap: stored 2 + income 2 − upkeep 1 = +3 Material per tick.
-    expect(before.storedProduction + before.workforceIncome - before.materialUpkeep).toBe(3)
+    // 1 tax + 2 commerce; upkeep 2 (residence + workshop).
+    expect(before.materialGross).toBe(3)
+    expect(before.workforceIncome).toBe(3)
+    expect(before.materialUpkeep).toBe(2)
+    // Net +1/tick into the uncapped treasury.
+    expect(before.materialGross - before.materialUpkeep).toBe(1)
   })
 
-  it('Food/Water producers earn no Material income (income is Workshop-only)', () => {
+  it('Farm/Well employment pays no commerce (tax still flows)', () => {
     const farm = snapshot(build({ residences: 1, farms: 1, colonists: 1, material: 0 }))
     expect(farm.foodProd).toBe(2)
-    expect(farm.materialGross).toBe(0)
-    expect(farm.workforceIncome).toBe(0) // Farm worker earns no Material
+    // 1 tax, 0 commerce.
+    expect(farm.materialGross).toBe(1)
+    expect(farm.workforceIncome).toBe(1)
 
     const well = snapshot(build({ residences: 1, wells: 1, colonists: 1, material: 0, water: 0 }))
     expect(well.waterProd).toBe(2)
-    expect(well.materialGross).toBe(0)
-    expect(well.workforceIncome).toBe(0) // Well worker earns no Material
+    expect(well.materialGross).toBe(1)
+    expect(well.workforceIncome).toBe(1)
   })
 
-  it('production inflow is bounded by the per-Workshop cap; income bypasses it and Storage retains overflow', () => {
-    const state = build({ residences: 1, workshops: 1, colonists: 1, material: 0, storageMaterial: 0 })
-    // Run until the main stock reaches the 25 cap.
+  it('treasury is uncapped: workshop revenue accrues linearly with no storage clamp', () => {
+    const state = build({ residences: 1, workshops: 1, colonists: 1, material: 0 })
+    // No cap: revenue lands every tick and the stock climbs without bound.
     const rows = trace(state, [20])
     const atCap = rows[0]
     if (atCap === undefined) throw new Error('10cw: missing cap row')
-    expect(atCap.material).toBeGreaterThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
-    expect(atCap.storedProduction).toBe(0) // capped
-    expect(atCap.storageMaterial).toBeGreaterThan(0) // overflow retained
-    expect(atCap.storageMaterial).toBeLessThanOrEqual(DEFAULT_STORAGE_CAPACITIES.material)
-    expect(atCap.workforceIncome).toBe(2)
+    expect(atCap.material).toBeGreaterThan(0)
+    expect(atCap.storedProduction).toBe(0) // no storage stage in Step001
+    expect(atCap.workforceIncome).toBe(3)
   })
 
-  it('protected reserve: a building command can spend Storage above the 15 floor', () => {
-    const state = build({ residences: 0, material: 0, storageMaterial: 40, roads: false })
+  it('empty treasury: a building command with 0 money is refused', () => {
+    const state = build({ residences: 0, material: 0, roads: false })
     const cell = { x: 6, y: 6 }
     const affordability = getPlacementAffordability(state, cell, 'residence')
-    expect(affordability.coveredByProtectedReserve).toBe(true)
-    expect(affordability.releasedFromStorage).toBe(25)
+    expect(affordability.affordable).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
     const after = stepSimulation(state, {
       type: 'placeBuilding',
       x: cell.x,
       y: cell.y,
       buildingType: 'residence',
     })
-    expect(after.storage.material).toBe(PROTECTED_MATERIAL_RESERVE)
-    expect(Object.keys(after.buildings)).toHaveLength(1)
+    expect(Object.keys(after.buildings)).toHaveLength(0)
   })
 })
 
@@ -504,16 +499,16 @@ describe('6. Candidate Phase 8 directions — evidence only (no ranking)', () =>
     const before = snapshot(warehouse)
     const after = snapshot(stepSimulation(warehouse))
     // Production turns labour into output with no resource consumed as input:
-    // Material moves by stored production + income − upkeep, and Food/Water
+    // the treasury moves by revenue − upkeep (3 + 2 − 6 = −1 here), Food/Water
     // move only through colonist needs. Upkeep is the one recurring cost and
-    // it is a Material deduction, not a production input.
-    expect(after.materialGross).toBe(2)
-    expect(after.materialUpkeep).toBe(1)
-    // Workshop-only income: the Workshop worker alone earns Material.
-    expect(after.workforceIncome).toBe(2)
-    expect(after.storedProduction).toBe(2)
+    // it is a Money deduction, not a production input.
+    expect(after.materialGross).toBe(5)
+    expect(after.materialUpkeep).toBe(6)
+    // Commerce is Workshop-only: the tax (3) flows regardless of workplace.
+    expect(after.workforceIncome).toBe(5)
+    expect(after.storedProduction).toBe(0)
     expect(after.material - before.material).toBe(
-      after.storedProduction + after.workforceIncome - after.materialUpkeep
+      after.materialGross - after.materialUpkeep
     )
     audit('DIRECTION_A_INPUTS', { before, after, upkeep: after.materialUpkeep })
   })
@@ -592,17 +587,16 @@ describe('7. Anti-feature / decision gate evidence', () => {
     expect(decisions.survival).toHaveLength(2)
   })
 
-  it('storage hub is material-only in practice (Food/Water overflow never enters it)', () => {
-    // Only `produceMaterial` writes overflow into Storage.
+  it('storage hub holds food and water only (money lives in the treasury)', () => {
+    // Surplus food/water buffers in the hub; money never enters it.
     const farm = trace(build({ residences: 1, farms: 1, colonists: 1, food: 0 }), [60])[0]
     if (farm === undefined) throw new Error('10cw: missing farm row')
-    expect(farm.storageMaterial).toBe(0)
     expect(farm.food).toBeGreaterThan(DEFAULT_STORAGE_CAPACITIES.food)
 
     const well = trace(build({ residences: 1, wells: 1, colonists: 1, water: 0 }), [60])[0]
     if (well === undefined) throw new Error('10cw: missing well row')
-    expect(well.storageMaterial).toBe(0)
     expect(well.water).toBeGreaterThan(DEFAULT_STORAGE_CAPACITIES.water)
-    expect(createInitialStorageHub().material).toBe(0)
+    expect(createInitialStorageHub().food).toBe(0)
+    expect(createInitialStorageHub().water).toBe(0)
   })
 })

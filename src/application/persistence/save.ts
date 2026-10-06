@@ -207,11 +207,14 @@ const migrateV8ToV9 = (save: Record<string, unknown>): Record<string, unknown> =
   if (isRecord(storage) && typeof storage['material'] === 'number') {
     money += storage['material'] as number
     const { material: _dropped, ...restStorage } = storage as Record<string, unknown> & { material?: unknown }
+    void _dropped
     const capacities = (restStorage['capacities'] as Record<string, unknown> | undefined) ?? {}
     const { material: _droppedCap, ...restCapacities } = capacities
+    void _droppedCap
     storage = { ...restStorage, capacities: restCapacities }
   }
   const { construction: _renamed, ...restResources } = resources as Record<string, unknown> & { construction?: unknown }
+  void _renamed
   return {
     ...save,
     state: { ...state, resources: { ...restResources, money }, storage },

@@ -179,7 +179,7 @@ const flow = (state: SimulationState): Flow => {
     materialProduction: getRevenuePerTick(state),
     materialUpkeep: getMaintenanceDuePerTick(state),
     materialNet: getNetMoneyPerTick(state),
-    storageCapacity: getMaterialStorageCapacity(state),
+    storageCapacity: 0,
     buildings: Object.keys(state.buildings).length,
     stage: getProgression(state).stage,
   }
@@ -232,7 +232,6 @@ describe('1. Current economic contract', { timeout: 30000 }, () => {
       waterPerWell: WATER_PER_WELL_PER_TICK,
       materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
       workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
-      materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
       roadCost: 5,
@@ -249,7 +248,6 @@ describe('1. Current economic contract', { timeout: 30000 }, () => {
     expect(contract.waterPerWell).toBe(2)
     expect(contract.materialPerWorker).toBe(2)
     expect(contract.workshopUpkeep).toBe(1)
-    expect(contract.materialStoragePerWorkshop).toBe(25)
     expect(contract.foodPerColonist).toBe(1)
     expect(contract.waterPerColonist).toBe(1)
   })
@@ -698,8 +696,8 @@ describe('7-8. Sensitivity and classification', { timeout: 30000 }, () => {
     const workshopEconomy = {
       production: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
       upkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
-      storage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-      note: 'changing production or upkeep changes the NET Material rate, never the worker count: headroom is unchanged',
+      storage: 0,
+      note: 'there is no material storage in Step001 - material is just money in the treasury',
     }
     const startingMaterial = {
       initial: INITIAL_TREASURY,

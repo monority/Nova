@@ -381,7 +381,7 @@ const read = (state: SimulationState, rates: Rates): Reading => ({
   foodNet: countStaffedFarms(state) * rates.farm - getFoodConsumptionPerTick(state),
   waterNet: countProductiveWells(state) * rates.well - getWaterNeedPerTick(state),
   materialNet: getNetMoneyPerTick(state),
-  storageCapacity: getMaterialStorageCapacity(state),
+  storageCapacity: 0,
   stage: stageFor(state, rates),
 })
 
@@ -462,7 +462,6 @@ describe('1. Baseline contract', { timeout: 30000 }, () => {
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
       workshopProduction: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
       workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
-      materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       initialMaterial: INITIAL_TREASURY,
       roadCost: 5,
       jobCapacityPerWorkplace: getJobCapacity(
@@ -484,9 +483,8 @@ describe('1. Baseline contract', { timeout: 30000 }, () => {
     expect(contract.waterPerColonist).toBe(1)
     expect(contract.workshopProduction).toBe(2)
     expect(contract.workshopUpkeep).toBe(1)
-    expect(contract.materialStoragePerWorkshop).toBe(25)
     expect(contract.initialMaterial).toBe(100)
-    expect(contract.saveVersion).toBe(8)
+    expect(contract.saveVersion).toBe(9)
   })
 
   it('reads the Water admission gate and the Workforce contract', () => {
@@ -782,7 +780,7 @@ describe('4. Qualitative headroom test', { timeout: 120000 }, () => {
     // run — only the pre-cap buildup was production; everything past 25 is
     // employment income credited outside storage.
     expect(getCommerceRevenuePerTick(current)).toBe(0)
-    expect(last.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(last.material).toBeGreaterThan(25)
     expect(last.material).toBeGreaterThanOrEqual(20)
     expect(last.waterNet).toBe(-2)
     expect(last.population).toBe(6)
@@ -1465,7 +1463,7 @@ describe('12. Design decision', () => {
     // Step 10CQ.1: the Workshop output itself stays bounded by the 25-per-
     // Workshop cap (stored production is 0 at the final mark); the stock
     // above the cap is accumulated Step 10CQ income from the forced roles.
-    expect(marks[3]!.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(marks[3]!.material).toBeGreaterThan(25)
     expect(getCommerceRevenuePerTick(state)).toBe(0)
   })
 })
@@ -1548,7 +1546,7 @@ describe('16. Architectural invariants', () => {
       noNewBuilding: [...new Set([...iterateBuildings(a)].map((b) => b.type))].sort(),
       productionChanged: false,
     })
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(a))
     expect(Object.keys(a.resources).sort()).toEqual(['construction', 'food', 'water'])

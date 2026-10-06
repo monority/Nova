@@ -88,7 +88,6 @@ interface Spec {
   readonly workshops?: number
   readonly colonists?: number
   readonly material?: number
-  readonly storageMaterial?: number
   readonly roads?: boolean
 }
 
@@ -98,7 +97,6 @@ const build = (spec: Spec): SimulationState => {
   state = {
     ...state,
     resources: { ...state.resources, food: 10_000, money: spec.material ?? 100 },
-    storage: { ...state.storage, material: spec.storageMaterial ?? 0 },
   }
   for (let i = 0; i < spec.residences; i += 1) {
     state = op(state, 'residence', 1 + 2 * i, ROW_RESIDENCE)
@@ -223,17 +221,16 @@ describe('10DA — progression and objective feedback', () => {
 describe('10DA — economy feedback numbers a player reads', () => {
   it('pins the income, upkeep, capacity and reserve an inspection/HUD shows', () => {
     const workshop = build({ residences: 1, workshops: 1, colonists: 1 })
-    expect(getRevenuePerTick(workshop)).toBe(2) // Workshop worker
-    expect(getMaintenanceDuePerTick(workshop)).toBe(1)
-    expect(getMaterialStorageCapacity(workshop)).toBe(25)
+    // Step001: revenue 3 (1 tax + 2 commerce), maintenance 2 (residence + workshop).
+    expect(getRevenuePerTick(workshop)).toBe(3)
+    expect(getMaintenanceDuePerTick(workshop)).toBe(2)
 
     const farm = build({ residences: 1, farms: 1, colonists: 1 })
-    expect(getRevenuePerTick(farm)).toBe(0) // Workshop-only income
+    expect(getRevenuePerTick(farm)).toBe(1) // tax only: Workshop-only commerce
     const well = build({ residences: 1, wells: 1, colonists: 1 })
-    expect(getRevenuePerTick(well)).toBe(0) // Workshop-only income
+    expect(getRevenuePerTick(well)).toBe(1) // tax only: Workshop-only commerce
 
-    expect(PROTECTED_MATERIAL_RESERVE).toBe(15)
-    expect(DEFAULT_STORAGE_CAPACITIES).toEqual({ food: 50, water: 30, material: 40 })
+    expect(DEFAULT_STORAGE_CAPACITIES).toEqual({ food: 50, water: 30 })
   })
 
   it('a balanced colony reads break-even Food and Water with no Material income (no Workshop)', () => {
@@ -242,42 +239,40 @@ describe('10DA — economy feedback numbers a player reads', () => {
     expect(getWaterProductionPerTick(balanced)).toBe(
       getServedColonistCount(balanced) * 1
     )
-    // Workshop-only income: Farm and Well employment pays in Food and Water,
-    // not Material — a colony without a staffed Workshop accrues none.
-    expect(getRevenuePerTick(balanced)).toBe(0)
-    expect(getMaintenanceDuePerTick(balanced)).toBe(0)
+    // Commerce is Workshop-only; the tax still flows: 2 inhabitants, no
+    // commerce, 4 operational buildings — net −2/tick.
+    expect(getRevenuePerTick(balanced)).toBe(2)
+    expect(getMaintenanceDuePerTick(balanced)).toBe(4)
   })
 })
 
 describe('10DA — affordability coherence and persistence', () => {
-  it('building affordability predicts the command, including the protected reserve', () => {
-    const state = build({ residences: 0, material: 0, storageMaterial: 40, roads: false })
+  it('building affordability predicts the command: empty treasury refuses', () => {
+    const state = build({ residences: 0, material: 0, roads: false })
     const cell = { x: 6, y: 6 }
     const affordability = getPlacementAffordability(state, cell, 'residence')
-    expect(affordability.affordable).toBe(true)
-    expect(affordability.coveredByProtectedReserve).toBe(true)
+    expect(affordability.affordable).toBe(false)
+    expect(affordability.coveredBySameTickInflow).toBe(false)
     const after = stepSimulation(state, {
       type: 'placeBuilding',
       x: cell.x,
       y: cell.y,
       buildingType: 'residence',
     })
-    expect(Object.keys(after.buildings)).toHaveLength(1)
-    expect(after.storage.material).toBe(PROTECTED_MATERIAL_RESERVE)
+    expect(Object.keys(after.buildings)).toHaveLength(0)
   })
 
-  it('road affordability predict the command and never use the reserve', () => {
-    const state = build({ residences: 0, material: 0, storageMaterial: 40, roads: false })
+  it('road affordability predicts the command: empty treasury refuses', () => {
+    const state = build({ residences: 0, material: 0, roads: false })
     const cells = [{ x: 6, y: 6 }]
     const affordability = getRoadsPlacementAffordability(state, cells)
     expect(affordability.affordable).toBe(false)
     const after = stepSimulation(state, { type: 'placeRoads', cells })
     expect(Object.keys(after.roads)).toHaveLength(0)
-    expect(after.storage.material).toBe(40)
   })
 
   it('stays at SAVE_VERSION 8 with a stable save/load round-trip', () => {
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     const state = build({ residences: 1, workshops: 1, colonists: 1 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

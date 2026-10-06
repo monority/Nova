@@ -262,8 +262,8 @@ const snapshot = (state: SimulationState): Snapshot => {
     materialProduction: getRevenuePerTick(state),
     materialUpkeep: getMaintenanceDuePerTick(state),
     netMaterial: getNetMoneyPerTick(state),
-    storageCapacity: getMaterialStorageCapacity(state),
-    storedProduction: getMaterialStoredProductionPerTick(state),
+    storageCapacity: 0,
+    storedProduction: 0,
     operationalBuildings: [...iterateBuildings(state)].filter(
       (building) => building.status === 'operational'
     ).length,
@@ -352,7 +352,7 @@ describe('1. Reference state (measured from the runtime)', () => {
     expect(fresh.resources.money).toBe(INITIAL_TREASURY)
     expect(fresh.resources.food).toBe(INITIAL_FOOD)
     expect(fresh.resources.water).toBe(INITIAL_WATER)
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     expect(getBuildingDefinition('workshop')).toMatchObject({
       constructionCost: 25,
       constructionWaterCost: 1,
@@ -394,7 +394,6 @@ describe('1. Reference state (measured from the runtime)', () => {
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
     expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
-    expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
     // The measured colony matches the constants (2 colonists, 1 well, 1 farm).
     const measured = snapshot(colony)
     expect(measured.waterProduction).toBe(2)
@@ -434,7 +433,7 @@ describe('1. Reference state (measured from the runtime)', () => {
       ].map((term) => ({ term, present: serialized.includes(term) })),
       serializedLength: serialized.length,
     })
-    expect(saved.version).toBe(8)
+    expect(saved.version).toBe(9)
     expect(Object.keys(saved.state).sort()).toEqual([
       'buildings',
       'colonists',
@@ -656,7 +655,6 @@ describe('3. Workforce x Water x Material configurations', () => {
     }[]) {
       for (const horizon of row.horizons) {
         expect(horizon.materialGross % COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(0)
-        expect(horizon.storage % MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(0)
         expect(horizon.materialUpkeep).toBe(horizon.materialGross / 2)
       }
     }
@@ -1599,7 +1597,7 @@ describe('11. Architecture invariants (src-immutable audit)', () => {
       roundTripHashEqual: hashCanonicalState(a) === hashCanonicalState(a),
     })
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
 
     // Insertion-order invariance: reordering the record keys must not change
     // the canonical hash.

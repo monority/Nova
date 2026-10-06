@@ -35,6 +35,7 @@ import {
   getProgression,
   getReassignmentOptions,
   getWaterProductionPerTick,
+  getMaintenanceDuePerTick,
   hashCanonicalState,
   iterateBuildings,
   loadSave,
@@ -270,7 +271,7 @@ describe('2. The existing industrial loop', { timeout: 60000 }, () => {
         waterDrained: before.water - after.water,
         materialGained: after.material - before.material,
         materialAtEnd: after.material,
-        maintenance: maintenanceDueForTick(burst.state),
+        maintenance: getMaintenanceDuePerTick(burst.state),
         stageDuringBurst: after.stage,
         recoveryWaterAtStart: recoveredStart.water,
         recoveryWaterAtEnd: recovery.water,
@@ -864,8 +865,8 @@ describe('16. Architectural invariants', () => {
       requirementKinds: [...new Set(SCENARIOS.flatMap((s) => s.objective.requirements.map((r) => r.kind)))].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(8)
-    expect(invariants.saveKeys).toHaveLength(8)
+    expect(invariants.saveVersion).toBe(9)
+    expect(invariants.saveKeys).toHaveLength(9)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.saveRoundTrip).toBe(true)
     expect(invariants.noNewResource).toEqual(['construction', 'food', 'water'])
