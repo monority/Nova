@@ -21,6 +21,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -47,11 +49,8 @@ import {
   hasOperationalWell,
   isOperationalWell,
   iterateBuildings,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
-  creditMaterialIncome,
-  produceMaterial,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
   SAVE_VERSION,
@@ -59,7 +58,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   WATER_PER_COLONIST_PER_TICK,
   WATER_PER_WELL_PER_TICK,
   type BuildingType,
@@ -170,11 +169,10 @@ const shadowStep = (state: SimulationState, rates: Rates): SimulationState => {
         }
   )
   const staffed = assignJobs(populated)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, undefined)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   const released = releaseCompletedConstructionCrew(maintained)
   return advanceTime(released)
 }
@@ -199,8 +197,8 @@ const flows = (state: SimulationState, rates: Rates) => {
   const served = getWaterCoverage(state).servedColonistIds.length
   const foodPerTick = farms * rates.farm
   const waterPerTick = wells * rates.well
-  const upkeep = workshops * MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK
-  const materialGross = workshops * MATERIAL_PER_WORKER_PER_TICK
+  const upkeep = workshops * MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
+  const materialGross = workshops * COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK
   return {
     population,
     staffedFarms: farms,
@@ -218,7 +216,7 @@ const flows = (state: SimulationState, rates: Rates) => {
     materialNet: materialGross - upkeep,
     food: state.resources.food,
     water: state.resources.water,
-    material: state.resources.construction,
+    material: state.resources.money,
     stage: getProgression(state).stage,
     employment: getEmploymentSummary(state),
   }
@@ -282,7 +280,7 @@ const colony = (spec: ColonySpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 100,
       water: spec.water ?? 0,
     },
@@ -357,8 +355,8 @@ describe('1. frozen baseline', () => {
     const contract = {
       farm: FOOD_PER_FARM_PER_TICK,
       well: WATER_PER_WELL_PER_TICK,
-      workshop: MATERIAL_PER_WORKER_PER_TICK,
-      upkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      workshop: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      upkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
       storagePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
@@ -867,9 +865,9 @@ describe('4. secondary consequences', () => {
       const before = { ...state.resources }
       const after = runShadow(state, 60, rates)
       return {
-        materialGained: after.resources.construction - before.construction,
+        materialGained: after.resources.money - before.money,
         materialPerTick: Number(
-          ((after.resources.construction - before.construction) / 60).toFixed(3)
+          ((after.resources.money - before.money) / 60).toFixed(3)
         ),
         waterDrained: before.water - after.resources.water,
         waterLeft: after.resources.water,

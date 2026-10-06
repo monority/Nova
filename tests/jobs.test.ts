@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getMaintenanceDuePerTick,
+
+  collectRevenue,
+  commerceRevenueForTick,
+  getCommerceRevenuePerTick,
+
   assignJobs,
   BUILDING_CATALOG,
   countEmployedWorkers,
@@ -9,9 +15,8 @@ import {
   getFoodConsumptionPerTick,
   getFoodTicksRemaining,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getNetMoneyPerTick,
   getResourceStock,
   hashCanonicalState,
   isEmployed,
@@ -19,12 +24,9 @@ import {
   isOperationalWorkshop,
   jobCapacityOf,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  materialProductionForTick,
-  materialStoredProductionForTick,
-  materialUpkeepDueForTick,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  maintenanceDueForTick,
   type PlaceBuildingCommand,
-  produceMaterial,
   SAVE_VERSION,
   SaveValidationError,
   serializeSave,
@@ -46,12 +48,12 @@ const withFood = (state: SimulationState, food: number): SimulationState => ({
   resources: { ...state.resources, food },
 })
 
-const withConstruction = (
+const withMoney = (
   state: SimulationState,
-  construction: number
+  money: number
 ): SimulationState => ({
   ...state,
-  resources: { ...state.resources, construction },
+  resources: { ...state.resources, money },
 })
 
 const colonistOf = (state: SimulationState, id: string) => {
@@ -138,7 +140,7 @@ describe('workshop building (Step 07C §3)', () => {
       constructionWaterCost: 1,
     })
     expect(WORKSHOP_JOB_CAPACITY).toBe(1)
-    expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
   })
 
   it('exposes job capacity for operational Farms and Workshops (Step 10E)', () => {
@@ -152,7 +154,7 @@ describe('workshop building (Step 07C §3)', () => {
 
   it('uses the existing construction lifecycle and deducts the catalog cost', () => {
     const state = stepSimulation(withWorkshopWater(createTestState()), place('workshop', 1, 1))
-    expect(getResourceStock(state).construction).toBe(75)
+    expect(getResourceStock(state).money).toBe(75)
     const workshop = state.buildings['building-1']
     expect(workshop?.type).toBe('workshop')
     expect(workshop?.status).toBe('underConstruction')
@@ -256,12 +258,12 @@ describe('deterministic job assignment (Step 07C §4)', () => {
   it('multiple colonists / multiple workshops: deterministic nearest-Workshop preference (09M)', () => {
     // Step 08F: storage clamp changes material flow, not assignment. Top up
     // the stock so this ordering test funds both placements deterministically.
-    let state = withConstruction(twoColonistState(), 100) // t6
+    let state = withMoney(twoColonistState(), 100) // t6
     state = stepSimulation(withWorkshopWater(state), place('workshop', 6, 6)) // t7: building-3
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // 1 remaining
     state = stepSimulation(state) // t9: colonist-1 -> building-3
-    state = withConstruction(state, 100)
+    state = withMoney(state, 100)
     state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 0)) // t10: building-4
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // 1 remaining
@@ -348,9 +350,9 @@ describe('deterministic job assignment (Step 07C §4)', () => {
 describe('construction material production (Step 07C §6-§8)', () => {
   it('produces nothing with zero workers', () => {
     const state = colonistState()
-    expect(materialProductionForTick(state)).toBe(0)
-    expect(getMaterialProductionPerTick(state)).toBe(0)
-    expect(produceMaterial(state)).toBe(state)
+    expect(commerceRevenueForTick(state)).toBe(0)
+    expect(getRevenuePerTick(state)).toBe(0)
+    expect(collectRevenue(state)).toBe(state)
   })
 
   it('an operational workshop with no worker produces nothing', () => {
@@ -358,33 +360,33 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state) // operational
     expect(getJobCapacity(state)).toBe(1)
-    expect(materialProductionForTick(state)).toBe(0)
-    expect(produceMaterial(state)).toBe(state)
+    expect(commerceRevenueForTick(state)).toBe(0)
+    expect(collectRevenue(state)).toBe(state)
     const after = stepSimulation(state)
-    expect(getResourceStock(after).construction).toBe(75)
+    expect(getResourceStock(after).money).toBe(75)
   })
 
   it('one worker produces gross +2, stored subject to workshop storage', () => {
     const state = workshopState()
     // Gross production is still 2/worker; upkeep due is still 1.
-    expect(materialProductionForTick(state)).toBe(2)
-    expect(materialUpkeepDueForTick(state)).toBe(1)
-    expect(getNetMaterialPerTick(state)).toBe(1)
+    expect(commerceRevenueForTick(state)).toBe(2)
+    expect(maintenanceDueForTick(state)).toBe(1)
+    expect(getNetMoneyPerTick(state)).toBe(1)
     // Step 08F: workshopState carries bootstrap stock (51: 50 bootstrap − 1
     // upkeep + 2 Step 10CQ income) above the single-workshop capacity (25),
     // so nothing is stored this tick.
-    const before = getResourceStock(state).construction
-    expect(materialStoredProductionForTick(state)).toBe(0)
+    const before = getResourceStock(state).money
+    expect(getCommerceRevenuePerTick(state)).toBe(0)
     const after = stepSimulation(state)
     // Step 10CQ.1: above the cap nothing is stored; income +2, upkeep −1.
-    expect(getResourceStock(after).construction).toBe(before + 1)
+    expect(getResourceStock(after).money).toBe(before + 1)
     expect(getResourceStock(after).food).toBe(getResourceStock(state).food - 1)
     // Below capacity the full gross inflow is stored: 0 + 2 stored + 2 income
     // − 1 upkeep = 3.
-    const empty = withConstruction(state, 0)
-    expect(materialStoredProductionForTick(empty)).toBe(2)
+    const empty = withMoney(state, 0)
+    expect(getCommerceRevenuePerTick(empty)).toBe(2)
     const recovered = stepSimulation(empty)
-    expect(getResourceStock(recovered).construction).toBe(3)
+    expect(getResourceStock(recovered).money).toBe(3)
   })
 
   it('multiple workers add linearly', () => {
@@ -394,20 +396,20 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = stepSimulation(state) // 1 construction tick left
     state = stepSimulation(state) // t12: second colonist admitted and employed
     expect(getEmploymentSummary(state).employed).toBe(2)
-    expect(materialProductionForTick(state)).toBe(4)
+    expect(commerceRevenueForTick(state)).toBe(4)
     // Step 08C: two staffed Workshops pay 2 upkeep, net +2.
-    expect(materialUpkeepDueForTick(state)).toBe(2)
-    expect(getNetMaterialPerTick(state)).toBe(2)
-    const before = getResourceStock(state).construction
+    expect(maintenanceDueForTick(state)).toBe(2)
+    expect(getNetMoneyPerTick(state)).toBe(2)
+    const before = getResourceStock(state).money
     const after = stepSimulation(state)
     // Step 10CQ.1 (below the 50 cap): 4 stored + 4 income − 2 upkeep = +6.
-    expect(getResourceStock(after).construction).toBe(before + 6)
+    expect(getResourceStock(after).money).toBe(before + 6)
   })
 
   it('a newly operational workshop is staffed and produces the same tick', () => {
     let state = stepSimulation(withWorkshopWater(colonistState()), place('workshop', 6, 6)) // t4
     state = withRoadsForWorkshops(state) // 09K: mobility connection
-    const before = getResourceStock(state).construction
+    const before = getResourceStock(state).money
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
     state = stepSimulation(state) // t5: 1 construction tick left
     state = stepSimulation(state) // t6: operational this tick
@@ -416,8 +418,8 @@ describe('construction material production (Step 07C §6-§8)', () => {
     // Step 08C: same-tick production (+2) pays same-tick upkeep (−1).
     // Step 08F: the bootstrap stock (50) already covers the new 25
     // capacity, so stored production is 0. Step 10CQ.1: income +2.
-    expect(materialStoredProductionForTick(state)).toBe(0)
-    expect(getResourceStock(state).construction).toBe(before + 1)
+    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    expect(getResourceStock(state).money).toBe(before + 1)
   })
 
   it('a newly admitted colonist is employed and produces the same tick', () => {
@@ -432,31 +434,31 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = stepSimulation(state) // t9: W2 operational
     state = stepSimulation(state, place('residence', 7, 7)) // t10
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
-    const beforeAdmission = getResourceStock(state).construction
+    const beforeAdmission = getResourceStock(state).money
     expect(Object.keys(state.colonists)).toHaveLength(1)
     state = stepSimulation(state) // t11: residence 1 construction tick left
     // Step 10Y timing isolation: pin the stock so the admission tick measures
     // exactly the same economics as before the extra construction tick.
-    state = withConstruction(state, beforeAdmission)
+    state = withMoney(state, beforeAdmission)
     state = stepSimulation(state) // t12: colonist-2 admitted this tick
     expect(Object.keys(state.colonists)).toHaveLength(2)
     expect(state.colonists['colonist-2']?.workplaceId).toBe('building-3')
     // Step 08C: two staffed Workshops produce +4 and pay 2 upkeep (net +2).
     // Step 10CQ.1: below the cap the admission tick adds 4 stored + 4 income
     // − 2 upkeep = +6.
-    expect(getResourceStock(state).construction).toBe(beforeAdmission + 6)
+    expect(getResourceStock(state).money).toBe(beforeAdmission + 6)
   })
 
   it('starvation removes the worker before production: no death-tick material', () => {
     const state = withFood(workshopState(), 0)
-    const materialBefore = getResourceStock(state).construction
+    const materialBefore = getResourceStock(state).money
     expect(getEmploymentSummary(state).employed).toBe(1)
     const after = stepSimulation(state)
     expect(Object.keys(after.colonists)).toHaveLength(0)
     expect(getResourceStock(after).food).toBe(0)
     expect(getEmploymentSummary(after).employed).toBe(0)
-    expect(getMaterialProductionPerTick(after)).toBe(0)
-    expect(getResourceStock(after).construction).toBe(materialBefore)
+    expect(getRevenuePerTick(after)).toBe(0)
+    expect(getResourceStock(after).money).toBe(materialBefore)
   })
 
   it('food shortage never generates workers by itself', () => {
@@ -465,33 +467,25 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = withFood(state, 0)
     const after = stepSimulation(state)
     expect(Object.keys(after.colonists)).toHaveLength(0)
-    expect(getResourceStock(after).construction).toBe(75)
-    expect(materialProductionForTick(after)).toBe(0)
+    expect(getResourceStock(after).money).toBe(75)
+    expect(commerceRevenueForTick(after)).toBe(0)
   })
 
-  it('material production is bounded by operational workshop storage', () => {
+  it('treasury is uncapped: revenue lands in full at any balance', () => {
     let state = workshopState()
-    const start = getResourceStock(state).construction
-    // Step 10CQ.1: the setup now ends with one income credit on top of the
-    // historical 49 (50 bootstrap − 1 upkeep + 2 income).
+    const start = getResourceStock(state).money
+    // t6: 50 bootstrap − 25 residence + 1 tax − 1 maintenance (t3), then
+    // Workshop commerce joins at t6: 50 + 3 − 2 = 51.
     expect(start).toBe(51)
-    // Step 08F: one operational Workshop stores 25. Over capacity the
-    // bootstrap stock used to drain by upkeep to the 24 equilibrium; Step
-    // 10CQ income (2) now exceeds upkeep (1), so production stays clamped
-    // while the stock grows +1/tick — the cap bounds production, never income.
+    // Step001: no cap — commerce flows at any balance, so the stock grows
+    // +1/tick (revenue 3 − maintenance 2) from the first tick.
     for (let i = 0; i < 60; i++) {
       state = stepSimulation(state)
-      expect(materialStoredProductionForTick(state)).toBeLessThanOrEqual(
-        Math.max(
-          0,
-          getMaterialStorageCapacity(state) - getResourceStock(state).construction
-        )
-      )
+      expect(getCommerceRevenuePerTick(state)).toBe(2)
     }
-    // Above the cap from the first tick: stored 0, +2 income, −1 upkeep →
-    // 51 + 60 = 111.
-    expect(getResourceStock(state).construction).toBe(111)
-    expect(getMaterialStorageCapacity(state)).toBe(25)
+    expect(getResourceStock(state).money).toBe(111)
+    expect(getRevenuePerTick(state)).toBe(3)
+    expect(getMaintenanceDuePerTick(state)).toBe(2)
     expect(getResourceStock(state).food).toBeGreaterThan(0)
     expect(Object.keys(state.colonists)).toHaveLength(1)
   })
@@ -506,44 +500,53 @@ describe('jobs integration: housing -> colonist -> workshop -> employment -> mat
     // Step 08G: the construction transaction runs AFTER production and
     // income, and BEFORE upkeep, so a placement tick stores first, then
     // credits income, then deducts 25, then pays upkeep on the remainder.
-    let state = workshopState() // t6: 1 worker, material 51 (50 + 2 income − 1)
-    state = stepSimulation(withWorkshopWater(state), place('workshop', 6, 6)) // t7: 51 + 0 stored + 2 income − 25 − 1 → 27
-    expect(getResourceStock(state).construction).toBe(27)
-    state = stepSimulation(state) // t8: 1 construction tick left (cap still 25): 27 + 0 + 2 − 1 → 28
+    let state = workshopState() // t6: 1 worker, money 51 (50 + 3 revenue − 2 maintenance)
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 6, 6)) // t7: 51 + 3 − 25 − 2 → 27
+    expect(getResourceStock(state).money).toBe(27)
+    state = withRoadsForWorkshops(state) // connect the new Workshop: commerce starts at completion
+    state = stepSimulation(state) // t8: 1 construction tick left: 27 + 3 − 2 → 28
     // Step 10Y timing isolation: pin the stock so the post-completion trace
     // measures exactly the same economics as before the extra tick.
-    state = withConstruction(state, 27)
-    state = stepSimulation(state) // t9: building-3 operational (vacant): cap 50, 27 + 2 stored + 2 income − 1 → 30
-    expect(getResourceStock(state).construction).toBe(30)
-    expect(getMaterialStorageCapacity(state)).toBe(50)
-    state = stepSimulation(state) // t10: cap 50, 30 + 2 + 2 − 1 → 33
-    expect(getResourceStock(state).construction).toBe(33)
-    state = stepSimulation(withWorkshopWater(state), place('workshop', 7, 7)) // t11: 33 + 2 + 2 − 25 − 1 = 11
-    expect(getResourceStock(state).construction).toBe(11)
+    state = withMoney(state, 27)
+    state = stepSimulation(state) // t9: building-3 operational (vacant): 27 + 5 − 3 → 29
+    expect(getResourceStock(state).money).toBe(29)
+    expect(getRevenuePerTick(state)).toBe(5)
+    expect(getMaintenanceDuePerTick(state)).toBe(3)
+    state = stepSimulation(state) // t10: 29 + 5 − 3 → 31
+    expect(getResourceStock(state).money).toBe(31)
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 7, 7)) // t11: 31 + 5 − 25 − 3 → 8
+    expect(getResourceStock(state).money).toBe(8)
 
     // Below the 25 cost: another building would be rejected right now.
-    expect(getResourceStock(state).construction).toBeLessThan(
+    expect(getResourceStock(state).money).toBeLessThan(
       BUILDING_CATALOG.workshop.constructionCost
     )
 
-    // Worker output plus Step 10CQ income raises the stock back to the
-    // construction cost: 11 → 26 in 5 ticks (net +3/tick below the cap).
+    // Revenue plus commerce raises the stock back to the construction
+    // cost; the third Workshop (7,7) joins once operational.
     let ticks = 0
-    while (getResourceStock(state).construction < 25) {
+    while (getResourceStock(state).money < 25) {
       state = stepSimulation(state)
       ticks += 1
       expect(ticks).toBeLessThanOrEqual(30)
     }
-    expect(getResourceStock(state).construction).toBe(26)
+    expect(getResourceStock(state).money).toBeGreaterThanOrEqual(25)
     expect(getEmploymentSummary(state).employed).toBe(1)
+    // Steady state from here (all buildings operational, housing full):
+    // one tick moves the treasury by exactly the queried net flow.
+    const steady = getResourceStock(state).money
+    const net = getNetMoneyPerTick(state)
+    state = stepSimulation(state)
+    expect(getResourceStock(state).money).toBe(steady + net)
 
-    const before = getResourceStock(state).construction
+    const before = getResourceStock(state).money
+    const revenue = getRevenuePerTick(state)
+    const maintenance = getMaintenanceDuePerTick(state)
     state = stepSimulation(state, place('residence', 0, 0))
     expect(state.buildings['building-5']?.type).toBe('residence')
-    // Exact deduction for the construction, plus this tick's stored labor
-    // flow (+2 stored under the 75 capacity) and Step 10CQ income (+2),
-    // minus upkeep (−1).
-    expect(getResourceStock(state).construction).toBe(before - 25 + 2 + 2 - 1)
+    // Exact deduction for the construction, plus this tick's revenue,
+    // minus maintenance.
+    expect(getResourceStock(state).money).toBe(before + revenue - 25 - maintenance)
   })
 })
 
@@ -574,8 +577,8 @@ describe('determinism and immutability (Step 07C §11)', () => {
     const state = workshopState()
     const before = hashCanonicalState(state)
     assignJobs(state)
-    produceMaterial(state)
-    materialProductionForTick(state)
+    collectRevenue(state)
+    commerceRevenueForTick(state)
     getEmploymentSummary(state)
     expect(hashCanonicalState(state)).toBe(before)
 
@@ -732,7 +735,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
       'storage',
       'time',
     ])
-    expect(withConstruction(state, 10).resources.construction).toBe(10)
+    expect(withMoney(state, 10).resources.money).toBe(10)
   })
 
   it('does not mutate the input state', () => {

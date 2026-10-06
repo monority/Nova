@@ -35,6 +35,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getTaxRevenuePerTick,
+
+  collectRevenue,
+  getCommerceRevenuePerTick,
+  TAX_PER_INHABITANT_PER_TICK,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -51,17 +57,10 @@ import {
   getPopulationCount,
   hashCanonicalState,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
-  materialStorageCapacityForTick,
-  materialStoredProductionForTick,
-  materialUpkeepDueForTick,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  maintenanceDueForTick,
   produceFood,
-  creditMaterialIncome,
-  produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -138,7 +137,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -210,13 +209,15 @@ interface TickRecord {
    * exact value a player command validates against. A build is affordable
    * on a tick iff this crest reaches 25, even when the resting stock does not.
    */
-  readonly materialCrest: number
+  readonly treasuryCrest: number
   readonly foodProduction: number
-  readonly materialProduction: number
+   readonly commerce: number
+  readonly taxes: number
+  readonly revenue: number
   readonly farmUpkeep: number
-  readonly workshopUpkeep: number
-  readonly totalUpkeep: number
-  readonly upkeepPaid: number
+  readonly maintenance: number
+  readonly totalMaintenance: number
+  readonly maintenancePaid: number
   readonly constructionAvailable: boolean
   readonly foodShortage: boolean
   readonly population: number
@@ -249,24 +250,24 @@ const stepWithMetrics = (
   const staffed = assignJobs(populated)
   const staffedFarms = countStaffedOperationalFarms(staffed)
   const staffedWorkshops = countStaffedOperationalWorkshops(staffed)
-  const materialProduction = materialStoredProductionForTick(staffed)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, command)
-  const crestStock = commanded.state.resources.construction
+  const commerce = getCommerceRevenuePerTick(staffed)
+  const taxes = getTaxRevenuePerTick(staffed)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, command)
+  const crestStock = commanded.state.resources.money
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
-  const workshopUpkeep = materialUpkeepDueForTick(progressed)
+  const maintenance = maintenanceDueForTick(progressed)
   const farmUpkeepDue = farmUpkeep ? staffedFarms : 0
-  const totalUpkeep = workshopUpkeep + farmUpkeepDue
-  const upkeepPaid = Math.min(progressed.resources.construction, totalUpkeep)
+  const totalMaintenance = maintenance + farmUpkeepDue
+  const maintenancePaid = Math.min(progressed.resources.money, totalMaintenance)
   const maintained =
-    upkeepPaid > 0
+    maintenancePaid > 0
       ? {
           ...progressed,
           resources: {
             ...progressed.resources,
-            construction: progressed.resources.construction - upkeepPaid,
+            money: progressed.resources.money - maintenancePaid,
           },
         }
       : progressed
@@ -281,14 +282,16 @@ const stepWithMetrics = (
       staffedFarms,
       staffedWorkshops,
       food: final.resources.food,
-      material: final.resources.construction,
-      materialCrest: crestStock,
+      material: final.resources.money,
+      treasuryCrest: crestStock,
       foodProduction,
-      materialProduction,
+       commerce,
+      taxes,
+      revenue: taxes + commerce,
       farmUpkeep: farmUpkeepDue,
-      workshopUpkeep,
-      totalUpkeep,
-      upkeepPaid,
+      maintenance,
+      totalMaintenance,
+      maintenancePaid,
       constructionAvailable: crestStock >= 25,
       foodShortage: !consumed.fed,
       population: getPopulationCount(final),
@@ -428,17 +431,17 @@ describe('H — harness fidelity', () => {
 describe('§2 — baseline reproduction (current rules, Farm upkeep absent)', () => {
   it('locks the audited constants to their src values', () => {
     const constants = {
-      materialStorage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-      workshopUpkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      taxPerInhabitant: TAX_PER_INHABITANT_PER_TICK,
+      commercePerWorkshop: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      maintenance: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       foodPerFarm: FOOD_PER_FARM_PER_TICK,
-      materialPerWorker: MATERIAL_PER_WORKER_PER_TICK,
     }
     audit('CONSTANTS', constants)
     expect(constants).toEqual({
-      materialStorage: 25,
-      workshopUpkeep: 1,
+      taxPerInhabitant: 1,
+      commercePerWorkshop: 2,
+      maintenance: 1,
       foodPerFarm: 2,
-      materialPerWorker: 2,
     })
   })
 
@@ -447,17 +450,17 @@ describe('§2 — baseline reproduction (current rules, Farm upkeep absent)', ()
     const r0 = runTrace(start, 1, false).records[0]!
     expect(r0.staffedWorkshops).toBe(1)
     expect(r0.staffedFarms).toBe(0)
-    expect(r0.materialProduction).toBe(2)
-    expect(r0.workshopUpkeep).toBe(1)
+    expect(r0.commerce).toBe(2)
+    expect(r0.maintenance).toBe(1)
     expect(r0.farmUpkeep).toBe(0)
     const trace = runTrace(start, 40, false)
     const after = trace.records.map((r) => r.material)
     audit('BASELINE_ONE_WORKSHOP', {
-      storage: materialStorageCapacityForTick(trace.state),
+      maintenance: maintenanceDueForTick(trace.state),
       tick20: after[19],
       tick24: after[23],
       tick40: after[39],
-      canAfford25AtRest: trace.state.resources.construction >= 25,
+      canAfford25AtRest: trace.state.resources.money >= 25,
     })
     // Step 10CQ.1: below the cap each tick adds 2 stored + 2 income − 1
     // upkeep = +3 up to 24 (t8), one clamp tick lands 26 (t9), then stored 0
@@ -465,23 +468,21 @@ describe('§2 — baseline reproduction (current rules, Farm upkeep absent)', ()
     expect(after[19]).toBe(37)
     expect(after[23]).toBe(41)
     expect(after[39]).toBe(57)
-    expect(trace.state.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(trace.state.resources.money).toBeGreaterThanOrEqual(25)
   })
 
-  it('confirms a staffed Farm costs no Material upkeep but earns +1 income/tick (Step 10CQ.1)', () => {
+  it('confirms a staffed Farm costs no Farm upkeep but pays building maintenance (Step001)', () => {
     const start = rowWorld({ residences: 1, farms: 1, workshops: 0, material: 10, food: 100 })
     const after = runTrace(start, 30, false).state
     audit('BASELINE_FARM_UPKEEP_ZERO', {
       materialStart: 10,
-      materialAfter30: after.resources.construction,
+      materialAfter30: after.resources.money,
       farmUpkeepDue: countStaffedOperationalFarms(start),
-      note: 'Farm upkeep stays 0; the +30 is pure Step 10CQ Farm-worker income (1/tick × 30)',
+      note: 'Farm upkeep stays 0; maintenance (residence + farm = 2/tick) exceeds taxes (1/tick), so the treasury drains to the floor',
     })
-    // Step 10CQ.1: 10 + 30 × 1 (Farm income) = 40 — with zero Farm upkeep.
-    expect(materialUpkeepDueForTick(start)).toBe(0)
-    expect(after.resources.construction).toBe(
-      10 + 30 * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
-    )
+    // Step001: maintenance 2 on a 1-tax colony: 10 drains to 0, floor holds.
+    expect(maintenanceDueForTick(start)).toBe(2)
+    expect(after.resources.money).toBe(0)
   })
 })
 
@@ -535,12 +536,12 @@ describe('§4/§5 — core 60-tick stability (candidate Farm upkeep ON)', () => 
         materialEnd: last.material,
         materialPeak: peak,
         materialFloor: floor,
-        grossMaterialPerTick: first.materialProduction,
-        totalUpkeepPerTick: first.totalUpkeep,
-        netMaterialPerTick: first.materialProduction - first.totalUpkeep,
+        grossMaterialPerTick: first.commerce,
+        totalUpkeepPerTick: first.totalMaintenance,
+        netMoneyPerTick: first.commerce - first.totalMaintenance,
         foodProductionPerTick: first.foodProduction,
         foodNetPerTick: first.foodProduction - first.colonists,
-        storage: materialStorageCapacityForTick(trace.state),
+        maintenance: maintenanceDueForTick(trace.state),
         populationEnd: last.population,
         constructionAvailable: last.constructionAvailable,
         foodShortageTicks: trace.records.filter((r) => r.foodShortage).length,
@@ -573,18 +574,18 @@ describe('§4/§5 — core 60-tick stability (candidate Farm upkeep ON)', () => 
       const r = runTrace(start, 1, true).records[0]!
       const farmWorkers = r.staffedFarms
       const shopWorkers = r.staffedWorkshops
-      const gross = r.materialProduction
-      const net = gross - r.totalUpkeep
+      const gross = r.commerce
+      const net = gross - r.totalMaintenance
       audit(`NET_${scenario.name}`, {
         farmWorkers,
         shopWorkers,
         gross,
-        totalUpkeep: r.totalUpkeep,
+        totalMaintenance: r.totalMaintenance,
         net,
         expectedNet: shopWorkers - farmWorkers,
       })
       // stored gross equals 2 x staffed workshops while below storage cap
-      expect(gross).toBe(shopWorkers * MATERIAL_PER_WORKER_PER_TICK)
+      expect(gross).toBe(shopWorkers * COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK)
       expect(net).toBe(shopWorkers - farmWorkers)
     }
   })
@@ -635,40 +636,37 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
     const trace = runTrace(start, 40, true)
     const r = trace.records[0]!
     audit('CRITICAL_1F1W', {
-      grossMaterial: r.materialProduction,
+      grossMaterial: r.commerce,
       farmUpkeep: r.farmUpkeep,
-      workshopUpkeep: r.workshopUpkeep,
-      totalUpkeep: r.totalUpkeep,
-      netMaterial: r.materialProduction - r.totalUpkeep,
+      maintenance: r.maintenance,
+      totalMaintenance: r.totalMaintenance,
+      netMaterial: r.commerce - r.totalMaintenance,
       materialTrace: trace.records.map((x) => x.material).slice(0, 5),
-      materialAfter40: trace.state.resources.construction,
+      materialAfter40: trace.state.resources.money,
     })
-    expect(r.materialProduction).toBe(2)
-    expect(r.totalUpkeep).toBe(2)
+    expect(r.commerce).toBe(2)
+    expect(r.totalMaintenance).toBe(2)
     // Workshop-only income: the Workshop worker earns 2, the Farm worker 0,
     // so above the cap income (2) exactly equals the candidate upkeep (2) and
     // the stock rests AT the cap. Below it, each tick adds 2 stored + 2
     // income − 2 upkeep = +2.
-    expect(
-      MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
-        MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
-    ).toBe(2)
+    expect(TAX_PER_INHABITANT_PER_TICK).toBe(1)
     expect(trace.records.slice(0, 5).map((x) => x.material)).toEqual([2, 4, 6, 8, 10])
-    expect(trace.state.resources.construction).toBe(25)
+    expect(trace.state.resources.money).toBe(25)
   })
 
   it('candidate 1F+1W from a 24 stock rests exactly at the cap; the crest still allows a timed build', () => {
     const start = rowWorld({ residences: 2, farms: 1, workshops: 1, material: 24, food: 200 })
     const trace = runTrace(start, 40, true)
     audit('CRITICAL_1F1W_AT_24', {
-      materialAfter40: trace.state.resources.construction,
+      materialAfter40: trace.state.resources.money,
       restEquilibrium: 25,
       note: 'Workshop-only income: t1 stores 1 and credits 2, pays 2 -> 25, and income (2) then equals upkeep (2) exactly, so the stock rests at the cap and the crest is at the build cost every tick',
     })
     // Workshop-only income: t1 stores 1 and credits 2, pays 2 -> 25; the
     // stock then rests at the cap (income 2 == upkeep 2).
-    expect(trace.state.resources.construction).toBe(25)
-    expect(trace.records.every((r) => r.materialCrest >= 25)).toBe(true)
+    expect(trace.state.resources.money).toBe(25)
+    expect(trace.records.every((r) => r.treasuryCrest >= 25)).toBe(true)
     // On the crest tick, produceMaterial fills to 25 and applyCommand can
     // spend it in the SAME tick (08G phase 8a precedes 8b).
     const crest = stepWithMetrics(start, true, {
@@ -706,12 +704,10 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
         farms,
         workshops: workshops,
         colonists,
-        netPerTick: last.materialProduction - last.totalUpkeep,
-        netPerTickAtStart: trace.records[0]!.materialProduction - trace.records[0]!.totalUpkeep,
+        netPerTick: last.revenue - last.totalMaintenance,
+        netPerTickAtStart: trace.records[0]!.revenue - trace.records[0]!.totalMaintenance,
         netWithIncomePerTick:
-          farms * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
-          workshops * MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK -
-          last.totalUpkeep,
+          trace.records[0]!.revenue - trace.records[0]!.totalMaintenance,
         materialEnd: last.material,
         classification: classify(trace.records),
       })
@@ -738,16 +734,16 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
     const flat = runTrace(flatStart, 60, true)
     audit('CRITICAL_2W1F_VS_2W2F', {
       twoWorkshopsOneFarm: {
-        netPerTick: grow.records[0]!.materialProduction - grow.records[0]!.totalUpkeep,
-        materialEnd: grow.state.resources.construction,
+        netPerTick: grow.records[0]!.commerce - grow.records[0]!.totalMaintenance,
+        materialEnd: grow.state.resources.money,
       },
       twoWorkshopsTwoFarms: {
-        netPerTick: flat.records[0]!.materialProduction - flat.records[0]!.totalUpkeep,
-        materialEnd: flat.state.resources.construction,
+        netPerTick: flat.records[0]!.commerce - flat.records[0]!.totalMaintenance,
+        materialEnd: flat.state.resources.money,
       },
     })
-    expect(grow.records[0]!.materialProduction - grow.records[0]!.totalUpkeep).toBe(1)
-    expect(flat.records[0]!.materialProduction - flat.records[0]!.totalUpkeep).toBe(0)
+    expect(grow.records[0]!.commerce - grow.records[0]!.totalMaintenance).toBe(1)
+    expect(flat.records[0]!.commerce - flat.records[0]!.totalMaintenance).toBe(0)
   })
 })
 
@@ -765,7 +761,7 @@ describe('§7 — construction stability (time-to-25)', () => {
     for (let tick = 0; tick < cap; tick += 1) {
       const result = stepWithMetrics(state, farmUpkeep)
       state = result.state
-      if (result.metrics.materialCrest >= 25) return tick + 1
+      if (result.metrics.treasuryCrest >= 25) return tick + 1
     }
     return null
   }
@@ -869,19 +865,19 @@ describe('§8 — bootstrap experiment', () => {
         staffedFarms: r.staffedFarms,
         staffedWorkshops: r.staffedWorkshops,
         farmUpkeep: r.farmUpkeep,
-        workshopUpkeep: r.workshopUpkeep,
+        maintenance: r.maintenance,
         constructionAvailable: r.constructionAvailable,
       })).concat([{
         step: 'FINAL',
         tick: state.time.tick,
         pop: getPopulationCount(state),
         food: state.resources.food,
-        material: state.resources.construction,
+        material: state.resources.money,
         staffedFarms: countStaffedOperationalFarms(state),
         staffedWorkshops: countStaffedOperationalWorkshops(state),
         farmUpkeep: 0,
-        workshopUpkeep: 0,
-        constructionAvailable: state.resources.construction >= 25,
+        maintenance: 0,
+        constructionAvailable: state.resources.money >= 25,
       }])
     audit('BOOTSTRAP_CANDIDATE', summarize(candidate, candidate.state))
     audit('BOOTSTRAP_BASELINE', summarize(baseline, baseline.state))
@@ -894,18 +890,18 @@ describe('§8 — bootstrap experiment', () => {
       secondWorkshopBuilt: countType(candidate.state, 'workshop') >= 2,
       secondFarmBuilt: countType(candidate.state, 'farm') >= 2,
       deadEnd:
-        candidate.state.resources.construction < 25 &&
+        candidate.state.resources.money < 25 &&
         !candidate.records[candidate.records.length - 1]!.constructionAvailable,
-      candidateMaterialEnd: candidate.state.resources.construction,
-      baselineMaterialEnd: baseline.state.resources.construction,
+      candidateMaterialEnd: candidate.state.resources.money,
+      baselineMaterialEnd: baseline.state.resources.money,
     })
     // Workshop-only income: the colonist staffs the nearer Farm, the Workshop
     // stays vacant, and Farm employment earns nothing — so the candidate's
     // farm upkeep drains the stock to 0. The farm-first bootstrap gap is now
     // absolute under the candidate rule; only Workshop staffing closes it.
-    expect(candidate.state.resources.construction).toBe(0)
-    expect(candidate.state.resources.construction).toBeLessThan(25)
-    expect(baseline.state.resources.construction).toBeLessThan(25)
+    expect(candidate.state.resources.money).toBe(0)
+    expect(candidate.state.resources.money).toBeLessThan(25)
+    expect(baseline.state.resources.money).toBeLessThan(25)
     expect(getPopulationCount(candidate.state)).toBe(1)
   })
 
@@ -923,13 +919,13 @@ describe('§8 — bootstrap experiment', () => {
     audit('BOOTSTRAP_TWO_WORKSHOPS', {
       tickAfterBuild3: trace.records[4]!.material,
       staffedWorkshops: trace.records[4]!.staffedWorkshops,
-      netPerTick: trace.records[4]!.materialProduction - trace.records[4]!.totalUpkeep,
-      materialAfter45Ticks: trace.state.resources.construction,
-      constructionAvailable: trace.state.resources.construction >= 25,
+      netPerTick: trace.records[4]!.commerce - trace.records[4]!.totalMaintenance,
+      materialAfter45Ticks: trace.state.resources.money,
+      constructionAvailable: trace.state.resources.money >= 25,
     })
     expect(trace.records[4]!.staffedWorkshops).toBe(1)
-    expect(trace.records[4]!.materialProduction - trace.records[4]!.totalUpkeep).toBe(1)
-    expect(trace.state.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(trace.records[4]!.commerce - trace.records[4]!.totalMaintenance).toBe(1)
+    expect(trace.state.resources.money).toBeGreaterThanOrEqual(25)
   })
 })
 
@@ -1042,25 +1038,25 @@ describe('§10 — worker competition under symmetric upkeep', () => {
         farmWorkers: farmBranch.staffedFarms,
         shopWorkers: farmBranch.staffedWorkshops,
         foodProduction: farmBranch.foodProduction,
-        materialProduction: farmBranch.materialProduction,
-        totalUpkeep: farmBranch.totalUpkeep,
-        netMaterial: farmBranch.materialProduction - farmBranch.totalUpkeep,
+        commerce: farmBranch.commerce,
+        totalMaintenance: farmBranch.totalMaintenance,
+        netMaterial: farmBranch.commerce - farmBranch.totalMaintenance,
       },
       workshopStaffed: {
         farmWorkers: shopBranch.staffedFarms,
         shopWorkers: shopBranch.staffedWorkshops,
         foodProduction: shopBranch.foodProduction,
-        materialProduction: shopBranch.materialProduction,
-        totalUpkeep: shopBranch.totalUpkeep,
-        netMaterial: shopBranch.materialProduction - shopBranch.totalUpkeep,
+        commerce: shopBranch.commerce,
+        totalMaintenance: shopBranch.totalMaintenance,
+        netMaterial: shopBranch.commerce - shopBranch.totalMaintenance,
       },
     })
     // Candidate opportunity cost: Farm = +2 Food AND -1 Material; Workshop =
     // +2 Material AND -1 Material. Both branches now pay Material.
-    expect(farmBranch.totalUpkeep).toBe(1)
+    expect(farmBranch.totalMaintenance).toBe(1)
     expect(farmBranch.foodProduction).toBe(2)
-    expect(shopBranch.totalUpkeep).toBe(1)
-    expect(shopBranch.materialProduction).toBe(2)
+    expect(shopBranch.totalMaintenance).toBe(1)
+    expect(shopBranch.commerce).toBe(2)
   })
 
   it('runs the four mandated competition scenarios', () => {
@@ -1080,18 +1076,18 @@ describe('§10 — worker competition under symmetric upkeep', () => {
         staffedWorkshops: r.staffedWorkshops,
         unemployed: r.unemployed,
         foodProduction: r.foodProduction,
-        materialProduction: r.materialProduction,
-        totalUpkeep: r.totalUpkeep,
-        netMaterial: r.materialProduction - r.totalUpkeep,
+        commerce: r.commerce,
+        totalMaintenance: r.totalMaintenance,
+        netMaterial: r.commerce - r.totalMaintenance,
       }
     }
     audit('COMPETITION_SCENARIOS', out)
     // 1 colonist: exactly one workplace staffed and it pays 1 Material.
     expect((out['1c 1F+1W'] as { staffedFarms: number; staffedWorkshops: number }).staffedFarms +
       (out['1c 1F+1W'] as { staffedWorkshops: number }).staffedWorkshops).toBe(1)
-    expect((out['1c 1F+1W'] as { totalUpkeep: number }).totalUpkeep).toBe(1)
+    expect((out['1c 1F+1W'] as { totalMaintenance: number }).totalMaintenance).toBe(1)
     // 2 colonists + 1F+1W: both staffed, net Material 0.
-    expect((out['2c 1F+1W'] as { totalUpkeep: number }).totalUpkeep).toBe(2)
+    expect((out['2c 1F+1W'] as { totalMaintenance: number }).totalMaintenance).toBe(2)
     expect((out['2c 1F+1W'] as { netMaterial: number }).netMaterial).toBe(0)
   })
 })
@@ -1129,7 +1125,7 @@ describe('§11 — spatial preference under the candidate', () => {
         staffedWorkshops: farmRun.records[0]!.staffedWorkshops,
         foodAfter40: farmRun.records[39]!.food,
         materialAfter40: farmRun.records[39]!.material,
-        totalUpkeep: farmRun.records[0]!.totalUpkeep,
+        totalMaintenance: farmRun.records[0]!.totalMaintenance,
         foodShortage: farmRun.records.some((r) => r.foodShortage),
       },
       residenceAtWorkshopColumn: {
@@ -1137,12 +1133,12 @@ describe('§11 — spatial preference under the candidate', () => {
         staffedWorkshops: shopRun.records[0]!.staffedWorkshops,
         foodAfter40: shopRun.records[39]!.food,
         materialAfter40: shopRun.records[39]!.material,
-        totalUpkeep: shopRun.records[0]!.totalUpkeep,
+        totalMaintenance: shopRun.records[0]!.totalMaintenance,
         foodShortage: shopRun.records.some((r) => r.foodShortage),
       },
     })
-    expect(farmRun.records[0]!.totalUpkeep).toBe(1)
-    expect(shopRun.records[0]!.totalUpkeep).toBe(1)
+    expect(farmRun.records[0]!.totalMaintenance).toBe(1)
+    expect(shopRun.records[0]!.totalMaintenance).toBe(1)
     expect(farmRun.records.some((r) => r.foodShortage)).toBe(false)
     expect(shopRun.records.some((r) => r.foodShortage)).toBe(true)
   })
@@ -1168,22 +1164,22 @@ describe('§11 — spatial preference under the candidate', () => {
       farmCreatedFirst: {
         staffedFarms: farmFirst.staffedFarms,
         staffedWorkshops: farmFirst.staffedWorkshops,
-        totalUpkeep: farmFirst.totalUpkeep,
+        totalMaintenance: farmFirst.totalMaintenance,
         foodProduction: farmFirst.foodProduction,
-        materialProduction: farmFirst.materialProduction,
+        commerce: farmFirst.commerce,
       },
       workshopCreatedFirst: {
         staffedFarms: shopFirst.staffedFarms,
         staffedWorkshops: shopFirst.staffedWorkshops,
-        totalUpkeep: shopFirst.totalUpkeep,
+        totalMaintenance: shopFirst.totalMaintenance,
         foodProduction: shopFirst.foodProduction,
-        materialProduction: shopFirst.materialProduction,
+        commerce: shopFirst.commerce,
       },
     })
     // The tie-break decides the output mix; under the candidate BOTH mixes
     // pay exactly 1 upkeep, so the tie no longer changes the Material cost.
-    expect(farmFirst.totalUpkeep).toBe(1)
-    expect(shopFirst.totalUpkeep).toBe(1)
+    expect(farmFirst.totalMaintenance).toBe(1)
+    expect(shopFirst.totalMaintenance).toBe(1)
   })
 })
 
@@ -1260,13 +1256,10 @@ describe('§13 — expansion threshold: minimum Workshops per Farm', () => {
         })
         const trace = runTrace(start, 60, true)
         const last = trace.records[59]!
-        const maxCrest = Math.max(...trace.records.map((r) => r.materialCrest))
-        // Step 10CQ.1: accumulation now comes from employment income, not from
-        // clamped stored production (which is 0 once the cap is reached).
-        const income =
-          last.staffedFarms * MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
-          last.staffedWorkshops * MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
-        const net = income - last.totalUpkeep
+        const maxCrest = Math.max(...trace.records.map((r) => r.treasuryCrest))
+        // Step001: accumulation comes from public revenue (taxes +
+        // commerce), never from clamped production (there is no cap).
+        const net = last.revenue - last.totalMaintenance
         if (net >= 0 && maxCrest >= 25) {
           minimum = workshops
           break
@@ -1275,14 +1268,15 @@ describe('§13 — expansion threshold: minimum Workshops per Farm', () => {
       return { farms, minimumWorkshopsForAccumulation: minimum }
     })
     audit('EXPANSION_THRESHOLD_TABLE', table)
-    // Workshop-only income: accumulation requires (W×2 − F×1 − W×1) ≥ 0,
-    // i.e. W ≥ F — the original Step 10G threshold is restored by the
-    // product-model correction (Farm workers earn nothing).
+    // Step001 money with the candidate Farm-upkeep surcharge: net is
+    // (F+W taxes + 2W commerce) − (2F+2W maintenance + F farm surcharge) =
+    // W − 2F, so accumulation needs W ≥ 2F strictly above the floor — and a
+    // zero net never reaches the 25 crest, hence the null at F = 3.
     expect(table).toEqual([
       { farms: 0, minimumWorkshopsForAccumulation: 1 },
-      { farms: 1, minimumWorkshopsForAccumulation: 1 },
-      { farms: 2, minimumWorkshopsForAccumulation: 2 },
-      { farms: 3, minimumWorkshopsForAccumulation: 3 },
+      { farms: 1, minimumWorkshopsForAccumulation: 3 },
+      { farms: 2, minimumWorkshopsForAccumulation: 5 },
+      { farms: 3, minimumWorkshopsForAccumulation: null },
     ])
   })
 
@@ -1334,7 +1328,7 @@ describe('§14 — death spiral test (low Material, candidate ON)', () => {
         materialStart: first.material,
         materialMin: Math.min(...trace.records.map((r) => r.material)),
         materialEnd: last.material,
-        totalUpkeepPerTick: first.totalUpkeep,
+        totalUpkeepPerTick: first.totalMaintenance,
         staffedStart: first.staffedFarms + first.staffedWorkshops,
         staffedEnd: last.staffedFarms + last.staffedWorkshops,
         capacityLost:
@@ -1398,7 +1392,7 @@ describe('§15 — recovery test', () => {
       const trace = runTrace(start, 60, true)
       const end = trace.records[59]!
       return {
-        netPerTick: end.materialProduction - end.totalUpkeep,
+        netPerTick: end.commerce - end.totalMaintenance,
         materialEnd: end.material,
         recovered: end.material > 0,
       }
@@ -1429,8 +1423,8 @@ describe('§15 — recovery test', () => {
       buildingType: 'workshop',
     })
     audit('RECOVERY_PLAYER_ACTION', {
-      beforeMaterial: trapped.resources.construction,
-      afterBuildMaterial: crest.state.resources.construction,
+      beforeMaterial: trapped.resources.money,
+      afterBuildMaterial: crest.state.resources.money,
       workshopBuilt: Object.values(crest.state.buildings).some(
         (b) => b.type === 'workshop' && b.x === 15 && b.y === 2
       ),
@@ -1448,7 +1442,7 @@ describe('§15 — recovery test', () => {
     })
     expect(Object.values(rejected.state.buildings).some((b) => b.x === 15 && b.y === 2)).toBe(false)
     audit('RECOVERY_IRREVERSIBLE', {
-      material: dead.resources.construction,
+      material: dead.resources.money,
       buildAccepted: false,
       note: 'no demolish and no unassign exist; W<=F at zero Material is terminal',
     })
@@ -1468,7 +1462,7 @@ describe('§16 — candidate classification evidence', () => {
       const first = candidate.records[0]!
       return {
         name: scenario.name,
-        netMaterialPerTick: first.materialProduction - first.totalUpkeep,
+        netMoneyPerTick: first.commerce - first.totalMaintenance,
         candidateClass: classify(candidate.records),
         baselineClass: classify(baseline.records),
         candidateMaterialEnd: candidate.records[CORE_TICKS - 1]!.material,

@@ -21,17 +21,15 @@ import {
   getBuildingDefinition,
   getEmploymentSummary,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPlacementSpatialPreview,
   getPopulationCount,
   getRoadNetworks,
   getRoadsPlacementAffordability,
   getWaterProductionPerTick,
-  getWorkforceIncome,
   hashCanonicalState,
   SAVE_VERSION,
   SCENARIOS,
@@ -99,7 +97,7 @@ const build = (spec: Spec): SimulationState => {
     resources: {
       ...state.resources,
       food: 10_000,
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       water: spec.water ?? 0,
     },
   }
@@ -240,11 +238,11 @@ describe('10DD — spatial depth: placement and road topology', () => {
 
   it('a roadless workplace produces nothing until a 5-Material road restores it', () => {
     const stranded = build({ residences: 1, workshops: 1, colonists: 1, roads: false, water: 1 })
-    expect(getMaterialProductionPerTick(stranded)).toBe(0)
+    expect(getRevenuePerTick(stranded)).toBe(0)
     expect(getPopulationCount(stranded)).toBe(1)
 
     const connected = build({ residences: 1, workshops: 1, colonists: 1, material: 100, water: 1 })
-    expect(getMaterialProductionPerTick(connected)).toBe(2)
+    expect(getRevenuePerTick(connected)).toBe(2)
   })
 })
 
@@ -256,26 +254,26 @@ describe('10DD — workforce depth', () => {
 
     expect(getFoodProductionPerTick(farm)).toBe(2)
     expect(getWaterProductionPerTick(well)).toBe(2)
-    expect(getMaterialProductionPerTick(workshop)).toBe(2)
+    expect(getRevenuePerTick(workshop)).toBe(2)
 
     // Income and upkeep differ by workplace: the allocation is a real
     // trade-off. Workshop-only income: only the Workshop worker earns
     // Material; Farm/Well employment pays in its own resource instead.
-    expect(getWorkforceIncome(farm)).toBe(0)
-    expect(getWorkforceIncome(well)).toBe(0)
-    expect(getWorkforceIncome(workshop)).toBe(2)
-    expect(getMaterialUpkeepPerTick(workshop)).toBe(1)
-    expect(getMaterialUpkeepPerTick(farm)).toBe(0)
+    expect(getRevenuePerTick(farm)).toBe(0)
+    expect(getRevenuePerTick(well)).toBe(0)
+    expect(getRevenuePerTick(workshop)).toBe(2)
+    expect(getMaintenanceDuePerTick(workshop)).toBe(1)
+    expect(getMaintenanceDuePerTick(farm)).toBe(0)
   })
 
   it('mobility gates assignment: a disconnected workplace stays vacant', () => {
     const disconnected = build({ residences: 1, workshops: 1, colonists: 1, roads: false, water: 1 })
     expect(getEmploymentSummary(disconnected).employed).toBe(0)
-    expect(getWorkforceIncome(disconnected)).toBe(0)
+    expect(getRevenuePerTick(disconnected)).toBe(0)
 
     const connected = build({ residences: 1, workshops: 1, colonists: 1, water: 1 })
     expect(getEmploymentSummary(connected).employed).toBe(1)
-    expect(getWorkforceIncome(connected)).toBe(2)
+    expect(getRevenuePerTick(connected)).toBe(2)
   })
 
   it('the same start with different allocations diverges over time', () => {
@@ -305,21 +303,21 @@ describe('10DD — economic and temporal depth', () => {
     const base = build({ residences: 1, workshops: 1, colonists: 1, material: 0, water: 1 })
     expect(getMaterialStorageCapacity(base)).toBe(25)
     // Below the cap: stored 2 + income 2 - upkeep 1 = +3/tick.
-    expect(getNetMaterialPerTick(base)).toBe(1) // production - upkeep (income is separate)
+    expect(getNetMoneyPerTick(base)).toBe(1) // production - upkeep (income is separate)
     const below = runTicks(base, 1)
-    expect(below.resources.construction).toBe(3)
+    expect(below.resources.money).toBe(3)
 
     const atCap = build({ residences: 1, workshops: 1, colonists: 1, material: 25, water: 1 })
     const above = runTicks(atCap, 1)
     // Stored production is 0 at the cap; income still grows the stock.
-    expect(above.resources.construction).toBe(26)
+    expect(above.resources.money).toBe(26)
   })
 
   it('the protected reserve funds buildings but never roads', () => {
     let state = createInitialState(config)
     state = {
       ...state,
-      resources: { ...state.resources, construction: 0 },
+      resources: { ...state.resources, money: 0 },
       storage: { ...state.storage, material: 40 },
     }
     expect(getPlacementAffordability(state, { x: 6, y: 6 }, 'residence').affordable).toBe(true)
@@ -338,7 +336,7 @@ describe('10DD — economic and temporal depth', () => {
     })
     const placed = Object.values(state.buildings).find((b) => b.type === 'workshop')
     expect(placed?.status).toBe('underConstruction')
-    expect(getMaterialUpkeepPerTick(state)).toBe(0)
+    expect(getMaintenanceDuePerTick(state)).toBe(0)
 
     // Operationally complete after the catalog's two ticks (staffing then applies).
     state = runTicks(state, 2)

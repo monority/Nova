@@ -31,11 +31,9 @@ import {
   getFoodProductionPerTick,
   getHousingSummary,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialStoredProductionPerTick,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getResourceStock,
@@ -46,14 +44,13 @@ import {
   getWaterServedResidenceCount,
   getWaterShortage,
   hashCanonicalState,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   INITIAL_FOOD,
   INITIAL_WATER,
   iterateBuildings,
   iterateColonists,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   SAVE_VERSION,
   serializeCanonicalState,
   serializeSave,
@@ -85,7 +82,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -215,10 +212,10 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterShortage: getWaterShortage(state),
     servedResidences: getWaterServedResidenceCount(state),
     servedColonists: getServedColonistCount(state),
-    material: state.resources.construction,
-    materialProduction: getMaterialProductionPerTick(state),
-    materialUpkeep: getMaterialUpkeepPerTick(state),
-    materialNet: getNetMaterialPerTick(state),
+    material: state.resources.money,
+    materialProduction: getRevenuePerTick(state),
+    materialUpkeep: getMaintenanceDuePerTick(state),
+    materialNet: getNetMoneyPerTick(state),
     storageCapacity: getMaterialStorageCapacity(state),
     storedProduction: getMaterialStoredProductionPerTick(state),
     employed: employment.employed,
@@ -335,7 +332,7 @@ describe('1. Current causal model', { timeout: 30000 }, () => {
     const snap = snapshot(living)
     audit('CAUSAL_MODEL', {
       initial: {
-        material: fresh.resources.construction,
+        material: fresh.resources.money,
         food: fresh.resources.food,
         water: fresh.resources.water,
         tick: fresh.time.tick,
@@ -347,8 +344,8 @@ describe('1. Current causal model', { timeout: 30000 }, () => {
         waterPerColonist: WATER_PER_COLONIST_PER_TICK,
         foodPerFarm: 2,
         foodPerColonist: 1,
-        materialPerWorker: MATERIAL_PER_WORKER_PER_TICK,
-        materialUpkeepPerStaffedWorkshop: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+        materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+        materialUpkeepPerStaffedWorkshop: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
         materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       },
       livingColony: snap,
@@ -362,7 +359,7 @@ describe('1. Current causal model', { timeout: 30000 }, () => {
       ],
     })
 
-    expect(fresh.resources.construction).toBe(INITIAL_CONSTRUCTION_MATERIAL)
+    expect(fresh.resources.money).toBe(INITIAL_TREASURY)
     expect(fresh.resources.food).toBe(INITIAL_FOOD)
     expect(fresh.resources.water).toBe(INITIAL_WATER)
     expect(catalog).toEqual([
@@ -1570,10 +1567,10 @@ describe('13-14. Architecture boundary audit', { timeout: 30000 }, () => {
       stock,
       population: getPopulationCount(state),
       jobs: getJobCapacity(state),
-      upkeep: getMaterialUpkeepPerTick(state),
+      upkeep: getMaintenanceDuePerTick(state),
       note: 'after 600 ticks no resource is negative and the upkeep clamp holds',
     })
-    expect(stock.construction).toBeGreaterThanOrEqual(0)
+    expect(stock.money).toBeGreaterThanOrEqual(0)
     expect(stock.food).toBeGreaterThanOrEqual(0)
     expect(stock.water).toBeGreaterThanOrEqual(0)
   })

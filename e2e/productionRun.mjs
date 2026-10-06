@@ -167,9 +167,9 @@ async function main() {
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     ok('load, app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.food !== '100' || s.construction !== '100' || s.colonists !== '0' || s.farms !== '0') {
+    if (s.tick !== '0' || s.food !== '100' || s.money !== '100' || s.colonists !== '0' || s.farms !== '0') {
       fail(`initial stats bad: ${JSON.stringify(s)}`);
-    } else ok(`initial stock: food ${s.food}, material ${s.construction}, colonists ${s.colonists}, farms ${s.farms}`);
+    } else ok(`initial stock: food ${s.food}, material ${s.money}, colonists ${s.colonists}, farms ${s.farms}`);
     await shot('01-initial.png');
 
     // B. Residence at (3,1) (tick 1). Residence is the default tool.
@@ -191,7 +191,7 @@ async function main() {
     await clickCell(page, { x: 3, y: 3 });
     await waitFor(async () => (await stats(page)).buildings === '2', 'farm placed');
     s = await stats(page);
-    if (s.construction !== '45' || s.farms !== '1') {
+    if (s.money !== '45' || s.farms !== '1') {
       fail(`after placements expected material 45 / farms 1, got ${JSON.stringify(s)}`);
     } else ok(`material 100 -> 45 (residence 25 + road 5 + farm 25), farms ${s.farms}`);
     await shot('02-placed.png');

@@ -80,7 +80,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 100,
       water: spec.water ?? 0,
     },
@@ -383,7 +383,7 @@ describe('progression — reachability of the contracted transitions', () => {
       25 + // well
       25 + // farm
       5 // one road cell (its four neighbours hold the four buildings)
-    const initialMaterial = createState().resources.construction
+    const initialMaterial = createState().resources.money
     expect(minimumVillageCost).toBe(105)
     expect(initialMaterial).toBe(100)
     // Documented consequence: the default opening is 5 Material short of the

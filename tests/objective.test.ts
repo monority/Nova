@@ -78,7 +78,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 100,
       water: spec.water ?? 0,
     },

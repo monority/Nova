@@ -21,7 +21,7 @@ import {
   getRoadNetworks,
   getWaterProductionPerTick,
   hashCanonicalState,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   isFoodSupplySustainable,
   iterateBuildings,
   SCENARIOS,
@@ -85,7 +85,7 @@ const snapshot = (state: SimulationState): PlaySnapshot => ({
   foodNet: getFoodProductionPerTick(state) - getPopulationCount(state),
   water: state.resources.water,
   waterCapacity: getWaterProductionPerTick(state),
-  material: state.resources.construction,
+  material: state.resources.money,
   materialNet: 0,
   roads: Object.keys(state.roads).length,
   networks: getRoadNetworks(state).length,
@@ -160,12 +160,12 @@ const playScenario = (
     }
     if (step.kind === 'roads') {
       let guard = 0
-      while (guard < 200 && state.resources.construction < step.cells.length * 5) {
+      while (guard < 200 && state.resources.money < step.cells.length * 5) {
         state = stepSimulation(state)
         observe()
         guard += 1
       }
-      if (state.resources.construction < step.cells.length * 5) {
+      if (state.resources.money < step.cells.length * 5) {
         actions.push({ label: `roads x${step.cells.length}`, tick: state.time.tick, accepted: false })
         continue
       }
@@ -622,14 +622,14 @@ describe('5. Carried-forward findings', { timeout: 30000 }, () => {
     )
     const minimumVillageCost = 2 * 25 + 25 + 25 + 5
     audit('OPENING_BUDGET', {
-      initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+      initialMaterial: INITIAL_TREASURY,
       minimumVillageCost,
       farmFirst: { stage: farmFirst.final.stage, materials: farmFirst.final.material, roads: farmFirst.final.roads, population: farmFirst.final.population },
       wellFirst: { stage: wellFirst.final.stage, wipeTick: wellFirst.wipeTick },
       conclusion:
         'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell); the construction order alone decides Settlement vs starvation, and with Workshop-only income the grant alone cannot fund the Village package (farm-first stalls at 20)',
     })
-    expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
+    expect(INITIAL_TREASURY).toBe(100)
     expect(minimumVillageCost).toBe(105)
     expect(farmFirst.final.stage).toBe('settlement')
     // Workshop-only income: the Farm and Well workers earn no Material, so the
@@ -661,7 +661,7 @@ describe('5. Carried-forward findings', { timeout: 30000 }, () => {
             requirements: [{ kind: 'population', atLeast: 1 }],
             failsWithoutColonists: false,
           },
-          resources: { material: 10, food: 100, water: 0 },
+          resources: { money: 10, food: 100, water: 0 },
           buildings: [],
           roads: [{ x: 1, y: 1 }],
           colonists: [],

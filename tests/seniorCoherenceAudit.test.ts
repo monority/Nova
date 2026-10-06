@@ -18,6 +18,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+  commerceRevenueForTick,
+
   assignJobs,
   consumeFood,
   countEmployedWorkers,
@@ -32,18 +35,15 @@ import {
   hashCanonicalState,
   isEmployed,
   loadSave,
-  materialProductionForTick,
-  materialStorageCapacityForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   produceFood,
-  produceMaterial,
   serializeCanonicalState,
   serializeSave,
   SAVE_VERSION,
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   type BuildingType,
   type SimulationState,
 } from '@/index'
@@ -158,23 +158,21 @@ describe('§4 — conservation: nothing appears or disappears without a rule', (
     }
   })
 
-  it('material ledger: stored = min(gross, cap - stock); upkeep = staffed x 1', () => {
+  it('money ledger: revenue lands in full; maintenance clamps to the treasury', () => {
     const { state } = staffedColony(2, 2)
     const assigned = assignJobs(state)
-    const gross = materialProductionForTick(assigned)
-    const cap = materialStorageCapacityForTick(assigned)
-    const stockBefore = assigned.resources.construction
-    const stored = produceMaterial(assigned)
-    expect(stored.resources.construction - stockBefore).toBe(
-      Math.min(gross, Math.max(0, cap - stockBefore))
-    )
-    const due = materialUpkeepDueForTick(assigned)
+    const gross = commerceRevenueForTick(assigned)
+    const stockBefore = assigned.resources.money
+    const funded = collectRevenue(assigned)
+    // No cap: the full revenue lands regardless of balance.
+    expect(funded.resources.money - stockBefore).toBe(gross + getTaxRevenuePerTick(assigned))
+    const due = maintenanceDueForTick(assigned)
     expect(due).toBeGreaterThanOrEqual(0)
-    const after = upkeepBuildings(stored)
-    expect(after.resources.construction).toBe(
-      stored.resources.construction - Math.min(stored.resources.construction, due)
+    const after = payMaintenance(funded)
+    expect(after.resources.money).toBe(
+      funded.resources.money - Math.min(funded.resources.money, due)
     )
-    expect(after.resources.construction).toBeGreaterThanOrEqual(0)
+    expect(after.resources.money).toBeGreaterThanOrEqual(0)
   })
 
   it('population ledger: pop only moves via admission (food>0 + free residence) or famine', () => {
@@ -216,10 +214,10 @@ describe('§5 — workers/jobs: contract as implemented', () => {
     const { state } = staffedColony(1, 1)
     // Unassigned state: nobody works the workshop.
     expect(countEmployedWorkers(state)).toBe(0)
-    expect(materialProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(0)
     const assigned = assignJobs(state)
     expect(countEmployedWorkers(assigned)).toBe(1)
-    expect(materialProductionForTick(assigned)).toBe(2)
+    expect(commerceRevenueForTick(assigned)).toBe(2)
   })
 
   it('farms produce zero when unstaffed (Step 10E: farms now require a worker)', () => {
@@ -354,7 +352,7 @@ describe('§6 — determinism: repetition and insertion order', () => {
     expect(a.buildings[nearA]!.y).toBe(3)
     expect(b.buildings[nearB]!.x).toBe(1)
     expect(b.buildings[nearB]!.y).toBe(3)
-    expect(materialProductionForTick(a)).toBe(materialProductionForTick(b))
+    expect(commerceRevenueForTick(a)).toBe(commerceRevenueForTick(b))
     expect(getEmploymentSummary(a).employed).toBe(
       getEmploymentSummary(b).employed
     )
@@ -368,9 +366,9 @@ describe('§6 — determinism: repetition and insertion order', () => {
 describe('§7 — invariants hold on edge cases', () => {
   const assertGlobalInvariants = (s: SimulationState): void => {
     expect(s.resources.food).toBeGreaterThanOrEqual(0)
-    expect(s.resources.construction).toBeGreaterThanOrEqual(0)
+    expect(s.resources.money).toBeGreaterThanOrEqual(0)
     expect(Number.isFinite(s.resources.food)).toBe(true)
-    expect(Number.isFinite(s.resources.construction)).toBe(true)
+    expect(Number.isFinite(s.resources.money)).toBe(true)
     expect(getPopulationCount(s)).toBeGreaterThanOrEqual(0)
     expect(Object.keys(s.buildings).length).toBeGreaterThanOrEqual(0)
     for (const c of Object.values(s.colonists)) {
@@ -417,7 +415,7 @@ describe('§7 — invariants hold on edge cases', () => {
 
   it('zero material stock: placements rejected, simulation continues', () => {
     let s = createTestState()
-    s = { ...s, resources: { ...s.resources, construction: 0 } }
+    s = { ...s, resources: { ...s.resources, money: 0 } }
     s = stepSimulation(s, {
       type: 'placeBuilding',
       x: 1,
@@ -590,7 +588,7 @@ describe('§8 — scalability benchmark', () => {
       produceFood(s)
     })
     measure('LARGE-produceMaterial', () => {
-      produceMaterial(assignJobs(s))
+      collectRevenue(assignJobs(s))
     })
     measure('LARGE-hash', () => {
       hashCanonicalState(s)

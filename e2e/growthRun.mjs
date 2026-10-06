@@ -76,7 +76,7 @@ const loadTownFixture = (page, material = 100_000, withVacantResidence = false) 
     let state = nova.createInitialState(config)
     state = {
       ...state,
-      resources: { ...state.resources, food: 1_000_000, water: 1_000_000, construction: materialValue },
+      resources: { ...state.resources, food: 1_000_000, water: 1_000_000, money: materialValue },
     }
     const op = (current, type, x, y) => {
       const created = nova.createBuilding(current, type, x, y, 2)
@@ -196,7 +196,7 @@ try {
   else fail(`expected affordable growth, got ${loaded.growthAffordable}`)
 
   const buildingsBefore = Number(loaded.buildings)
-  const materialBefore = Number(loaded.construction)
+  const materialBefore = Number(loaded.money)
   await page.screenshot({ path: resolve(ART, '01-town-demand.png') })
 
   // 3. One STEP → exactly one autonomous Residence, under construction.
@@ -207,10 +207,10 @@ try {
   } else {
     fail(`expected exactly one new building, got ${buildingsBefore} -> ${afterOne.buildings}`)
   }
-  if (Number(afterOne.construction) < materialBefore) {
-    ok(`growth spent Material (${materialBefore} -> ${afterOne.construction})`)
+  if (Number(afterOne.money) < materialBefore) {
+    ok(`growth spent Material (${materialBefore} -> ${afterOne.money})`)
   } else {
-    fail(`expected Material to be spent, got ${materialBefore} -> ${afterOne.construction}`)
+    fail(`expected Material to be spent, got ${materialBefore} -> ${afterOne.money}`)
   }
   const grown = await page.evaluate(() => window.__nova.buildingAt({ x: 2, y: 0 }))
   if (grown !== null && grown.type === 'residence') {

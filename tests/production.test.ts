@@ -77,7 +77,7 @@ describe('farm catalog (Step 06B)', () => {
 
   it('farms cost construction material through the shared placement path', () => {
     const state = stepSimulation(createTestState(), placeFarm(1, 1))
-    expect(getResourceStock(state).construction).toBe(75)
+    expect(getResourceStock(state).money).toBe(75)
     expect(state.buildings['building-1']?.type).toBe('farm')
     expect(state.buildings['building-1']?.status).toBe('underConstruction')
   })

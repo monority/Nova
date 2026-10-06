@@ -151,7 +151,7 @@ async function main() {
     // 1 — Bootstrap: no Well yet, the historical Food + housing gate admits.
     // ---------------------------------------------------------------------
     let s = await fresh(page);
-    assert(s.tick === '0' && s.construction === '100', `fresh state bad: ${JSON.stringify(s)}`);
+    assert(s.tick === '0' && s.money === '100', `fresh state bad: ${JSON.stringify(s)}`);
     assert(s.water === '0', `fresh water must be 0, got ${s.water}`);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 });

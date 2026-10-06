@@ -132,7 +132,7 @@ async function assignCrew(page, colonistId) {
 async function stepUntilPlaceable(page, cost = 25, maxTicks = 60) {
   for (let i = 0; i < maxTicks; i += 1) {
     const s = await stats(page);
-    if (Number(s.construction) + Number(s.storedProduction) >= cost) return s;
+    if (Number(s.money) + Number(s.storedProduction) >= cost) return s;
     await step(page);
   }
   throw new Error(`stock + stored never reached ${cost}: ${JSON.stringify(await stats(page))}`);
@@ -148,7 +148,7 @@ async function placeAtThroughGate(page, cell) {
 /** Step until the construction stock covers a 25-cost build. */
 async function stepUntilAffordable(page, cost = 25, maxTicks = 60) {
   for (let i = 0; i < maxTicks; i += 1) {
-    if (Number((await stats(page)).construction) >= cost) return stats(page);
+    if (Number((await stats(page)).money) >= cost) return stats(page);
     await step(page);
   }
   throw new Error(`material never reached ${cost}: ${JSON.stringify(await stats(page))}`);
@@ -211,7 +211,7 @@ async function main() {
     // Setup — a staffed Workshop, so a crew has a measurable cost
     // ---------------------------------------------------------------------
     let s = await fresh(page);
-    assert(s.tick === '0' && s.construction === '100', `fresh state bad: ${JSON.stringify(s)}`);
+    assert(s.tick === '0' && s.money === '100', `fresh state bad: ${JSON.stringify(s)}`);
     s = await bootstrapResidence(page);
     ok(`bootstrap: residence operational at tick ${s.tick} with ${s.colonists} colonist`);
 
@@ -250,11 +250,11 @@ async function main() {
     s = await stats(page);
     assert(s.staffedWorkshopIds !== '', `Workshop should be staffed, got ${JSON.stringify(s)}`);
     assert(s.materialProduction === '2', `Workshop should produce 2, got ${s.materialProduction}`);
-    const materialBefore = Number(s.construction);
-    ok(`setup: Workshop staffed, material ${s.construction}, production ${s.materialProduction}`);
+    const materialBefore = Number(s.money);
+    ok(`setup: Workshop staffed, material ${s.money}, production ${s.materialProduction}`);
 
     // ---------------------------------------------------------------------
-    // Scenario A — basic construction: uncrewed 2-tick building
+    // Scenario A — basic money: uncrewed 2-tick building
     // ---------------------------------------------------------------------
     // The Well is placed away from the network, so it can never steal the
     // Workshop worker and the comparison stays isolated.
@@ -292,9 +292,9 @@ async function main() {
     assert(s.crewWorkerIds === '', `crew must be released on completion, got "${s.crewWorkerIds}"`);
     assert(s.staffedWorkshopIds === '', `crew member must not staff the Workshop that tick, got "${s.staffedWorkshopIds}"`);
     assert(s.materialProduction === '0', `crew member must produce nothing that tick, got ${s.materialProduction}`);
-    assert(Number(s.construction) <= materialBefore, `material must not grow on a crew tick: ${materialBefore} -> ${s.construction}`);
+    assert(Number(s.money) <= materialBefore, `material must not grow on a crew tick: ${materialBefore} -> ${s.money}`);
     assert(s.status.includes('Construction crew assigned'), `crew feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`B/C: crewed Farm completed at tick ${s.tick}, Workshop vacant, production ${s.materialProduction}, material ${s.construction}`);
+    ok(`B/C: crewed Farm completed at tick ${s.tick}, Workshop vacant, production ${s.materialProduction}, material ${s.money}`);
     await shot('03-crewed.png');
 
     // D: the released colonist returns to normal work on the next tick.

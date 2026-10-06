@@ -10,15 +10,14 @@
  *   4. consumeFood         - all-or-nothing feeding (docs/11 #5)
  *   5. updatePopulation    - starvation then food-gated admission (docs/11 #9)
  *   6. assignJobs          - deterministic Workshop employment (Step 07C §4)
- *   7. produceMaterial     - employed colonists add construction material,
- *       clamped to operational Workshop storage (Step 08F §5)
+ *   7. collectRevenue      - taxes per inhabitant plus commerce per connected
+ *       Workshop flow into the uncapped treasury (Step001)
  *   8a. applyCommand       - player construction transaction (Step 08G §5):
- *       validated against the post-production stock, deducted before upkeep,
- *       never negative, atomic (check -> deduct -> create)
- *   8b. upkeepBuildings    - staffed operational Workshops pay 1 material
- *       (Step 08C, after production AND after construction, before time:
- *       partial payment clamped to stock, never negative, no deactivation,
- *       no debt)
+ *       validated against the post-revenue treasury, deducted before
+ *       maintenance, never negative, atomic (check -> deduct -> create)
+ *   8b. payMaintenance     - operational buildings pay maintenance (Step001,
+ *       after revenue AND after construction, before time: partial payment
+ *       clamped to treasury, never negative, no deactivation, no debt)
  *   9. advanceTime         - tick += 1
  *
  * Construction crew ordering (Step 10Y): phase 1 progresses each site by 1,
@@ -26,10 +25,11 @@
  * colonists). A crew assigned by the command phase (8a) therefore first
  * affects the NEXT tick's phase 1, and a newly placed building still uses the
  * existing 8a catch-up progress. The crew member stays crewed for the WHOLE
- * completion tick (so phase 8's `produceMaterial` cannot pay them twice) and
- * is released by the end-of-tick `releaseCompletedConstructionCrew`
- * normalization, run after upkeep and before `advanceTime`. Food/Water/
- * Material production rules are untouched: a crewed colonist holds no
+ * completion tick (so phase 7's `collectRevenue` cannot tax them twice: crew
+ * are live colonists, taxed exactly once like everyone else) and is released
+ * by the end-of-tick `releaseCompletedConstructionCrew` normalization, run
+ * after maintenance and before `advanceTime`. Food/Water/Revenue rules are
+ * untouched: a crewed colonist holds no
  * workplace, so `countWorkersAt` and every production rule already exclude
  * them.
  *
@@ -41,8 +41,8 @@
  *
  *   - a colonist admitted on tick N is assigned and produces on tick N;
  *   - a Workshop operational on tick N is staffed and produces on tick N;
- *   - starvation on tick N removes workers BEFORE produceMaterial, so no
- *     colonist produces construction material on the tick they starve.
+ *   - starvation on tick N removes inhabitants BEFORE collectRevenue, so no
+ *     colonist is taxed on the tick they starve.
  *
  * Every phase is a pure function: (state, ...) -> new state.
  * No phase mutates its input. No phase depends on rendering, UI,
@@ -66,7 +66,6 @@ import {
   getDistanceBetweenAccesses,
 } from '../mobility/mobility.js'
 import type { ColonistState } from '../population/colonist.js'
-import { getWorkplaceMaterialIncomeRate } from '../population/colonist.js'
 import {
   getBuildingRoadAccess,
   getBuildingRoadAccessWithNetworks,
@@ -83,19 +82,18 @@ import {
   deductFood,
   deductResources,
   deductWater,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
   hasSufficientFood,
   hasSufficientResources,
   hasSufficientWater,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
 } from '../resource/resource.js'
 import type { CellCoordinate } from '../world/grid.js'
 import { isInBounds, isTerrainBlocked } from '../world/grid.js'
 import { waterProductionForTick } from '../water/water.js'
-import { releaseProtectedMaterialReserve } from '../storage/storage.js'
 import type { SimulationCommand } from './command.js'
 import {
   createBuilding,
@@ -168,46 +166,6 @@ export type PlacementValidation =
         | 'insufficientResources'
         | 'insufficientWater'
     }
-
-export const releaseMaterialForCommand = (
-  state: SimulationState,
-  command: SimulationCommand | undefined
-): SimulationState => {
-  if (command === undefined || command.type !== 'placeBuilding') {
-    return state
-  }
-  const definition = BUILDING_CATALOG[command.buildingType]
-  const preflight = {
-    ...state,
-    resources: {
-      ...state.resources,
-      // Affordability is checked after the centralized release below. All
-      // other placement constraints still preflight against current state.
-      construction: Number.MAX_SAFE_INTEGER,
-    },
-  }
-  const validation = validatePlacement(
-    preflight,
-    { x: command.x, y: command.y },
-    command.buildingType
-  )
-  if (!validation.valid || definition === undefined) {
-    return state
-  }
-  const released = releaseProtectedMaterialReserve(
-    state.storage,
-    state.resources.construction,
-    definition.constructionCost
-  )
-  if (released.releaseAmount === 0) {
-    return state
-  }
-  return {
-    ...state,
-    resources: { ...state.resources, construction: released.operationalMaterial },
-    storage: released.storage,
-  }
-}
 
 export const validatePlacement = (
   state: SimulationState,
@@ -466,10 +424,10 @@ export const validateConstructionCrew = (
  * the stock of the state this runs on. Invalid command = explicit no-op
  * (same canonical state), never an error thrown across the phase boundary.
  *
- * Step 08G §5: the orchestrator runs this AFTER produceMaterial, so the
+ * Step 08G §5: the orchestrator runs this AFTER collectRevenue, so the
  * validated stock already includes this tick's STORED production (never
  * hypothetical overflow: the 08F clamp discarded it before this runs), and
- * BEFORE upkeepBuildings, so upkeep sees the post-construction stock.
+ * BEFORE payMaintenance, so maintenance sees the post-construction treasury.
  */
 export const applyCommand = (
   state: SimulationState,
@@ -744,7 +702,7 @@ export const advanceConstruction = (
  * End-of-tick crew normalization (Step 10Y §14). Clears every construction
  * assignment whose site is no longer under construction (completed, or gone).
  *
- * Runs AFTER `produceMaterial`/`upkeepBuildings` in the orchestrator, i.e.
+ * Runs AFTER `collectRevenue`/`payMaintenance` in the orchestrator, i.e.
  * after every production rule of the tick, so the crew member is excluded from
  * production for the WHOLE tick in which the site completes — construction
  * credit and production output are mutually exclusive (Step 10Y §3). The
@@ -917,7 +875,7 @@ export const foodProductionForTick = (state: SimulationState): number =>
  * the workplace assignments written by the PREVIOUS tick's assignJobs, so a
  * newly assigned Farm worker becomes productive on the NEXT tick. Phase order
  * is deliberately preserved (no reorder for same-tick convenience); Workshop
- * Material timing is unchanged (assignJobs -> produceMaterial same tick).
+ * Revenue timing is unchanged (assignJobs -> collectRevenue same tick).
  */
 export const produceFood = (state: SimulationState): SimulationState => {
   const output = foodProductionForTick(state)
@@ -1289,31 +1247,36 @@ export const assignJobs = (state: SimulationState): SimulationState => {
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic material output for this tick (Step 09F, employment gate Step
- * 09K): each operational, staffed Workshop with road access contributes its
- * workers × rate. Unassigned or non-operational Workshops produce nothing
- * (no hidden autonomous production, §7); since 09K a Workshop without road
- * access (or without a mobility-connected worker) is normally vacant rather
- * than staffed-but-blocked — the rule below is unchanged, it simply sees
- * fewer staffed roadless Workshops.
- *
- * Road access (Step 09E getBuildingRoadAccess) is the single source of truth;
- * the rate and storage coefficients are unchanged.
+ * Connected operational Workshops this tick (Step001 commerce base):
+ * operational AND road-accessible, vacant included, under-construction
+ * excluded — trade flows through the network, not through employment.
+ * Road access (Step 09E getBuildingRoadAccess) is the single source of
+ * truth. Deterministic ascending-id iteration like countOperationalFarms.
  */
-export const materialProductionForTick = (state: SimulationState): number => {
+export const countConnectedOperationalWorkshops = (
+  state: SimulationState
+): number => {
   let total = 0
   for (const building of iterateBuildings(state)) {
     if (!isOperationalWorkshop(building)) {
       continue
     }
-    const workers = countWorkersAt(state, building.id)
-    if (workers === 0 || !getBuildingRoadAccess(state, building.id).hasRoadAccess) {
+    if (!getBuildingRoadAccess(state, building.id).hasRoadAccess) {
       continue
     }
-    total += workers * MATERIAL_PER_WORKER_PER_TICK
+    total += 1
   }
   return total
 }
+
+/** Deterministic tax revenue this tick: live inhabitants × rate. */
+export const taxRevenueForTick = (state: SimulationState): number =>
+  getPopulationCount(state) * TAX_PER_INHABITANT_PER_TICK
+
+/** Deterministic commerce revenue this tick: connected Workshops × rate. */
+export const commerceRevenueForTick = (state: SimulationState): number =>
+  countConnectedOperationalWorkshops(state) *
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK
 
 /**
  * Operational Workshops, staffed or vacant (Step 08F §7). Storage capacity
@@ -1330,122 +1293,52 @@ export const countOperationalWorkshops = (state: SimulationState): number => {
   return count
 }
 
-/**
- * Material storage capacity this tick (Step 08F §2): operational Workshops
- * × 25. Pure derivation, never stored. Zero with no operational Workshop —
- * the bootstrap stock above capacity is preserved (§4): the cap bounds
- * production inflow only, never retroactively mutates stock.
- */
-export const materialStorageCapacityForTick = (
-  state: SimulationState
-): number =>
-  countOperationalWorkshops(state) * MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP
-
-/**
- * Production actually stored this tick (Step 08F §5): min(gross, available
- * space). Excess is deterministically discarded — no overflow resource, no
- * debt, no buffer, no backlog. Integer arithmetic, never negative.
- */
-export const materialStoredProductionForTick = (
-  state: SimulationState
-): number => {
-  const gross = materialProductionForTick(state)
-  if (gross <= 0) {
-    return 0
-  }
-  const available = Math.max(
-    0,
-    materialStorageCapacityForTick(state) - state.resources.construction
-  )
-  return Math.min(gross, available)
-}
-
-/**
- * Add this tick's labor output to the shared construction stock, clamped to
- * available storage (Step 08F §5-6). Pure: returns the input state reference
- * when nothing is stored. Runs after assignJobs, so a colonist admitted —
- * or a Workshop completed — on this tick produces on this tick, while a
- * starving colonist produces nothing. A Workshop operational as of this tick
- * (advanceConstruction ran before) contributes capacity this same tick.
- * Upkeep still runs after: production never bypasses the cap merely because
- * upkeep later frees space.
- *
- * Step 10BG: overflow (gross - stored) is captured in the central storage hub
- * instead of being discarded. Storage is a PARALLEL pool — it does NOT
- * reduce the main resource stock available for construction.
- */
-export const produceMaterial = (state: SimulationState): SimulationState => {
-  const gross = materialProductionForTick(state)
-  if (gross === 0) {
-    return state
-  }
-  const stored = materialStoredProductionForTick(state)
-  const overflow = gross - stored
-  if (stored === 0 && overflow === 0) {
-    return state
-  }
-  let nextState = {
-    ...state,
-    resources: {
-      ...state.resources,
-      construction: state.resources.construction + stored,
-    },
-  }
-  // Step 10BG: capture overflow in central storage (parallel pool, doesn't
-  // affect main stock affordability)
-  if (overflow > 0) {
-    const storage = nextState.storage
-    const materialHeadroom = storage.capacities.material - storage.material
-    if (materialHeadroom > 0) {
-      const allocated = Math.min(overflow, materialHeadroom)
-      nextState = {
-        ...nextState,
-        storage: { ...storage, material: storage.material + allocated },
-      }
-    }
-  }
-  return nextState
-}
-
 // ---------------------------------------------------------------------------
-// Phase 8a - Material income from employed colonists (Step 10CQ)
+// Phase 7 - Public revenue (Step001)
 // ---------------------------------------------------------------------------
 
 /**
- * Credit Material income to the stock based on employed colonists.
- * Runs after produceMaterial so income is additive to production,
- * and before upkeep so income is available to pay upkeep.
- *
- * Income rates:
- * - Farm worker: 1 Material/tick
- * - Well worker: 1 Material/tick
- * - Workshop worker: 2 Material/tick
- *
- * Only employed colonists at operational workplaces earn income.
- * Unemployed, construction-crew-assigned, or improperly assigned colonists earn 0.
+ * Collect this tick's public revenue into the uncapped treasury: taxes per
+ * live inhabitant plus commerce per connected Workshop. Pure: returns the
+ * input state reference when nothing is due. Runs after assignJobs, so a
+ * colonist admitted on this tick is taxed on this tick, while a starving
+ * colonist pays nothing. A Workshop operational as of this tick
+ * (advanceConstruction ran before) contributes commerce this same tick.
+ * Maintenance still runs after: revenue never bypasses maintenance merely
+ * because maintenance later drains the treasury.
  */
-export const creditMaterialIncome = (state: SimulationState): SimulationState => {
-  let totalIncome = 0
-  for (const colonist of iterateColonists(state)) {
-    if (colonist.workplaceId === null) continue
-    if (colonist.constructionAssignmentId !== null) continue
-    const workplace = state.buildings[colonist.workplaceId]
-    if (workplace === undefined || workplace.status !== 'operational') continue
-    totalIncome += getWorkplaceMaterialIncomeRate(workplace.type)
+export const collectRevenue = (state: SimulationState): SimulationState => {
+  const revenue = taxRevenueForTick(state) + commerceRevenueForTick(state)
+  if (revenue <= 0) {
+    return state
   }
-  if (totalIncome <= 0) return state
   return {
     ...state,
     resources: {
       ...state.resources,
-      construction: state.resources.construction + totalIncome,
+      money: state.resources.money + revenue,
     },
   }
 }
 
 // ---------------------------------------------------------------------------
-// Phase 8b - Operational upkeep (Step 08C)
+// Phase 8b - Building maintenance (Step001)
 // ---------------------------------------------------------------------------
+
+/**
+ * Operational buildings of every type: maintenance is infrastructure, not
+ * labor — vacant counts, under-construction does not. Deterministic:
+ * iterateBuildings sorts by id.
+ */
+export const countOperationalBuildings = (state: SimulationState): number => {
+  let count = 0
+  for (const building of iterateBuildings(state)) {
+    if (building.status === 'operational') {
+      count += 1
+    }
+  }
+  return count
+}
 
 /**
  * Staffed operational Workshops: operational AND at least one worker
@@ -1467,24 +1360,24 @@ export const countStaffedOperationalWorkshops = (
   return count
 }
 
-/** Deterministic upkeep due this tick: staffed operational Workshops × 1. */
-export const materialUpkeepDueForTick = (state: SimulationState): number =>
-  countStaffedOperationalWorkshops(state) *
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK
+/** Deterministic maintenance due this tick: operational buildings × rate. */
+export const maintenanceDueForTick = (state: SimulationState): number =>
+  countOperationalBuildings(state) *
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
 
 /**
- * Deduct this tick's upkeep from the construction stock. Runs after
- * produceMaterial so same-tick production pays same-tick upkeep, and after
- * assignJobs/starvation so the staffing served is this tick's. Partial
- * payment clamped to stock: deduct = min(stock, due). Never throws on
+ * Deduct this tick's maintenance from the treasury. Runs after
+ * collectRevenue so same-tick revenue pays same-tick maintenance, and after
+ * assignJobs/starvation so the population served is this tick's. Partial
+ * payment clamped to treasury: deduct = min(treasury, due). Never throws on
  * deficit, never deactivates buildings, no debt, no carry-over.
  */
-export const upkeepBuildings = (state: SimulationState): SimulationState => {
-  const due = materialUpkeepDueForTick(state)
+export const payMaintenance = (state: SimulationState): SimulationState => {
+  const due = maintenanceDueForTick(state)
   if (due <= 0) {
     return state
   }
-  const deduct = Math.min(state.resources.construction, due)
+  const deduct = Math.min(state.resources.money, due)
   if (deduct <= 0) {
     return state
   }
@@ -1492,7 +1385,7 @@ export const upkeepBuildings = (state: SimulationState): SimulationState => {
     ...state,
     resources: {
       ...state.resources,
-      construction: state.resources.construction - deduct,
+      money: state.resources.money - deduct,
     },
   }
 }

@@ -21,8 +21,7 @@ import {
   findScenario,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
+  getMaintenanceDuePerTick,
   getObjectiveStatus,
   getPlacementAffordability,
   getProgression,
@@ -30,7 +29,7 @@ import {
   getServedColonistCount,
   getTownConditions,
   getWaterProductionPerTick,
-  getWorkforceIncome,
+  getRevenuePerTick,
   hashCanonicalState,
   loadSave,
   SAVE_VERSION,
@@ -44,7 +43,6 @@ import {
 } from '@/index'
 import {
   DEFAULT_STORAGE_CAPACITIES,
-  PROTECTED_MATERIAL_RESERVE,
 } from '@/domain/storage/storage.js'
 
 const config: SimulationConfig = {
@@ -99,7 +97,7 @@ const build = (spec: Spec): SimulationState => {
   let state = createInitialState(config)
   state = {
     ...state,
-    resources: { ...state.resources, food: 10_000, construction: spec.material ?? 100 },
+    resources: { ...state.resources, food: 10_000, money: spec.material ?? 100 },
     storage: { ...state.storage, material: spec.storageMaterial ?? 0 },
   }
   for (let i = 0; i < spec.residences; i += 1) {
@@ -225,14 +223,14 @@ describe('10DA — progression and objective feedback', () => {
 describe('10DA — economy feedback numbers a player reads', () => {
   it('pins the income, upkeep, capacity and reserve an inspection/HUD shows', () => {
     const workshop = build({ residences: 1, workshops: 1, colonists: 1 })
-    expect(getWorkforceIncome(workshop)).toBe(2) // Workshop worker
-    expect(getMaterialUpkeepPerTick(workshop)).toBe(1)
+    expect(getRevenuePerTick(workshop)).toBe(2) // Workshop worker
+    expect(getMaintenanceDuePerTick(workshop)).toBe(1)
     expect(getMaterialStorageCapacity(workshop)).toBe(25)
 
     const farm = build({ residences: 1, farms: 1, colonists: 1 })
-    expect(getWorkforceIncome(farm)).toBe(0) // Workshop-only income
+    expect(getRevenuePerTick(farm)).toBe(0) // Workshop-only income
     const well = build({ residences: 1, wells: 1, colonists: 1 })
-    expect(getWorkforceIncome(well)).toBe(0) // Workshop-only income
+    expect(getRevenuePerTick(well)).toBe(0) // Workshop-only income
 
     expect(PROTECTED_MATERIAL_RESERVE).toBe(15)
     expect(DEFAULT_STORAGE_CAPACITIES).toEqual({ food: 50, water: 30, material: 40 })
@@ -246,8 +244,8 @@ describe('10DA — economy feedback numbers a player reads', () => {
     )
     // Workshop-only income: Farm and Well employment pays in Food and Water,
     // not Material — a colony without a staffed Workshop accrues none.
-    expect(getWorkforceIncome(balanced)).toBe(0)
-    expect(getMaterialUpkeepPerTick(balanced)).toBe(0)
+    expect(getRevenuePerTick(balanced)).toBe(0)
+    expect(getMaintenanceDuePerTick(balanced)).toBe(0)
   })
 })
 

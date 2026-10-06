@@ -65,7 +65,7 @@ const read = (state: SimulationState) => ({
   servedResidences: getWaterServedResidenceCount(state),
   capacity: getWaterProductionPerTick(state),
   foodPerTick: getFoodProductionPerTick(state),
-  material: state.resources.construction,
+  material: state.resources.money,
   food: state.resources.food,
   water: state.resources.water,
   networks: getRoadNetworks(state).length,
@@ -278,7 +278,7 @@ describe('3. failure and recovery', () => {
     // Workshop-only income: the same recovery succeeds — the join itself
     // restores service and employment; no income accrues on the way, so the
     // stock ends at exactly 0.
-    expect(recovered.resources.construction).toBe(0)
+    expect(recovered.resources.money).toBe(0)
   })
 
   it('recovery is also possible after the serviced-but-stranded mistake', () => {

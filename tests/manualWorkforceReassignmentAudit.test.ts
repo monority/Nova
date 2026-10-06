@@ -22,6 +22,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -42,8 +44,6 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
-  creditMaterialIncome,
-  produceMaterial,
   progressPlacedRoads,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -51,7 +51,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   type BuildingType,
   type SimulationConfig,
   type SimulationState,
@@ -119,7 +119,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -187,11 +187,10 @@ const stepWithHook = (state: SimulationState, hook: AssignmentHook): SimulationS
   const populated = updatePopulation(consumed.state, consumed.fed)
   const staffed = assignJobs(populated)
   const adjusted = hook(staffed)
-  const materialized = produceMaterial(adjusted)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, undefined)
+  const funded = collectRevenue(adjusted)
+    const commanded = applyCommand(funded, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(maintained)
 }
 
@@ -211,7 +210,7 @@ const snapshot = (state: SimulationState): Snapshot => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   staffedFarms: countStaffedOperationalFarms(state),
   staffedWorkshops: countStaffedOperationalWorkshops(state),
   unemployment: getEmploymentSummary(state).unemployed,
@@ -396,7 +395,7 @@ describe('5 — canonical problematic scenario', () => {
       staffedFarms: countStaffedOperationalFarms(state),
       staffedWorkshops: countStaffedOperationalWorkshops(state),
       food: state.resources.food,
-      material: state.resources.construction,
+      material: state.resources.money,
       roadNetworks: 'single row network (y=1)',
     })
     expect(countStaffedOperationalFarms(state)).toBe(2)

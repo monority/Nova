@@ -19,6 +19,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  commerceRevenueForTick,
+
   areBuildingsMobilityConnected,
   assignJobs,
   countWorkersAt,
@@ -33,8 +35,7 @@ import {
   getRoadNetworkCount,
   hashCanonicalState,
   loadSave,
-  materialProductionForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   SAVE_VERSION,
   serializeCanonicalState,
   serializeSave,
@@ -152,8 +153,8 @@ describe('M-A — direct road', () => {
     expect(distance(state, residence.id, workshop.id)).toBe(0)
     const assigned = assignJobs(state)
     expect(workplaceOf(assigned, colonist.id)).toBe(workshop.id)
-    expect(materialProductionForTick(assigned)).toBe(2)
-    expect(materialUpkeepDueForTick(assigned)).toBe(1)
+    expect(commerceRevenueForTick(assigned)).toBe(2)
+    expect(maintenanceDueForTick(assigned)).toBe(1)
   })
 })
 
@@ -362,8 +363,8 @@ describe('M-H — no operational path', () => {
     )
     const assigned = assignJobs(state)
     expect(workplaceOf(assigned, colonist.id)).toBeNull()
-    expect(materialProductionForTick(assigned)).toBe(0)
-    expect(materialUpkeepDueForTick(assigned)).toBe(0)
+    expect(commerceRevenueForTick(assigned)).toBe(0)
+    expect(maintenanceDueForTick(assigned)).toBe(0)
   })
 })
 
@@ -616,8 +617,8 @@ describe('M-M / M-N — capacity and multiple colonists', () => {
     expect(getRoadNetworkCount(assigned)).toBe(2)
     expect(workplaceOf(assigned, cA.id)).toBe(workshopA.id)
     expect(workplaceOf(assigned, cB.id)).toBe(workshopB.id)
-    expect(materialProductionForTick(assigned)).toBe(4)
-    expect(materialUpkeepDueForTick(assigned)).toBe(2)
+    expect(commerceRevenueForTick(assigned)).toBe(4)
+    expect(maintenanceDueForTick(assigned)).toBe(2)
   })
 })
 

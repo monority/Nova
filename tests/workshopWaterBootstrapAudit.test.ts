@@ -28,6 +28,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -46,8 +48,6 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
-  creditMaterialIncome,
-  produceMaterial,
   produceWater,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
@@ -57,7 +57,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   WATER_PER_COLONIST_PER_TICK,
   waterProductionForTick,
   type BuildingType,
@@ -82,7 +82,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -214,7 +214,7 @@ const exemptWorkshopIds = (state: SimulationState, rule: Rule): string[] => {
     case 'freeBatch':
       return state.time.tick < rule.ticks ? staffed : []
     case 'materialFloor':
-      return state.resources.construction < rule.floor ? staffed : []
+      return state.resources.money < rule.floor ? staffed : []
     default:
       return staffed
   }
@@ -281,13 +281,12 @@ const stepMirror = (
   )
   const staffed = assignJobs(populated)
   const gated = preGate.unpaid ? idleWorkersAt(staffed, staffedWorkshopIds(staffed)) : staffed
-  const produced2 = produceMaterial(gated)
-  const withIncome = creditMaterialIncome(produced2)
+  const funded = collectRevenue(gated)
   // An idle plant keeps its worker assigned: the idle is a production gate for
   // this tick only, never a persisting unemployment that could leak forward.
-  const commanded = applyCommand(withIncome, lateCommand)
+  const commanded = applyCommand(funded, lateCommand)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
 
   // Model D: a Well pays a one-time Water grant when it becomes operational.
   let granted = releaseCompletedConstructionCrew(maintained)
@@ -331,7 +330,7 @@ const read = (state: SimulationState): Reading => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   water: state.resources.water,
   staffedWorkshops: countStaffedOperationalWorkshops(state),
   staffedWells: operationalIdsOfType(state, 'well').filter((id) => countWorkersAt(state, id) > 0).length,
@@ -348,13 +347,13 @@ const deadlockProbe = (
   ticks = 40
 ): { readonly recovered: boolean; readonly maxMaterial: number; readonly readings: Reading } => {
   let next = start
-  let maxMaterial = start.resources.construction
+  let maxMaterial = start.resources.money
   for (let i = 0; i < ticks; i += 1) {
     next = stepWith(next, rule)
-    maxMaterial = Math.max(maxMaterial, next.resources.construction)
+    maxMaterial = Math.max(maxMaterial, next.resources.money)
   }
   return {
-    recovered: maxMaterial > start.resources.construction,
+    recovered: maxMaterial > start.resources.money,
     maxMaterial,
     readings: read(next),
   }
@@ -475,7 +474,7 @@ describe('§5 — permanent free producer test (delayed Well)', () => {
       const after = run(base, delay, rule)
       return {
         wellAbsentTicks: delay,
-        material: after.resources.construction,
+        material: after.resources.money,
         staffedWorkshops: countStaffedOperationalWorkshops(after),
         note: 'the exemption never expires while no operational Well exists',
       }
@@ -502,21 +501,21 @@ describe('§5 — permanent free producer test (delayed Well)', () => {
     const e = run(base, 30, { kind: 'freeBatch', ticks: 2 })
     const f = run(base, 30, { kind: 'materialFloor', floor: MATERIAL_FLOOR_WELL_PRICE })
     const fLate = run(
-      { ...base, time: { tick: 500 }, resources: { ...base.resources, construction: 0 } },
+      { ...base, time: { tick: 500 }, resources: { ...base.resources, money: 0 } },
       30,
       { kind: 'materialFloor', floor: MATERIAL_FLOOR_WELL_PRICE }
     )
     audit('EXPIRY_DIMENSIONS', {
-      freeBatch2: { material: e.resources.construction, staffedWorkshops: countStaffedOperationalWorkshops(e) },
-      materialFloor: { material: f.resources.construction, staffedWorkshops: countStaffedOperationalWorkshops(f) },
+      freeBatch2: { material: e.resources.money, staffedWorkshops: countStaffedOperationalWorkshops(e) },
+      materialFloor: { material: f.resources.money, staffedWorkshops: countStaffedOperationalWorkshops(f) },
       materialFloorLateInTheRun: {
-        material: fLate.resources.construction,
+        material: fLate.resources.money,
         staffedWorkshops: countStaffedOperationalWorkshops(fLate),
       },
       note: 'E bounds the free window in TIME; F bounds it in STOCK — but Step 10CQ income adds +1/net/tick from the staffed Workshop, so material keeps growing',
     })
     // Income drives accumulation above the old 26 cap.
-    expect(f.resources.construction).toBeGreaterThan(MATERIAL_FLOOR_WELL_PRICE)
+    expect(f.resources.money).toBeGreaterThan(MATERIAL_FLOOR_WELL_PRICE)
   })
 })
 
@@ -582,7 +581,7 @@ describe('§2 — Models C and D', () => {
       deadlockProbe: { recovered: probe.recovered, maxMaterial: probe.maxMaterial },
       withBuildableWell: {
         water: withWell.resources.water,
-        material: withWell.resources.construction,
+        material: withWell.resources.money,
         staffedWells: operationalIdsOfType(withWell, 'well').filter((id) => countWorkersAt(withWell, id) > 0).length,
       },
       note: 'the grant needs a completed Well, and a Well needs 25 Material: but income (Step 10CQ) lets the colony accumulate past the Well price without the grant',
@@ -622,7 +621,7 @@ describe('§4 — opening order (Well first vs Workshop first)', () => {
       let firstWaterTick = -1
       for (let i = 1; i <= 12; i += 1) {
         next = stepWith(next, rule)
-        if (firstMaterialTick === -1 && next.resources.construction > material) firstMaterialTick = i
+        if (firstMaterialTick === -1 && next.resources.money > material) firstMaterialTick = i
         if (firstWaterTick === -1 && next.resources.water > 0) firstWaterTick = i
       }
       return { first, firstMaterialTick, firstWaterTick, readings: read(next) }
@@ -667,7 +666,7 @@ describe('§6 — recovery audit', () => {
       const after = run(base, 10, rule)
       return {
         staffedWorkshops: countStaffedOperationalWorkshops(after),
-        material: after.resources.construction,
+        material: after.resources.money,
         water: after.resources.water,
         population: getPopulationCount(after),
       }
@@ -721,7 +720,7 @@ describe('§7 — Construction Crew propagation', () => {
             ? { type: 'assignConstructionCrew' as const, colonistId: crewMember, buildingId: target }
             : undefined
         state = stepMirror(state, { kind: 'strict' }, command)
-        if (firstMaterialTick === -1 && state.resources.construction > 0) firstMaterialTick = i
+        if (firstMaterialTick === -1 && state.resources.money > 0) firstMaterialTick = i
       }
       return {
         crewTarget,

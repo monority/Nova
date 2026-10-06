@@ -82,7 +82,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -182,7 +182,7 @@ const behaviour = (state: SimulationState): string =>
     population: getPopulationCount(state),
     food: state.resources.food,
     water: state.resources.water,
-    material: state.resources.construction,
+    material: state.resources.money,
     staffedFarms: countStaffedOperationalFarms(state),
     staffedWorkshops: staffedWorkshops(state),
     staffedWells: countStaffedOperationalWells(state),
@@ -586,7 +586,7 @@ describe('§11 — deadlock and recovery', () => {
       out[name] = {
         populationStart: getPopulationCount(state),
         populationEnd: getPopulationCount(after),
-        material: after.resources.construction,
+        material: after.resources.money,
       }
     }
     audit('DEADLOCK_RECOVERY', out)

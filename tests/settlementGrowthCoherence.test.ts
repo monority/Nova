@@ -69,7 +69,7 @@ const base = (): SimulationState => {
   const state = createInitialState(config)
   return {
     ...state,
-    resources: { ...state.resources, food: 10_000, water: 100, construction: 1_000 },
+    resources: { ...state.resources, food: 10_000, water: 100, money: 1_000 },
   }
 }
 
@@ -209,7 +209,7 @@ describe('G1.2 — growth feedback', () => {
     expect(evaluateSettlementGrowth(withoutWell).blocker).toBe('noWaterHeadroom')
     const broke: SimulationState = {
       ...townFixture(),
-      resources: { ...townFixture().resources, construction: 0 },
+      resources: { ...townFixture().resources, money: 0 },
     }
     expect(evaluateSettlementGrowth(broke).blocker).toBe('unaffordable')
   })
@@ -275,7 +275,7 @@ describe('G1.2 — player agency through existing systems', () => {
   it('keeps the Material and stage gates causal', () => {
     const broke: SimulationState = {
       ...townFixture(),
-      resources: { ...townFixture().resources, construction: 0 },
+      resources: { ...townFixture().resources, money: 0 },
     }
     expect(evaluateSettlementGrowth(broke).demand).toBe(true)
     expect(evaluateSettlementGrowth(broke).blocker).toBe('unaffordable')

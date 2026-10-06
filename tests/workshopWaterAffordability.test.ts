@@ -14,12 +14,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getRevenuePerTick,
+
   assignJobs,
   createBuilding,
   createColonist,
   createInitialState,
   createRoads,
-  getMaterialStoredProductionPerTick,
   getPlacementAffordability,
   getResourceStock,
   stepSimulation,
@@ -62,7 +63,7 @@ const opRoad = (state: SimulationState, x: number, y: number): SimulationState =
  */
 const workshopColony = (material: number, water = 5): SimulationState => {
   let state = createInitialState(config)
-  state = { ...state, resources: { ...state.resources, food: 500, construction: material, water } }
+  state = { ...state, resources: { ...state.resources, food: 500, money: material, water } }
   state = op(state, 'residence', 1, 0)
   state = op(state, 'workshop', 1, 2)
   state = opRoad(state, 1, 1)
@@ -77,42 +78,44 @@ const audit = (label: string, value: unknown): void => {
   console.log(`AUDIT ${label}: ${JSON.stringify(value)}`)
 }
 
-describe('§1 — the 24-Material equilibrium is buildable', () => {
-  it('reports the Workshop as affordable at rest 24 while the domain accepts it', () => {
+describe('§1 — sub-cost revenue completes the build', () => {
+  it('reports the Workshop as affordable at 24 while the domain accepts it', () => {
     const state = workshopColony(24)
-    const stored = getMaterialStoredProductionPerTick(state)
+    const revenue = getRevenuePerTick(state)
     const affordability = getPlacementAffordability(state, { x: 3, y: 2 }, 'workshop')
     // The domain's own verdict at rest, for contrast.
     const restValidation = validatePlacement(state, { x: 3, y: 2 }, 'workshop')
     // The authoritative dispatch: the domain accepts mid-tick.
     const dispatched = stepSimulation(state, place(3, 2, 'workshop'))
     audit('WALL_24', {
-      visibleMaterial: getResourceStock(state).construction,
-      storedThisTick: stored,
+      visibleMaterial: getResourceStock(state).money,
+      revenueThisTick: revenue,
       restValidation,
       affordable: affordability.affordable,
       coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       domainAcceptedThePlacement:
         Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
-      materialAfterDispatch: getResourceStock(dispatched).construction,
+      materialAfterDispatch: getResourceStock(dispatched).money,
     })
-    expect(getResourceStock(state).construction).toBe(24)
-    expect(stored).toBeGreaterThanOrEqual(1)
+    expect(getResourceStock(state).money).toBe(24)
+    expect(revenue).toBe(3)
     expect(restValidation).toEqual({ valid: false, reason: 'insufficientResources' })
     expect(affordability.coveredBySameTickInflow).toBe(true)
     expect(affordability.affordable).toBe(true)
     // The preview now agrees with what the domain actually does.
     expect(Object.keys(dispatched.buildings)).toHaveLength(3)
+    // 24 + 3 revenue − 25 cost − 2 maintenance = 0.
+    expect(getResourceStock(dispatched).money).toBe(0)
   })
 
-  it('still refuses a placement the stored inflow cannot cover', () => {
-    // 20 Material with a staffed Workshop: 20 + 1 stored < 25.
+  it('still refuses a placement the revenue cannot cover', () => {
+    // 20 Money with taxes + commerce: 20 + 3 revenue < 25.
     const state = workshopColony(20)
     const affordability = getPlacementAffordability(state, { x: 3, y: 2 }, 'workshop')
     const dispatched = stepSimulation(state, place(3, 2, 'workshop'))
     audit('WALL_REFUSED', {
-      visibleMaterial: getResourceStock(state).construction,
-      storedThisTick: getMaterialStoredProductionPerTick(state),
+      visibleMaterial: getResourceStock(state).money,
+      revenueThisTick: getRevenuePerTick(state),
       affordable: affordability.affordable,
       coveredBySameTickInflow: affordability.coveredBySameTickInflow,
       reason: affordability.placement.valid ? null : affordability.placement.reason,
@@ -125,15 +128,15 @@ describe('§1 — the 24-Material equilibrium is buildable', () => {
 })
 
 describe('§1 — the Water shortfall is its own refusal', () => {
-  it('is refused for Water even when stored Material covers the cost', () => {
-    // Material 24 + stored 1 = 25 (the Material clause alone would pass), but
+  it('is refused for Water even when revenue covers the cost', () => {
+    // Money 24 + revenue 3 = 27 (the Money clause alone would pass), but
     // Water 0: the placement must stay refused, exactly as the domain refuses it.
     const state = workshopColony(24, 0)
     const affordability = getPlacementAffordability(state, { x: 3, y: 2 }, 'workshop')
     const dispatched = stepSimulation(state, place(3, 2, 'workshop'))
     audit('WATER_REFUSAL', {
-      material: getResourceStock(state).construction,
-      storedThisTick: getMaterialStoredProductionPerTick(state),
+      money: getResourceStock(state).money,
+      revenueThisTick: getRevenuePerTick(state),
       water: getResourceStock(state).water,
       affordable: affordability.affordable,
       coveredBySameTickInflow: affordability.coveredBySameTickInflow,
@@ -142,7 +145,7 @@ describe('§1 — the Water shortfall is its own refusal', () => {
       domainAccepted: Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
     })
     expect(affordability.affordable).toBe(false)
-    // Stored Material production must NOT be treated as covering the Water cost.
+    // Same-tick revenue must NOT be treated as covering the Water cost.
     expect(affordability.coveredBySameTickInflow).toBe(false)
     // The validator reports the Material shortfall first (its deterministic
     // order) and the placement is refused either way.
@@ -154,7 +157,7 @@ describe('§1 — the Water shortfall is its own refusal', () => {
     const state = workshopColony(30, 0)
     const affordability = getPlacementAffordability(state, { x: 3, y: 2 }, 'workshop')
     audit('WATER_ONLY', {
-      material: getResourceStock(state).construction,
+      material: getResourceStock(state).money,
       water: getResourceStock(state).water,
       affordable: affordability.affordable,
       coveredBySameTickInflow: affordability.coveredBySameTickInflow,

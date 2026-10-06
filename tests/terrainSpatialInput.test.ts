@@ -45,9 +45,8 @@ import {
   iterateBuildings,
   listBlockedCells,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   normalizeBlockedCells,
   parseBlockedCell,
   ROAD_CONSTRUCTION_COST,
@@ -247,7 +246,7 @@ describe('2. building placement', () => {
     expect(result.state).toBe(state)
     expect(Object.keys(result.state.buildings)).toHaveLength(0)
     expect(result.state.counters).toEqual(state.counters)
-    expect(result.state.resources.construction).toBe(state.resources.construction)
+    expect(result.state.resources.money).toBe(state.resources.money)
     expect(result.state.time.tick).toBe(0)
   })
 
@@ -261,15 +260,15 @@ describe('2. building placement', () => {
     })
     expect(result.accepted).toBe(true)
     expect(Object.keys(result.state.buildings)).toHaveLength(1)
-    expect(result.state.resources.construction).toBe(
-      state.resources.construction - getBuildingDefinition('residence').constructionCost
+    expect(result.state.resources.money).toBe(
+      state.resources.money - getBuildingDefinition('residence').constructionCost
     )
   })
 
   it('checks terrain before affordability', () => {
     const poor: SimulationState = {
       ...terrainState(['2,2']),
-      resources: { construction: 0, food: 0, water: 0 },
+      resources: { money: 0, food: 0, water: 0 },
     }
     const result = applyCommand(poor, {
       type: 'placeBuilding',
@@ -354,7 +353,7 @@ describe('3. road placement is atomic', () => {
     expect(result.state).toBe(state)
     expect(Object.keys(result.state.roads)).toHaveLength(0)
     expect(result.placedRoadIds).toEqual([])
-    expect(result.state.resources.construction).toBe(100)
+    expect(result.state.resources.money).toBe(100)
   })
 
   it('keeps the reason order (empty, bounds, terrain, occupancy, cost)', () => {
@@ -384,7 +383,7 @@ describe('3. road placement is atomic', () => {
       cells: [cellAt(state, 1, 1), cellAt(state, 2, 1)],
     })
     expect(Object.keys(placed.roads)).toHaveLength(2)
-    expect(placed.resources.construction).toBe(100 - 2 * ROAD_CONSTRUCTION_COST)
+    expect(placed.resources.money).toBe(100 - 2 * ROAD_CONSTRUCTION_COST)
     // Step 09C: a placed road is caught up once by the same tick's command
     // phase, so it keeps the 2-tick contract (2 -> 1 at placement).
     expect(
@@ -633,7 +632,7 @@ describe('6. terrain-chokepoint fixture (variant C)', () => {
     expect(measured.eastServed).toBe(true)
     expect(measured.westCanReachEastFarm).toBe(true)
     // Workshop-only income: the 5-cost road leaves 30 − 5 = 25.
-    expect(merged.resources.construction).toBe(25)
+    expect(merged.resources.money).toBe(25)
   })
 
   it('case B — the connector cell as a building severs the colony', () => {
@@ -661,7 +660,7 @@ describe('6. terrain-chokepoint fixture (variant C)', () => {
     // Still refused with 100x the Material: a blocked cell is never legal.
     const rich: SimulationState = {
       ...state,
-      resources: { ...state.resources, construction: 3000 },
+      resources: { ...state.resources, money: 3000 },
     }
     expect(
       applyCommand(rich, { type: 'placeBuilding', x: 0, y: 1, buildingType: 'well' })
@@ -704,7 +703,7 @@ describe('6. terrain-chokepoint fixture (variant C)', () => {
     const sever = (material: number) => {
       const state: SimulationState = {
         ...start(),
-        resources: { ...start().resources, construction: material },
+        resources: { ...start().resources, money: material },
       }
       const placed = stepSimulation(state, {
         type: 'placeBuilding',
@@ -758,8 +757,8 @@ describe('7. terrain is spatial input only', () => {
   it('leaves every economic constant and rate untouched', () => {
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
-    expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
-    expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
     expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(WATER_PER_COLONIST_PER_TICK).toBe(1)

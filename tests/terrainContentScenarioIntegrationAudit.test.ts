@@ -171,7 +171,7 @@ const scene = (spec: SceneSpec, blockedCells: readonly string[] = []): Simulatio
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 100,
       water: spec.water ?? 0,
     },
@@ -245,7 +245,7 @@ const read = (state: SimulationState) => {
   return {
     tick: state.time.tick,
     population: Object.keys(state.colonists).length,
-    material: state.resources.construction,
+    material: state.resources.money,
     food: state.resources.food,
     water: state.resources.water,
     waterCapacity: getWaterProductionPerTick(state),
@@ -749,7 +749,7 @@ describe('4. road detour', () => {
     const rows = paths.map(({ variant, blocked, cells }) => {
       const base = detourBase(blocked)
       const built = layRoads(base, cells)
-      const materialSpent = base.resources.construction - built.resources.construction
+      const materialSpent = base.resources.money - built.resources.money
       const settled = read(tick(built, 60))
       return {
         variant,
@@ -1194,11 +1194,11 @@ describe('9-10. scenario candidates and distinctness', () => {
       terrainCells: roadCellsToReconnect(west, RIDGE, { x: 1, y: 1 }, { x: 3, y: 1 }),
       openCells,
       openCost: openCells === null ? null : openCells * ROAD_CONSTRUCTION_COST,
-      leftoverMaterial: west.resources.construction,
+      leftoverMaterial: west.resources.money,
       affordableInFixture:
-        openCells === null ? null : openCells * ROAD_CONSTRUCTION_COST <= west.resources.construction,
+        openCells === null ? null : openCells * ROAD_CONSTRUCTION_COST <= west.resources.money,
       richTerrainCells: roadCellsToReconnect(
-        { ...west, resources: { ...west.resources, construction: 3000 } },
+        { ...west, resources: { ...west.resources, money: 3000 } },
         RIDGE,
         { x: 1, y: 1 },
         { x: 3, y: 1 }
@@ -1355,7 +1355,7 @@ describe('9-10. scenario candidates and distinctness', () => {
     const start = createScenarioState(worldConfig([]), TERRAIN_CHOKEPOINT_FIXTURE)
     const rich: SimulationState = {
       ...start,
-      resources: { ...start.resources, construction: 3000 },
+      resources: { ...start.resources, money: 3000 },
     }
     const attempts = [
       { label: 'well at 0,1', check: () => validatePlacement(start, { x: 0, y: 1 }, 'well') },

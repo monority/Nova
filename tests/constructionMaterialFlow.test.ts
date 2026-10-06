@@ -1,14 +1,22 @@
+/**
+ * Step001 — money flow through the construction transaction.
+ *
+ * Revenue (taxes + commerce) lands before the player command; maintenance
+ * is deducted after. The treasury is uncapped: revenue always lands in
+ * full, and exact spend math is pinned below.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import {
   BUILDING_CATALOG,
   countEmployedWorkers,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getResourceStock,
+  getRevenuePerTick,
   hashCanonicalState,
   loadSave,
-  materialUpkeepDueForTick,
   SAVE_VERSION,
   serializeSave,
   stepSimulation,
@@ -23,80 +31,76 @@ const place = (
   y: number
 ): PlaceBuildingCommand => ({ type: 'placeBuilding', x, y, buildingType })
 
-const atConstruction = (
+const atMoney = (
   state: SimulationState,
-  construction: number
+  money: number
 ): SimulationState => ({
   ...state,
-  resources: { ...state.resources, construction },
+  resources: { ...state.resources, money },
 })
 
-/** One staffed operational road-connected Workshop (cap 25), one colonist. */
+/** One staffed operational road-connected Workshop, one colonist: revenue 3, maintenance 2. */
 const singleWorkshop = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 2, 2)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
-  // Step 09F: production requires road access — connect BEFORE production ticks.
+  // Step 09F: commerce requires road access — connect BEFORE revenue ticks.
   state = withRoadsForWorkshops(state)
   state = stepSimulation(state) // t4: operational + staffed
   return state
 }
 
-/** Rest state pinned to the historical 08F equilibrium stock (24 material). */
-const equilibrium24 = (): SimulationState =>
-  atConstruction(singleWorkshop(), 24)
-
 /**
- * Two operational Workshops, two employed workers (cap 50, gross 4).
- * No farm: the 100-food bootstrap covers the few ticks these tests run.
+ * Two connected operational Workshops, two employed workers.
+ * Revenue 6 (2 taxes + 4 commerce), maintenance 4. No farm: the 100-food
+ * bootstrap covers the few ticks these tests run.
  */
 const twoWorkshopsTwoWorkers = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3
-  state = withRoadsForWorkshops(state) // 09F: road for WS1
+  state = withRoadsForWorkshops(state)
   state = stepSimulation(state) // t4: WS1 operational + staffed
   state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5)) // t5
-  state = withRoadsForWorkshops(state) // 09F: road for WS2
-  state = stepSimulation(state) // t6: WS2 operational, cap 50
+  state = withRoadsForWorkshops(state)
+  state = stepSimulation(state) // t6: WS2 operational
   state = stepSimulation(state, place('residence', 1, 0)) // t7
-  state = withRoadsForWorkshops(state) // 09K: connect the second residence
+  state = withRoadsForWorkshops(state)
   state = stepSimulation(state) // t8: colonist-2 admitted + employed
   return state
 }
 
-/** Two operational Workshops, one employed worker (cap 50, gross 2). */
+/** Two connected operational Workshops, one employed worker. Revenue 5, maintenance 3. */
 const twoWorkshopsOneWorker = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(state, place('residence', 0, 0)) // t1
   state = stepSimulation(state) // t2: colonist-1
   state = stepSimulation(withWorkshopWater(state), place('workshop', 0, 5)) // t3
-  state = withRoadsForWorkshops(state) // 09F: road for WS1
+  state = withRoadsForWorkshops(state)
   state = stepSimulation(state) // t4: WS1 operational + staffed
   state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 5)) // t5
-  state = withRoadsForWorkshops(state) // 09F: road for WS2
-  state = stepSimulation(state) // t6: WS2 operational (vacant), cap 50
+  state = withRoadsForWorkshops(state)
+  state = stepSimulation(state) // t6: WS2 operational (vacant)
   return state
 }
 
-describe('construction material flow (Step 08G)', () => {
+describe('money flow (Step001)', () => {
   describe('A — reach construction threshold', () => {
-    it('1 — 24 material + valid production reaches 25 mid-tick', () => {
-      const before = equilibrium24()
-      expect(getResourceStock(before).construction).toBe(24)
-      // Production (+1 stored under cap 25) and Step 10CQ income (+2) run
-      // before the transaction, so the 25-cost placement is accepted from a
-      // 24 rest stock.
+    it('1 — 22 money + 3 revenue reaches 25 mid-tick', () => {
+      const before = atMoney(singleWorkshop(), 22)
+      expect(getResourceStock(before).money).toBe(22)
+      // Revenue (+3) runs before the transaction, so the 25-cost placement
+      // is accepted from a 22 treasury.
       const after = stepSimulation(before, place('residence', 0, 0))
       expect(Object.keys(after.buildings)).toHaveLength(
         Object.keys(before.buildings).length + 1
       )
     })
 
-    it('2 — construction succeeds at 25 with the 2-tick contract intact', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
+    it('2 — construction succeeds with the 2-tick contract intact', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
       const placed = after.buildings['building-3']
       expect(placed?.type).toBe('residence')
       expect(placed?.status).toBe('underConstruction')
@@ -109,80 +113,73 @@ describe('construction material flow (Step 08G)', () => {
       expect(next.buildings['building-3']?.status).toBe('operational')
     })
 
-    it('3 — exactly 25 material is consumed (24 + 1 stored + 2 income − 25 − 1 upkeep)', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
-      // Step 10CQ.1: 24 + 1 stored + 2 income − 25 cost = 2, upkeep takes 1.
-      expect(getResourceStock(after).construction).toBe(1)
+    it('3 — exact spend: 30 + 3 revenue − 25 cost − 2 maintenance = 6', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
+      expect(getResourceStock(after).money).toBe(6)
     })
   })
 
-  describe('B — no hypothetical overflow', () => {
-    it('4 — gross above remaining capacity does not inflate spendable stock', () => {
-      // 2 workers gross 4, but only 1 fits under cap 50 at stock 49.
-      // Spendable mid-tick stock is 50, not 49 + 4 = 53.
-      const before = atConstruction(twoWorkshopsTwoWorkers(), 49)
+  describe('B — no treasury cap', () => {
+    it('4 — revenue at a large balance lands in full', () => {
+      const before = atMoney(singleWorkshop(), 10000)
       const after = stepSimulation(before, place('farm', 5, 5))
-      // Step 10CQ.1: 49 + 1 stored + 4 income − 25 cost − 2 upkeep = 27
-      // (a model that ignored the clamp would give 53).
-      expect(getResourceStock(after).construction).toBe(27)
+      // 10000 + 3 revenue − 25 cost − 2 maintenance = 9976 (never clamped).
+      expect(getResourceStock(after).money).toBe(9976)
     })
 
-    it('5 — fully discarded production adds nothing to a build', () => {
-      // Bootstrap stock 75 sits above the single-workshop cap: stored is 0.
-      const before = atConstruction(singleWorkshop(), 75)
-      const after = stepSimulation(before, place('farm', 5, 5))
-      // Step 10CQ.1: 75 + 0 stored + 2 income − 25 cost − 1 upkeep = 51.
-      expect(getResourceStock(after).construction).toBe(51)
+    it('5 — revenue without construction accumulates net flow', () => {
+      const before = atMoney(singleWorkshop(), 75)
+      const after = stepSimulation(before)
+      // 75 + 3 revenue − 2 maintenance = 76.
+      expect(getResourceStock(after).money).toBe(76)
+      expect(getNetMoneyPerTick(before)).toBe(1)
     })
   })
 
   describe('C — atomic failure', () => {
-    it('6 — insufficient material places nothing', () => {
-      const before = atConstruction(createTestState(), 10)
+    it('6 — insufficient money places nothing', () => {
+      const before = atMoney(createTestState(), 10)
       const after = stepSimulation(before, place('residence', 3, 3))
       expect(Object.keys(after.buildings)).toHaveLength(0)
     })
 
-    it('7 — stock is unchanged on failure', () => {
-      const before = atConstruction(createTestState(), 10)
+    it('7 — treasury is unchanged on failure (no revenue, no buildings)', () => {
+      const before = atMoney(createTestState(), 10)
       const after = stepSimulation(before, place('residence', 3, 3))
-      expect(getResourceStock(after).construction).toBe(10)
+      expect(getResourceStock(after).money).toBe(10)
     })
 
     it('8 — building state is unchanged on failure (occupied cell)', () => {
-      const before = equilibrium24()
+      const before = atMoney(singleWorkshop(), 30)
       const count = Object.keys(before.buildings).length
       const after = stepSimulation(before, place('farm', 2, 2))
       expect(Object.keys(after.buildings)).toHaveLength(count)
-      // The rejected command still runs production (1 stored) and income (2)
-      // minus upkeep (1): 24 + 1 + 2 − 1 = 26 (Step 10CQ.1).
-      expect(getResourceStock(after).construction).toBe(26)
+      // The rejected command still runs revenue (+3) minus maintenance (−2).
+      expect(getResourceStock(after).money).toBe(31)
     })
   })
 
-  describe('D — upkeep interaction', () => {
-    it('9 — construction at 25 leaves stock for upkeep to pay from (Step 10CQ.1)', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
-      // 24 + 1 stored + 2 income − 25 cost = 2, then upkeep pays its 1.
-      expect(getResourceStock(after).construction).toBe(1)
+  describe('D — maintenance interaction', () => {
+    it('9 — construction at 23 leaves the treasury for maintenance to clear', () => {
+      // 23 + 3 revenue − 25 cost = 1, then maintenance pays its clamped 1.
+      const after = stepSimulation(atMoney(singleWorkshop(), 23), place('residence', 0, 0))
+      expect(getResourceStock(after).money).toBe(0)
     })
 
-    it('10 — upkeep is paid from the stock left after construction (due 1, paid 1)', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
-      expect(materialUpkeepDueForTick(after)).toBe(1)
-      expect(getMaterialUpkeepPerTick(after)).toBe(1)
-      // Step 10CQ.1: income leaves 2 after the 25-cost spend, so the full
-      // 1 due is paid and 1 remains (the clamped path lives in test 19).
-      expect(getResourceStock(after).construction).toBe(1)
+    it('10 — maintenance is due for the standing buildings after construction', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
+      // Residence + Workshop operational; the new residence is still dry.
+      expect(getMaintenanceDuePerTick(after)).toBe(2)
+      expect(getResourceStock(after).money).toBe(6)
     })
 
-    it('11 — material never goes negative through construction + upkeep', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
-      expect(getResourceStock(after).construction).toBeGreaterThanOrEqual(0)
+    it('11 — money never goes negative through construction + maintenance', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 23), place('residence', 0, 0))
+      expect(getResourceStock(after).money).toBeGreaterThanOrEqual(0)
     })
 
-    it('12 — the workshop stays operational and staffed after a clamped upkeep', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
+    it('12 — the workshop stays operational and staffed after a clamped maintenance', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 23), place('residence', 0, 0))
       const workshop = Object.values(after.buildings).find(
         (b) => b.type === 'workshop'
       )
@@ -192,60 +189,51 @@ describe('construction material flow (Step 08G)', () => {
   })
 
   describe('E — all building types', () => {
-    it('13 — residence builds from stock 24 (Step 10CQ.1)', () => {
-      const after = stepSimulation(equilibrium24(), place('residence', 0, 0))
+    it('13 — residence builds from money 23', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 23), place('residence', 0, 0))
       expect(after.buildings['building-3']?.type).toBe('residence')
-      // 24 + 1 stored + 2 income − 25 cost − 1 upkeep = 1.
-      expect(getResourceStock(after).construction).toBe(1)
+      expect(getResourceStock(after).money).toBe(0)
     })
 
-    it('14 — farm builds from stock 24 (Step 10CQ.1)', () => {
-      const after = stepSimulation(equilibrium24(), place('farm', 0, 0))
+    it('14 — farm builds from money 23', () => {
+      const after = stepSimulation(atMoney(singleWorkshop(), 23), place('farm', 0, 0))
       expect(after.buildings['building-3']?.type).toBe('farm')
-      expect(getResourceStock(after).construction).toBe(1)
+      expect(getResourceStock(after).money).toBe(0)
     })
 
-    it('15 — workshop builds from stock 24 (no special case)', () => {
-      const after = stepSimulation(withWorkshopWater(equilibrium24()), place('workshop', 0, 0))
+    it('15 — workshop builds from money 23 (no special case)', () => {
+      const after = stepSimulation(withWorkshopWater(atMoney(singleWorkshop(), 23)), place('workshop', 0, 0))
       expect(after.buildings['building-3']?.type).toBe('workshop')
       expect(after.buildings['building-3']?.status).toBe('underConstruction')
-      expect(getResourceStock(after).construction).toBe(1)
+      expect(getResourceStock(after).money).toBe(0)
     })
   })
 
   describe('F — multiple workshops', () => {
-    it('16 — two workshops give capacity 50', () => {
-      expect(
-        getMaterialStorageCapacity(twoWorkshopsTwoWorkers())
-      ).toBe(50)
-    })
-
-    it('17 — two-worker production interacts deterministically with upkeep', () => {
-      // Step 10CQ.1: 48 + 2 stored + 4 income − 25 cost − 2 upkeep = 27.
-      const before = atConstruction(twoWorkshopsTwoWorkers(), 48)
+    it('16 — two-workshop revenue and maintenance interact deterministically', () => {
+      // 48 + 6 revenue − 25 cost − 4 maintenance = 25.
+      const before = atMoney(twoWorkshopsTwoWorkers(), 48)
       const after = stepSimulation(before, place('residence', 5, 5))
-      expect(getResourceStock(after).construction).toBe(27)
-      expect(materialUpkeepDueForTick(after)).toBe(2)
+      expect(getResourceStock(after).money).toBe(25)
+      expect(getMaintenanceDuePerTick(after)).toBe(4)
       expect(countEmployedWorkers(after)).toBe(2)
     })
 
-    it('18 — one-worker production under two-workshop capacity', () => {
-      // Step 10CQ.1: 48 + 2 stored + 2 income − 25 cost − 1 upkeep = 26.
-      const before = atConstruction(twoWorkshopsOneWorker(), 48)
+    it('17 — one worker under two workshops: revenue 5, maintenance 3', () => {
+      // 48 + 5 revenue − 25 cost − 3 maintenance = 25.
+      const before = atMoney(twoWorkshopsOneWorker(), 48)
       expect(countEmployedWorkers(before)).toBe(1)
       const after = stepSimulation(before, place('farm', 5, 5))
-      expect(getResourceStock(after).construction).toBe(26)
-      expect(materialUpkeepDueForTick(after)).toBe(1)
+      expect(getResourceStock(after).money).toBe(25)
+      expect(getMaintenanceDuePerTick(after)).toBe(3)
     })
 
-    it('19 — upkeep goes partial when construction leaves less than due', () => {
-      // Step 10CQ.1: the pin moves 22 → 18 so the partial-upkeep
-      // precondition survives income: 18 + 4 stored + 4 income − 25 cost = 1,
-      // which is below the 2 due: pays 1, ends 0.
-      const before = atConstruction(twoWorkshopsTwoWorkers(), 18)
+    it('18 — maintenance goes partial when construction leaves less than due', () => {
+      // 20 + 6 revenue − 25 cost = 1, below the 4 due: pays 1, ends 0.
+      const before = atMoney(twoWorkshopsTwoWorkers(), 20)
       const after = stepSimulation(before, place('farm', 5, 5))
-      expect(getResourceStock(after).construction).toBe(0)
-      expect(materialUpkeepDueForTick(after)).toBe(2)
+      expect(getResourceStock(after).money).toBe(0)
+      expect(getMaintenanceDuePerTick(after)).toBe(4)
       expect(countEmployedWorkers(after)).toBe(2)
       for (const building of Object.values(after.buildings)) {
         if (building.type === 'workshop') {
@@ -256,48 +244,47 @@ describe('construction material flow (Step 08G)', () => {
   })
 
   describe('G — determinism', () => {
-    it('20 — repeated replay of the 24 → build → 1 path is identical', () => {
+    it('19 — repeated replay of the build path is identical', () => {
       const run = (): SimulationState =>
-        stepSimulation(equilibrium24(), place('residence', 0, 0))
+        stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
       const a = run()
       const b = run()
       expect(a).toEqual(b)
     })
 
-    it('21 — hash is identical across replays', () => {
-      const a = stepSimulation(equilibrium24(), place('residence', 0, 0))
-      const b = stepSimulation(equilibrium24(), place('residence', 0, 0))
+    it('20 — hash is identical across replays', () => {
+      const a = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
+      const b = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
       expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     })
   })
 
   describe('H — persistence', () => {
-    it('22 — save/load round-trips after construction (SAVE_VERSION 4)', () => {
-      expect(SAVE_VERSION).toBe(8)
-      const state = stepSimulation(equilibrium24(), place('residence', 0, 0))
+    it('21 — save/load round-trips after construction (SAVE_VERSION 9)', () => {
+      expect(SAVE_VERSION).toBe(9)
+      const state = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
-      expect(getResourceStock(restored).construction).toBe(1)
+      expect(getResourceStock(restored).money).toBe(6)
     })
 
-    it('23 — save/load round-trips after a production-only tick', () => {
-      const state = stepSimulation(equilibrium24())
-      // Step 10CQ.1: 24 + 1 stored + 2 income − 1 upkeep = 26.
-      expect(getResourceStock(state).construction).toBe(26)
+    it('22 — save/load round-trips after a revenue-only tick', () => {
+      const state = stepSimulation(atMoney(singleWorkshop(), 75))
+      // 75 + 3 revenue − 2 maintenance = 76.
+      expect(getResourceStock(state).money).toBe(76)
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
     })
 
-    it('24 — save/load round-trips after construction + partial upkeep', () => {
+    it('23 — save/load round-trips after construction + partial maintenance', () => {
       const state = stepSimulation(
-        // Step 10CQ.1: pin18 keeps the partial-upkeep precondition (see 19).
-        atConstruction(twoWorkshopsTwoWorkers(), 18),
+        atMoney(twoWorkshopsTwoWorkers(), 20),
         place('farm', 5, 5)
       )
-      expect(getResourceStock(state).construction).toBe(0)
+      expect(getResourceStock(state).money).toBe(0)
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
-      expect(materialUpkeepDueForTick(restored)).toBe(2)
+      expect(getMaintenanceDuePerTick(restored)).toBe(4)
     })
   })
 
@@ -306,6 +293,12 @@ describe('construction material flow (Step 08G)', () => {
       expect(BUILDING_CATALOG.residence.constructionCost).toBe(25)
       expect(BUILDING_CATALOG.farm.constructionCost).toBe(25)
       expect(BUILDING_CATALOG.workshop.constructionCost).toBe(25)
+    })
+  })
+
+  describe('revenue reads', () => {
+    it('single-workshop fixture reports revenue 3', () => {
+      expect(getRevenuePerTick(singleWorkshop())).toBe(3)
     })
   })
 })

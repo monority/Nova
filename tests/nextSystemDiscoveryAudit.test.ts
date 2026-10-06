@@ -12,6 +12,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceTime,
   applyCommand,
   areBuildingsMobilityConnected,
@@ -33,8 +35,6 @@ import {
   iterateRoads,
   loadSave,
   produceFood,
-  produceMaterial,
-  creditMaterialIncome,
   produceWater,
   progressOneBuilding,
   progressOneRoad,
@@ -45,7 +45,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   WATER_PER_COLONIST_PER_TICK,
   waterProductionForTick,
   type BuildingType,
@@ -120,7 +120,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -279,12 +279,11 @@ const stepAudited = (
         }
   )
   const staffed = excludeCrew(assignJobs(populated), busy)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, command)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, command)
   // Step 10Y removed the building placement catch-up from stepSimulation.
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(maintained)
 }
 
@@ -334,7 +333,7 @@ describe('§1 — current causal graph', () => {
         'applyCommand',
         'progressPlacedRoads',
         'progressPlacedRoads',
-        'upkeepBuildings',
+        'payMaintenance',
         'advanceTime',
       ],
       terminalNodes: [
@@ -794,12 +793,12 @@ describe('§10/§11 — Material and population feedback', () => {
     const after = advance(state, 120)
     audit('MATERIAL_AND_POPULATION', {
       materialRelationship: 'construction only — the Construction Crew candidate adds no Material/tick upkeep',
-      materialStock: after.resources.construction,
+      materialStock: after.resources.money,
       populationOwnership: { food: 'survival', water: 'growth', housing: 'capacity' },
       constructionCrewFourthDimension: 'expansion throughput (workforce -> construction), not survival/growth/capacity',
       populationFeedback: 'indirect only; the crew changes when housing/Well capacity arrives, never whether a colonist survives',
     })
-    expect(after.resources.construction).toBeGreaterThanOrEqual(0)
+    expect(after.resources.money).toBeGreaterThanOrEqual(0)
   })
 })
 

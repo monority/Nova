@@ -18,18 +18,16 @@ import {
   advanceTime,
   applyCommand,
   assignJobs,
+  collectRevenue,
   consumeFood,
   consumeWater,
-  creditMaterialIncome,
+  payMaintenance,
   produceFood,
-  produceMaterial,
   produceWater,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
-  releaseMaterialForCommand,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
 } from './phases.js'
 import { growSettlement } from './growth.js'
 import { getWaterCoverage, hasOperationalWell, waterPotentialProductionForTick } from '../water/water.js'
@@ -49,15 +47,12 @@ export const stepSimulation = (
   // Phase 1: Construction progress / lifecycle.
   const constructed = advanceConstruction(preResolved)
 
-  // Release only pre-existing protected Material before production. Newly
-  // produced overflow remains protected for at least this tick.
-  const reserveReleased = releaseMaterialForCommand(constructed, lateCommand)
-
+  // Step001: no reserve release — the treasury is directly spendable.
   // Phase 3: food need — derived from the colony before admission.
-  const requiredFood = updateNeeds(reserveReleased)
+  const requiredFood = updateNeeds(constructed)
 
   // Phase 4: farm production into the shared stock.
-  const produced = produceFood(reserveReleased)
+  const produced = produceFood(constructed)
 
   // Phase 4b: Well production into the shared Water stock.
   const watered = produceWater(produced)
@@ -105,14 +100,11 @@ export const stepSimulation = (
   // Phase 7: deterministic employment.
   const staffed = assignJobs(populated)
 
-  // Phase 8: labor output into the construction stock.
-  const materialized = produceMaterial(staffed)
+  // Phase 7: public revenue (taxes + commerce) into the treasury.
+  const funded = collectRevenue(staffed)
 
-  // Phase 8a: material income from employed colonists (Step 10CQ).
-  const withIncome = creditMaterialIncome(materialized)
-
-  // Phase 8b: player construction transaction (Step 08G §5).
-  const commanded = applyCommand(withIncome, lateCommand)
+  // Phase 8a: player construction transaction (Step 08G §5).
+  const commanded = applyCommand(funded, lateCommand)
 
   const progressed = progressPlacedRoads(commanded.state, commanded)
 
@@ -121,8 +113,8 @@ export const stepSimulation = (
   // at most one autonomous Residence construction per tick.
   const grown = growSettlement(progressed)
 
-  // Phase 8b: operational upkeep.
-  const maintained = upkeepBuildings(grown)
+  // Phase 8b: building maintenance.
+  const maintained = payMaintenance(grown)
 
   // Release completed construction crews.
   const released = releaseCompletedConstructionCrew(maintained)

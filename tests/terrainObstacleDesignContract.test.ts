@@ -31,7 +31,6 @@ import {
   getBuildingRoadAccess,
   getColonistWorkMobility,
   getDistanceBetweenAccesses,
-  getMaterialStorageCapacity,
   getPlacementAffordability,
   getPopulationCount,
   getProgression,
@@ -111,7 +110,7 @@ const scene = (fixture: Fixture): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: fixture.material ?? 100,
+      money: fixture.material ?? 100,
       food: fixture.food ?? 100,
       water: fixture.water ?? 0,
     },
@@ -171,7 +170,7 @@ const read = (state: SimulationState) => {
   return {
     tick: state.time.tick,
     population: getPopulationCount(state),
-    material: state.resources.construction,
+    material: state.resources.money,
     water: state.resources.water,
     capacity: supply.capacity,
     servedResidences: getWaterServedResidenceCount(state),
@@ -229,17 +228,17 @@ const runPlan = (
       const illegal = step.cells.filter((cell) => isEmulatedBlocked(blocked, cell))
       const cost = step.cells.length * ROAD_CONSTRUCTION_COST
       let guard = 0
-      while (guard < 200 && state.resources.construction < cost) {
+      while (guard < 200 && state.resources.money < cost) {
         tick(1)
         guard += 1
       }
-      const before = state.resources.construction
+      const before = state.resources.money
       state = stepSimulation(state, { type: 'placeRoads', cells: [...step.cells] })
       log.push({
         kind: 'roads',
         cells: step.cells.length,
         tick: state.time.tick,
-        accepted: state.resources.construction === before - cost,
+        accepted: state.resources.money === before - cost,
         emulatedBlockedCellsIncluded: illegal.length,
       })
       tick(ROAD_CONSTRUCTION_TICKS)

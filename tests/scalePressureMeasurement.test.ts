@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
+
   assignJobs,
   createBuilding,
   createColonist,
@@ -9,14 +13,13 @@ import {
   getEmploymentSummary,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getNetMoneyPerTick,
   getProgression,
   getResourceStock,
   getRoadNetworks,
   getWaterProductionPerTick,
   iterateBuildings,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   stepSimulation,
   type BuildingType,
   type SimulationConfig,
@@ -63,7 +66,7 @@ const row = (state: SimulationState, length: number): SimulationState => {
 const colony = (population: number): SimulationState => {
   let state = {
     ...base(),
-    resources: { construction: 1000, food: 1000, water: 1000 },
+    resources: { money: 1000, food: 1000, water: 1000 },
   }
   for (let i = 0; i < population; i += 1) state = operational(state, 'residence', i, 0)
   const farmCount = Math.ceil(population / 2)
@@ -88,9 +91,9 @@ const metrics = (state: SimulationState) => {
     foodNet: getFoodProductionPerTick(state) - getFoodConsumptionPerTick(state),
     waterCapacity: getWaterProductionPerTick(state),
     water: getResourceStock(state).water,
-    materialNet: getNetMaterialPerTick(state),
-    material: getResourceStock(state).construction,
-    reserve: state.storage.material,
+    materialNet: getNetMoneyPerTick(state),
+    material: getResourceStock(state).money,
+
     workers: employment.employed,
     farms: buildings.filter((b) => b.type === 'farm' && b.status === 'operational').length,
     wells: buildings.filter((b) => b.type === 'well' && b.status === 'operational').length,
@@ -115,7 +118,9 @@ describe('Step 10BO — concrete scale-pressure measurement', () => {
     expect(rows.find((row) => row.population === 5)?.waterCapacity).toBe(4)
     expect(rows.find((row) => row.population === 6)?.waterCapacity).toBe(6)
     expect(rows.find((row) => row.population === 10)?.workers).toBe(10)
-    expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
+    expect(TAX_PER_INHABITANT_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
   })
 
   it('shows the same healthy state under replay and insertion-order replay', () => {
@@ -135,7 +140,7 @@ describe('Step 10BO — concrete scale-pressure measurement', () => {
     const start = colony(4)
     const sites = [...iterateBuildings(start)].filter((b) => b.type === 'residence').length
     expect(sites).toBe(4)
-    expect(getMaterialProductionPerTick(start)).toBe(0)
-    expect(start.resources.construction).toBe(1000)
+    expect(getRevenuePerTick(start)).toBe(0)
+    expect(start.resources.money).toBe(1000)
   })
 })

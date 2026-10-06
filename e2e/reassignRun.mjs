@@ -176,7 +176,7 @@ async function main() {
     // Build: R1 (2,2) + road (3,2),(3,3) + Farm (4,2) + Workshop (4,3)
     // ---------------------------------------------------------------------
     let s = await fresh(page);
-    assert(s.tick === '0' && s.construction === '100', `fresh state bad: ${JSON.stringify(s)}`);
+    assert(s.tick === '0' && s.money === '100', `fresh state bad: ${JSON.stringify(s)}`);
 
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 2, y: 2 });
@@ -213,7 +213,7 @@ async function main() {
     assert(s.staffedFarmIds === 'building-2', `automatic Farm expected, got farms "${s.staffedFarmIds}"`);
     assert(s.foodForecast === 'sustainable', `one staffed Farm must sustain one colonist, got ${s.foodForecast}`);
     assert(s.manualWorkerIds === '', `no manual worker expected yet, got "${s.manualWorkerIds}"`);
-    ok(`automatic allocation: farms "${s.staffedFarmIds}", food ${s.food}, material ${s.construction}`);
+    ok(`automatic allocation: farms "${s.staffedFarmIds}", food ${s.food}, material ${s.money}`);
     await shot('01-automatic.png');
 
     // ---------------------------------------------------------------------

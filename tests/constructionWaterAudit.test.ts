@@ -22,6 +22,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -40,8 +42,6 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
-  creditMaterialIncome,
-  produceMaterial,
   produceWater,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
@@ -51,7 +51,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   WATER_PER_COLONIST_PER_TICK,
   waterProductionForTick,
   type BuildingType,
@@ -77,7 +77,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -248,9 +248,8 @@ const stepMirror = (
         }
   )
   const staffed = assignJobs(populated)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommandWithWater(withIncome, lateCommand, rule)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommandWithWater(funded, lateCommand, rule)
 
   // `end` payment: the Water is charged when the building becomes operational.
   let paid = commanded.state
@@ -273,7 +272,7 @@ const stepMirror = (
     paidState.state,
     { ...paidState, state: paidState.state }
   )
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(releaseCompletedConstructionCrew(maintained))
 }
 
@@ -318,7 +317,7 @@ const read = (state: SimulationState): Reading => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   water: state.resources.water,
   residences: Object.values(state.buildings).filter((b) => b.type === 'residence').length,
   farms: Object.values(state.buildings).filter((b) => b.type === 'farm').length,
@@ -351,11 +350,11 @@ const placementProbe = (
   const result = applyCommandWithWater(prepared, placeCommand(2, 2, type), rule)
   return {
     type,
-    materialBefore: prepared.resources.construction,
+    materialBefore: prepared.resources.money,
     waterBefore: prepared.resources.water,
     accepted: result.accepted,
     reason: result.reason,
-    materialAfter: result.state.resources.construction,
+    materialAfter: result.state.resources.money,
     waterAfter: result.state.resources.water,
     status: result.placedBuildingId === null ? null : result.state.buildings[result.placedBuildingId]?.status,
   }
@@ -468,12 +467,12 @@ describe('§1/§2/§3 — cost matrix, scopes and bootstrap safety', () => {
     })
     const after = runWithScript(base, { scope: 'productiveExceptWell', cost: 2 }, [], 20)
     audit('BOOTSTRAP_NO_RUNTIME_DRAIN', {
-      materialAfter20: after.resources.construction,
+      materialAfter20: after.resources.money,
       waterAfter20: after.resources.water,
       staffedWorkshops: countStaffedOperationalWorkshops(after),
       note: 'unlike the 10AB per-tick rule, an established Workshop keeps working with zero Water: the one-off cost cannot trap production',
     })
-    expect(after.resources.construction).toBeGreaterThan(0)
+    expect(after.resources.money).toBeGreaterThan(0)
   })
 })
 
@@ -655,7 +654,7 @@ describe('§6 — Water versus a second Material cost', () => {
       })
       const rule: Rule = { scope: 'productiveExceptWell', cost: waterCost }
       // The extra Material variant is modelled by removing Material up front.
-      const adjusted = { ...base, resources: { ...base.resources, construction: 100 - materialCost + 25 } }
+      const adjusted = { ...base, resources: { ...base.resources, money: 100 - materialCost + 25 } }
       const after = runWithScript(
         adjusted,
         rule,
@@ -667,7 +666,7 @@ describe('§6 — Water versus a second Material cost', () => {
         materialCost,
         waterCost,
         waterEnd: after.resources.water,
-        materialEnd: after.resources.construction,
+        materialEnd: after.resources.money,
         workshops: read(after).workshops,
         population: getPopulationCount(after),
       }

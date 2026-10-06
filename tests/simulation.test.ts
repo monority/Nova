@@ -100,7 +100,7 @@ describe('simulation tick', () => {
 
   it('operational residence exists only after its lifecycle completes', () => {
     let state = stepSimulation(createTestState(), placeResidence(4, 4))
-    // Under construction: no operational capacity, no colonist.
+    // Under money: no operational capacity, no colonist.
     expect(availableResidenceIds(state)).toHaveLength(0)
     expect(Object.keys(state.colonists)).toHaveLength(0)
     state = stepSimulation(state)

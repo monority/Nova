@@ -18,8 +18,8 @@ import {
   createInitialState,
   createRoads,
   getBuildingDefinition,
-  getMaterialProductionPerTick,
-  getMaterialUpkeepPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
   getPopulationCount,
   getResourceStock,
   getWaterStock,
@@ -45,7 +45,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -115,12 +115,12 @@ describe('§1/§2 — Workshop construction contract', () => {
     const before = canPay(25, 1)
     const after = stepSimulation(before, place(2, 2, 'workshop'))
     audit('PLACEMENT', {
-      material: `${before.resources.construction} -> ${after.resources.construction}`,
+      material: `${before.resources.money} -> ${after.resources.money}`,
       water: `${before.resources.water} -> ${after.resources.water}`,
       status: after.buildings['building-1']?.status,
       constructionRemaining: after.buildings['building-1']?.constructionRemaining,
     })
-    expect(after.resources.construction).toBe(0)
+    expect(after.resources.money).toBe(0)
     expect(after.resources.water).toBe(0)
     expect(after.buildings['building-1']?.status).toBe('underConstruction')
   })
@@ -134,7 +134,7 @@ describe('§1/§2 — Workshop construction contract', () => {
       validation,
       accepted: result.accepted,
       reason: result.reason,
-      materialUnchanged: getResourceStock(after).construction,
+      materialUnchanged: getResourceStock(after).money,
       waterUnchanged: getWaterStock(after),
       buildings: Object.keys(after.buildings).length,
     })
@@ -174,14 +174,14 @@ describe('§10 — isolation', () => {
       const before = canPay(25, 0)
       const after = stepSimulation(before, place(2, 2, type))
       expect(after.buildings['building-1']?.type).toBe(type)
-      expect(after.resources.construction).toBe(0)
+      expect(after.resources.money).toBe(0)
       expect(after.resources.water).toBe(0)
     }
     const roadBase = withStocks(createState(), { food: 500, material: 5, water: 0 })
     const roads = stepSimulation(roadBase, { type: 'placeRoads', cells: [{ x: 1, y: 1 }] })
     audit('ISOLATION', {
       residenceFarmWell: 'placed with Water 0',
-      road: { roads: Object.keys(roads.roads).length, material: roads.resources.construction, water: roads.resources.water },
+      road: { roads: Object.keys(roads.roads).length, material: roads.resources.money, water: roads.resources.water },
     })
     expect(Object.keys(roads.roads)).toHaveLength(1)
     expect(roads.resources.water).toBe(0)
@@ -209,14 +209,14 @@ describe('§4 — operation consumes no Water', () => {
       waterBefore,
       waterAfter: after.resources.water,
       staffedWorkshops: countStaffedOperationalWorkshops(after),
-      materialProduction: getMaterialProductionPerTick(after),
-      materialUpkeep: getMaterialUpkeepPerTick(after),
+      materialProduction: getRevenuePerTick(after),
+      materialUpkeep: getMaintenanceDuePerTick(after),
       note: 'the Workshop is operational and staffed for all ten ticks and never touches Water',
     })
     expect(countStaffedOperationalWorkshops(state)).toBe(1)
     expect(after.resources.water).toBe(waterBefore)
-    expect(getMaterialProductionPerTick(after)).toBe(2)
-    expect(getMaterialUpkeepPerTick(after)).toBe(1)
+    expect(getRevenuePerTick(after)).toBe(2)
+    expect(getMaintenanceDuePerTick(after)).toBe(1)
   })
 
   it('multiple Workshops never multiply Water consumption per tick', () => {

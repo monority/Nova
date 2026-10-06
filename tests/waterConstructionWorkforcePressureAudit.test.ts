@@ -41,11 +41,9 @@ import {
   getFoodProductionPerTick,
   getHousingSummary,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialStoredProductionPerTick,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getServedColonistCount,
@@ -54,14 +52,13 @@ import {
   getWaterShortage,
   getWaterStatus,
   hashCanonicalState,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   INITIAL_FOOD,
   INITIAL_WATER,
   isWaterSupplySustainable,
   iterateBuildings,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   SAVE_VERSION,
   serializeCanonicalState,
   serializeSave,
@@ -105,7 +102,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -250,7 +247,7 @@ const snapshot = (state: SimulationState): Snapshot => {
     tick: state.time.tick,
     population: getPopulationCount(state),
     food: state.resources.food,
-    material: state.resources.construction,
+    material: state.resources.money,
     water: state.resources.water,
     housingAvailable: housing.availableCapacity,
     jobCapacity: getJobCapacity(state),
@@ -262,9 +259,9 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterNeed: getWaterNeedPerTick(state),
     servedColonists: getServedColonistCount(state),
     waterShortage: getWaterShortage(state),
-    materialProduction: getMaterialProductionPerTick(state),
-    materialUpkeep: getMaterialUpkeepPerTick(state),
-    netMaterial: getNetMaterialPerTick(state),
+    materialProduction: getRevenuePerTick(state),
+    materialUpkeep: getMaintenanceDuePerTick(state),
+    netMaterial: getNetMoneyPerTick(state),
     storageCapacity: getMaterialStorageCapacity(state),
     storedProduction: getMaterialStoredProductionPerTick(state),
     operationalBuildings: [...iterateBuildings(state)].filter(
@@ -343,7 +340,7 @@ describe('1. Reference state (measured from the runtime)', () => {
     audit('REFERENCE_STATE', {
       tick: fresh.time.tick,
       food: fresh.resources.food,
-      material: fresh.resources.construction,
+      material: fresh.resources.money,
       water: fresh.resources.water,
       buildings: Object.keys(fresh.buildings).length,
       colonists: Object.keys(fresh.colonists).length,
@@ -352,7 +349,7 @@ describe('1. Reference state (measured from the runtime)', () => {
       catalog,
     })
 
-    expect(fresh.resources.construction).toBe(INITIAL_CONSTRUCTION_MATERIAL)
+    expect(fresh.resources.money).toBe(INITIAL_TREASURY)
     expect(fresh.resources.food).toBe(INITIAL_FOOD)
     expect(fresh.resources.water).toBe(INITIAL_WATER)
     expect(SAVE_VERSION).toBe(8)
@@ -386,19 +383,17 @@ describe('1. Reference state (measured from the runtime)', () => {
       waterPerColonistPerTick: WATER_PER_COLONIST_PER_TICK,
       foodPerFarmPerTick: FOOD_PER_FARM_PER_TICK,
       foodPerColonistPerTick: FOOD_PER_COLONIST_PER_TICK,
-      materialPerWorkerPerTick: MATERIAL_PER_WORKER_PER_TICK,
+      materialPerWorkerPerTick: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
       materialUpkeepPerStaffedWorkshopPerTick:
-        MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
-      materialStoragePerOperationalWorkshop:
-        MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+        MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       measured: snapshot(colony),
     })
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
     expect(WATER_PER_COLONIST_PER_TICK).toBe(1)
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
-    expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
-    expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
     expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
     // The measured colony matches the constants (2 colonists, 1 well, 1 farm).
     const measured = snapshot(colony)
@@ -562,7 +557,7 @@ describe('2. Water industrial opportunity cost', () => {
         water: 10,
       })
       const waterBefore = state.resources.water
-      const materialBefore = state.resources.construction
+      const materialBefore = state.resources.money
       // Pay for one extra Workshop at the first free column and measure the
       // one-off charge, then let the colony settle for 30 ticks.
       const extraCol = 2 + 1 + workshops // well at col 2, configured workshops follow
@@ -660,7 +655,7 @@ describe('3. Workforce x Water x Material configurations', () => {
       horizons: { materialGross: number; storage: number; materialUpkeep: number }[]
     }[]) {
       for (const horizon of row.horizons) {
-        expect(horizon.materialGross % MATERIAL_PER_WORKER_PER_TICK).toBe(0)
+        expect(horizon.materialGross % COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(0)
         expect(horizon.storage % MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(0)
         expect(horizon.materialUpkeep).toBe(horizon.materialGross / 2)
       }
@@ -694,11 +689,11 @@ describe('4. Industrial expansion W0 -> W4', () => {
       }
       const canPlace = affordableAt(state, 'workshop', cellOf('workshop', targetCol))
       if (!canPlace) {
-        transitions.push({ target: `W${n}`, waited, placed: false, water: state.resources.water, material: state.resources.construction })
+        transitions.push({ target: `W${n}`, waited, placed: false, water: state.resources.water, material: state.resources.money })
         break
       }
       state = placeReal(state, 'workshop', cellOf('workshop', targetCol)).state
-      transitions.push({ target: `W${n}`, waited, placed: true, water: state.resources.water, material: state.resources.construction })
+      transitions.push({ target: `W${n}`, waited, placed: true, water: state.resources.water, material: state.resources.money })
     }
     audit('EXPANSION_AT_WATER_CAP', {
       before,
@@ -759,12 +754,12 @@ describe('4. Industrial expansion W0 -> W4', () => {
             staffedWorkshopsBefore: before.staffedWorkshops,
             staffedFarmsBefore: before.staffedFarms,
             waterAfter: state.resources.water,
-            materialAfter: state.resources.construction,
+            materialAfter: state.resources.money,
             settledWater: state.resources.water,
-            settledMaterial: state.resources.construction,
+            settledMaterial: state.resources.money,
             settledStaffedWorkshops: countStaffedOperationalWorkshops(state),
             settledStaffedFarms: countStaffedOperationalFarms(state),
-            settledNetMaterial: getNetMaterialPerTick(state),
+            settledNetMaterial: getNetMoneyPerTick(state),
             settledWaterNet:
               getWaterProductionPerTick(state) - getWaterNeedPerTick(state),
           })
@@ -786,10 +781,10 @@ describe('4. Industrial expansion W0 -> W4', () => {
           waterAfter: after.water,
           materialAfter: after.material,
           settledWater: settled.resources.water,
-          settledMaterial: settled.resources.construction,
+          settledMaterial: settled.resources.money,
           settledStaffedWorkshops: countStaffedOperationalWorkshops(settled),
           settledStaffedFarms: countStaffedOperationalFarms(settled),
-          settledNetMaterial: getNetMaterialPerTick(settled),
+          settledNetMaterial: getNetMoneyPerTick(settled),
           settledWaterNet:
             getWaterProductionPerTick(settled) - getWaterNeedPerTick(settled),
         })
@@ -1052,7 +1047,7 @@ describe('6. Workforce opportunity cost', () => {
         afterMaterialProd: after.materialProduction,
         settledWater: settled.resources.water,
         settledFood: settled.resources.food,
-        settledMaterial: settled.resources.construction,
+        settledMaterial: settled.resources.money,
         settledStaffed: [...iterateBuildings(settled)]
           .filter((building) => countWorkersAt(settled, building.id) > 0)
           .map((building) => building.type),
@@ -1169,13 +1164,13 @@ describe('7. Construction crew interaction', () => {
       let completionTick: number | null =
         state.buildings[siteId]?.status === 'operational' ? state.time.tick : null
       let firstProductionTick: number | null =
-        getMaterialProductionPerTick(state) > 0 ? state.time.tick : null
+        getRevenuePerTick(state) > 0 ? state.time.tick : null
       while (state.time.tick < horizon) {
         state = stepSimulation(state)
         if (completionTick === null && state.buildings[siteId]?.status === 'operational') {
           completionTick = state.time.tick
         }
-        if (firstProductionTick === null && getMaterialProductionPerTick(state) > 0) {
+        if (firstProductionTick === null && getRevenuePerTick(state) > 0) {
           firstProductionTick = state.time.tick
         }
       }
@@ -1285,7 +1280,7 @@ describe('8. Long-run stability', () => {
         state = stepSimulation(state)
         if (i >= 800) {
           waterTrace.push(state.resources.water)
-          materialTrace.push(state.resources.construction)
+          materialTrace.push(state.resources.money)
           foodTrace.push(state.resources.food)
         }
       }

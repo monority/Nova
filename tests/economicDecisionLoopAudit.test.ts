@@ -33,7 +33,7 @@ const config: SimulationConfig = { world: { seed: 'nova-step10bs', width: 20, he
 
 const base = (): SimulationState => {
   const state = createInitialState(config)
-  return { ...state, resources: { construction: 100, food: 100, water: 100 } }
+  return { ...state, resources: { money: 100, food: 100, water: 100 } }
 }
 
 const operational = (state: SimulationState, type: BuildingType, x: number, y: number): SimulationState => {
@@ -91,8 +91,8 @@ const timeline = (state: SimulationState) => {
     water: state.resources.water,
     waterCapacity: getWaterProductionPerTick(state),
     waterNeed: getWaterNeedPerTick(state),
-    material: state.resources.construction,
-    reserve: state.storage.material,
+    material: state.resources.money,
+    money: state.resources.money,
     staffedFarm: countStaffedOperationalFarms(state),
     staffedWell: countStaffedOperationalWells(state),
     staffedWorkshop: staffed(state, 'workshop'),
@@ -121,8 +121,8 @@ describe('Step 10BS — economic decision loop audit', () => {
     const production = place(start, 'workshop', 5, 0)
     const growthTimeline = [timeline(start), timeline(growth), timeline(advance(growth, 8))]
     const productionTimeline = [timeline(start), timeline(production), timeline(advance(production, 8))]
-    expect(growthTimeline[2]).toMatchObject({ population: 3, construction: 0 })
-    expect(productionTimeline[2]).toMatchObject({ population: 3, construction: 0 })
+    expect(growthTimeline[2]).toMatchObject({ population: 3, money: 0 })
+    expect(productionTimeline[2]).toMatchObject({ population: 3, money: 0 })
     expect(growthTimeline[2]).toEqual(productionTimeline[2])
   })
 
@@ -159,9 +159,9 @@ describe('Step 10BS — economic decision loop audit', () => {
     const crewed = stepSimulation(site.state, { type: 'assignConstructionCrew', colonistId: worker.id, buildingId: site.buildingId })
     const during = timeline(crewed)
     const recovered = timeline(advance(crewed, 3))
-    expect(during.construction).toBe(1)
+    expect(during.money).toBe(1)
     expect(during.vacant).toBe(1)
-    expect(recovered).toMatchObject({ construction: 0, staffedFarm: 2, staffedWell: 2, vacant: 0 })
+    expect(recovered).toMatchObject({ money: 0, staffedFarm: 2, staffedWell: 2, vacant: 0 })
     expect(recovered.staffedFarm + recovered.staffedWell).toBe(4)
   })
 

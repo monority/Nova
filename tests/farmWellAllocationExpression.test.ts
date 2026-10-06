@@ -22,7 +22,7 @@ const config: SimulationConfig = { world: { seed: 'nova-step10bt1', width: 20, h
 
 const base = (): SimulationState => {
   const state = createInitialState(config)
-  return { ...state, resources: { construction: 1000, food: 1000, water: 1000 } }
+  return { ...state, resources: { money: 1000, food: 1000, water: 1000 } }
 }
 
 const operational = (state: SimulationState, type: BuildingType, x: number, y: number): SimulationState => {

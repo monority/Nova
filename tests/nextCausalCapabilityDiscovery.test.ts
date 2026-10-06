@@ -33,7 +33,7 @@ import {
   getEmploymentSummary,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   getProgression,
   getRoadNetworks,
   getServedColonistCount,
@@ -45,9 +45,8 @@ import {
   hashCanonicalState,
   iterateBuildings,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   ROAD_CONSTRUCTION_COST,
   SAVE_VERSION,
   SCENARIOS,
@@ -141,7 +140,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 200,
       water: spec.water ?? 100,
     },
@@ -206,7 +205,7 @@ const read = (state: SimulationState) => {
     population: Object.keys(state.colonists).length,
     food: state.resources.food,
     water: state.resources.water,
-    material: state.resources.construction,
+    material: state.resources.money,
     foodPerTick: getFoodProductionPerTick(state),
     foodConsumption: getFoodConsumptionPerTick(state),
     foodNet: getFoodProductionPerTick(state) - getFoodConsumptionPerTick(state),
@@ -214,7 +213,7 @@ const read = (state: SimulationState) => {
     waterServedResidences: getWaterServedResidenceCount(state),
     servedColonists: getServedColonistCount(state),
     waterSupply: getWaterSupplyStatus(state).state,
-    materialPerTick: getMaterialProductionPerTick(state),
+    materialPerTick: getRevenuePerTick(state),
     employed: employment.employed,
     unemployed: employment.unemployed,
     jobCapacity: employment.jobCapacity,
@@ -335,8 +334,8 @@ describe('1. delta-only closed capability matrix', () => {
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerWell: WATER_PER_WELL_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
-      materialPerWorker: MATERIAL_PER_WORKER_PER_TICK,
-      materialUpkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      materialUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       materialStorage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       roadCost: ROAD_CONSTRUCTION_COST,
     }
@@ -663,13 +662,13 @@ describe('4. candidate B: construction scheduling', () => {
     audit('THROUGHPUT', {
       placements: placements.length,
       elapsedTicks: elapsed,
-      materialSpent: 100 - state.resources.construction,
+      materialSpent: 100 - state.resources.money,
     })
     // Four placements cost four ticks and four x 25 Material, plus 2 ticks of
     // construction each: throughput is linear in both currencies, so it is a
     // quantity, not a new qualitative dimension.
     expect(elapsed).toBe(placements.length)
-    expect(100 - state.resources.construction).toBe(4 * 25)
+    expect(100 - state.resources.money).toBe(4 * 25)
   })
 })
 
@@ -876,7 +875,7 @@ describe('7. candidate E: production timing', () => {
       .map((building) => building.type)
     const after40 = read(tick(withWorkshop, 40))
     audit('PRODUCTION_TIMING', {
-      materialAfterPlacement: withWorkshop.resources.construction,
+      materialAfterPlacement: withWorkshop.resources.money,
       waterAfterPlacement: withWorkshop.resources.water,
       assignment,
       after40,
@@ -887,7 +886,7 @@ describe('7. candidate E: production timing', () => {
     expect(withWorkshop.resources.water).toBe(50)
     // Workshop-only income: the Well and Farm workers earn no Material, so the
     // placement is 25 − 25 = 0 with nothing credited on top.
-    expect(withWorkshop.resources.construction).toBe(0)
+    expect(withWorkshop.resources.money).toBe(0)
     expect(after40.population).toBeGreaterThan(0)
     // Food or Water (or both) end in deficit at 40 ticks: industry is funded by
     // a reserve, never by a surplus.

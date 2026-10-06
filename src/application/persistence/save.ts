@@ -52,6 +52,12 @@ export const SAVE_FORMAT = 'nova-save'
  * deterministically by adding an empty StorageHub to every state.
  */
 /**
+ * v9: Step001 money migration. `resources.construction` becomes `money`,
+ * and the removed hub material slot is folded into the treasury — no
+ * stored value is lost, money is simply no longer double-counted as a
+ * physical stock. Capacities drop the material slot.
+ */
+/**
  * Step 10AV: terrain (`config.world.blockedCells`) is an OPTIONAL field that
  * is omitted whenever the world has no blocked cell, so a terrain-free world
  * — every save written before this step — keeps exactly its historical
@@ -59,11 +65,11 @@ export const SAVE_FORMAT = 'nova-save'
  * world that actually owns blocked cells carries the field. No migration and
  * therefore NO version bump: SAVE_VERSION stays 8.
  */
-export const SAVE_VERSION = 8
-/** The single previous version this build knows how to migrate (v4/v5/v6/v7 chain through it). */
-export const MIGRATABLE_SAVE_VERSION = 7
+export const SAVE_VERSION = 9
+/** The single previous version this build knows how to migrate (v4..v8 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 8
 /** Every older version the chained migration still accepts. */
-export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7]
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -102,7 +108,9 @@ const assertString = (value: unknown, field: string): void => {
  *   v4 -> v5: stamp every colonist `workplaceAssignmentMode: 'automatic'`;
  *   v5 -> v6: add `water: 0` to the resource stock;
  *   v6 -> v7: stamp every colonist `constructionAssignmentId: null`;
- *   v7 -> v8: add empty StorageHub.
+ *   v7 -> v8: add empty StorageHub;
+ *   v8 -> v9: rename `resources.construction` to `money`, fold hub
+ *     `storage.material` into the treasury, drop the hub material slot.
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -117,6 +125,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV6ToV7(current)
     } else if (version === 7) {
       current = migrateV7ToV8(current)
+    } else if (version === 8) {
+      current = migrateV8ToV9(current)
     } else {
       break
     }
@@ -179,6 +189,33 @@ const migrateV6ToV7 = (save: Record<string, unknown>): Record<string, unknown> =
         : value
   }
   return { ...save, state: { ...state, colonists } }
+}
+
+/** v8 -> v9: Step001 money migration (value-preserving, see version doc). */
+const migrateV8ToV9 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state) || !isRecord(state['resources'])) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const resources = state['resources']
+  const construction = resources['construction']
+  if (typeof construction !== 'number') {
+    throw new SaveValidationError('Malformed save: missing resources.construction')
+  }
+  let money = construction
+  let storage = state['storage']
+  if (isRecord(storage) && typeof storage['material'] === 'number') {
+    money += storage['material'] as number
+    const { material: _dropped, ...restStorage } = storage as Record<string, unknown> & { material?: unknown }
+    const capacities = (restStorage['capacities'] as Record<string, unknown> | undefined) ?? {}
+    const { material: _droppedCap, ...restCapacities } = capacities
+    storage = { ...restStorage, capacities: restCapacities }
+  }
+  const { construction: _renamed, ...restResources } = resources as Record<string, unknown> & { construction?: unknown }
+  return {
+    ...save,
+    state: { ...state, resources: { ...restResources, money }, storage },
+  }
 }
 
 /** v7 -> v8: add empty StorageHub (Step 10BG). */
@@ -250,7 +287,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   assertFiniteInt(time['tick'], 'time.tick')
   assertFiniteInt(counters['nextBuildingId'], 'counters.nextBuildingId')
   assertFiniteInt(counters['nextColonistId'], 'counters.nextColonistId')
-  assertFiniteInt(resources['construction'], 'resources.construction')
+  assertFiniteInt(resources['money'], 'resources.money')
   assertFiniteInt(resources['food'], 'resources.food')
   assertFiniteInt(resources['water'], 'resources.water')
   if ((resources['food'] as number) < 0) {
@@ -313,7 +350,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
   }
 
   const resourcesStock: ResourceStock = {
-    construction: resources['construction'] as number,
+    money: resources['money'] as number,
     food: resources['food'] as number,
     water: resources['water'] as number,
   }
@@ -383,12 +420,10 @@ const validateStorage = (raw: Record<string, unknown>): StorageHub => {
   }
   const food = storage['food']
   const water = storage['water']
-  const material = storage['material']
   const capacities = storage['capacities']
   if (
     typeof food !== 'number' || !Number.isInteger(food) || food < 0 ||
-    typeof water !== 'number' || !Number.isInteger(water) || water < 0 ||
-    typeof material !== 'number' || !Number.isInteger(material) || material < 0
+    typeof water !== 'number' || !Number.isInteger(water) || water < 0
   ) {
     return createInitialStorageHub()
   }
@@ -397,19 +432,16 @@ const validateStorage = (raw: Record<string, unknown>): StorageHub => {
   }
   const capFood = capacities['food']
   const capWater = capacities['water']
-  const capMaterial = capacities['material']
   if (
     typeof capFood !== 'number' || !Number.isInteger(capFood) || capFood < 0 ||
-    typeof capWater !== 'number' || !Number.isInteger(capWater) || capWater < 0 ||
-    typeof capMaterial !== 'number' || !Number.isInteger(capMaterial) || capMaterial < 0
+    typeof capWater !== 'number' || !Number.isInteger(capWater) || capWater < 0
   ) {
     return createInitialStorageHub()
   }
   return {
     food,
     water,
-    material,
-    capacities: { food: capFood, water: capWater, material: capMaterial },
+    capacities: { food: capFood, water: capWater },
   }
 }
 

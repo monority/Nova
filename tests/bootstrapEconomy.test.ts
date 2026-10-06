@@ -14,6 +14,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  TAX_PER_INHABITANT_PER_TICK,
+
+  collectRevenue,
+  commerceRevenueForTick,
+  getCommerceRevenuePerTick,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -26,18 +32,13 @@ import {
   foodProductionForTick,
   getBuildingRoadAccess,
   hashCanonicalState,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   INITIAL_FOOD,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  materialProductionForTick,
-  materialStoredProductionForTick,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  materialUpkeepDueForTick,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  maintenanceDueForTick,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   produceFood,
-  creditMaterialIncome,
-  produceMaterial,
   progressPlacedRoads,
   ROAD_CONSTRUCTION_COST,
   ROAD_CONSTRUCTION_TICKS,
@@ -45,7 +46,7 @@ import {
   serializeCanonicalState,
   serializeSave,
   stepSimulation,
-  upkeepBuildings,
+  payMaintenance,
   updateNeeds,
   updatePopulation,
   WORKSHOP_JOB_CAPACITY,
@@ -80,20 +81,20 @@ interface TrajRow {
 
 const row = (state: SimulationState): TrajRow => ({
   tick: state.time.tick,
-  material: state.resources.construction,
+  material: state.resources.money,
   food: state.resources.food,
   population: Object.keys(state.colonists).length,
   employed: countEmployedWorkers(state),
-  gross: materialProductionForTick(state),
-  stored: materialStoredProductionForTick(state),
-  upkeep: materialUpkeepDueForTick(state),
+  gross: commerceRevenueForTick(state),
+  stored: getCommerceRevenuePerTick(state),
+  upkeep: maintenanceDueForTick(state),
 })
 
 const slim = (state: SimulationState): TrajRow => row(state)
 
 describe('canonical rules from source (Step 09I §3/§8)', () => {
   it('A0 — starting stock, catalog, rates and road constants are unchanged', () => {
-    expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
+    expect(INITIAL_TREASURY).toBe(100)
     expect(INITIAL_FOOD).toBe(100)
     // Step 10AD: every definition carries the one-off Water construction cost
     // (0 except the Workshop).
@@ -117,9 +118,10 @@ describe('canonical rules from source (Step 09I §3/§8)', () => {
     })
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
-    expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
-    expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
-    expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
+    expect(TAX_PER_INHABITANT_PER_TICK).toBe(1)
+    expect(INITIAL_TREASURY).toBe(100)
     expect(WORKSHOP_JOB_CAPACITY).toBe(1)
     expect(ROAD_CONSTRUCTION_COST).toBe(5)
     expect(ROAD_CONSTRUCTION_TICKS).toBe(2)
@@ -259,8 +261,8 @@ describe('scenario D — sustained one-Workshop economy (Step 09I §7)', () => {
     const states = runD()
     const at = (tick: number): SimulationState => states[tick - 5]!
     // Step 10CQ.1: income (2) - upkeep (1) = +1/tick above cap.
-    expect(at(10).resources.construction).toBe(41)
-    expect(at(20).resources.construction).toBe(51)
+    expect(at(10).resources.money).toBe(41)
+    expect(at(20).resources.money).toBe(51)
     // Income drives accumulation past the old 24 equilibrium.
     expect(slim(at(24))).toEqual({
       tick: 24, material: 55, food: 78, population: 1,
@@ -333,7 +335,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
       'building-3',
     ])
     // Stock above 25 but below 50: one Farm built, no second workshop.
-    expect(attempt.state.resources.construction).toBeGreaterThan(0)
+    expect(attempt.state.resources.money).toBeGreaterThan(0)
   })
 
   it('E3 — a second (vacant) Workshop raises capacity and accumulation resumes', () => {
@@ -361,7 +363,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     for (let i = 0; i < 6; i += 1) {
       state = stepSimulation(state) // t15..t20
     }
-    expect(state.resources.construction).toBe(52)
+    expect(state.resources.money).toBe(52)
   })
 })
 
@@ -378,7 +380,7 @@ describe('food interaction (Step 09I §10)', () => {
     state = stepSimulation(state, roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])) // t4
     state = stepSimulation(state) // t5: production resumes with NO farm
     expect(state.resources.food).toBe(97)
-    expect(materialProductionForTick(state)).toBe(2)
+    expect(commerceRevenueForTick(state)).toBe(2)
     // ~97 ticks of Food runway remain: Food is not the bootstrap bottleneck.
   })
 })
@@ -390,14 +392,14 @@ describe('roadless Workshop as a sink (Step 09I §11)', () => {
     state = stepSimulation(state) // t2
     state = placeCatchUp(withWorkshopWater(state), place('workshop', 4, 4)) // t3
     state = stepSimulation(state) // t4: operational but not mobility-connected
-    const start = state.resources.construction
+    const start = state.resources.money
     for (let i = 0; i < 5; i += 1) {
       state = stepSimulation(state)
       // 09K: no mobility connection → no worker → no staffed Workshop.
       // production = 0, upkeep = 0, net Material = 0: stock frozen.
-      expect(materialProductionForTick(state)).toBe(0)
-      expect(materialUpkeepDueForTick(state)).toBe(0)
-      expect(state.resources.construction).toBe(start)
+      expect(commerceRevenueForTick(state)).toBe(0)
+      expect(maintenanceDueForTick(state)).toBe(0)
+      expect(state.resources.money).toBe(start)
     }
     // This is the key 09K economy change: the old 09F "staffed roadless sink"
     // (1 Material/tick drain for no output) no longer exists. A roadless
@@ -433,7 +435,7 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
       const need = updateNeeds(t1)
       expect(need).toBe(Object.keys(t1.colonists).length)
       const t2 = produceFood(t1)
-      expect(t2.resources.construction).toBe(t1.resources.construction)
+      expect(t2.resources.money).toBe(t1.resources.money)
       const consumed = consumeFood(t2, need)
       expect(consumed.fed).toBe(true) // no starvation anywhere in bootstrap
       const t3 = consumed.state
@@ -444,9 +446,9 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
       expect(t4.resources).toEqual(t3.resources)
       const t5 = assignJobs(t4)
       expect(t5.resources).toEqual(t4.resources)
-      const t6 = produceMaterial(t5)
-      expect(t6.resources.construction - t5.resources.construction).toBe(
-        materialStoredProductionForTick(t5),
+      const t6 = collectRevenue(t5)
+      expect(t6.resources.money - t5.resources.money).toBe(
+        getCommerceRevenuePerTick(t5),
       )
       const t7 = applyCommand(t6, command)
       // A missing command is an explicit no-op (no transaction), never a
@@ -458,7 +460,7 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
       } else {
         expect(t7.accepted).toBe(true)
       }
-      const paid = t6.resources.construction - t7.state.resources.construction
+      const paid = t6.resources.money - t7.state.resources.money
       const expectedCost =
         command === undefined
           ? 0
@@ -469,20 +471,20 @@ describe('correctness invariants over a mixed run (Step 09I §14)', () => {
       // Step 10Y: stepSimulation no longer catches a placed building up.
       const t8 = progressPlacedRoads(t7.state, t7)
       expect(t8.resources).toEqual(t7.state.resources)
-      const due = materialUpkeepDueForTick(t8)
-      const t9 = upkeepBuildings(t8)
-      expect(t8.resources.construction - t9.resources.construction).toBe(
-        Math.min(t8.resources.construction, due),
+      const due = maintenanceDueForTick(t8)
+      const t9 = payMaintenance(t8)
+      expect(t8.resources.money - t9.resources.money).toBe(
+        Math.min(t8.resources.money, due),
       )
       // Step 10CQ.1: material income must be credited in the replay.
-      const t9b = creditMaterialIncome(t9)
+      const t9b = collectRevenue(t9)
       const t10 = advanceTime(t9b)
       // The replay IS the real path: identical canonical state.
       expect(serializeCanonicalState(t10)).toBe(
         serializeCanonicalState(stepSimulation(before, command)),
       )
       state = stepSimulation(before, command)
-      minMaterial = Math.min(minMaterial, state.resources.construction)
+      minMaterial = Math.min(minMaterial, state.resources.money)
       minFood = Math.min(minFood, state.resources.food)
     }
     expect(minMaterial).toBeGreaterThanOrEqual(0)
@@ -544,6 +546,6 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     }
     expect(hashCanonicalState(resumed)).toBe(hashCanonicalState(direct))
     expect(slim(resumed)).toEqual(slim(direct))
-    expect(resumed.resources.construction).toBe(40)
+    expect(resumed.resources.money).toBe(40)
   })
 })

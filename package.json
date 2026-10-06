@@ -35,7 +35,6 @@
     "test:e2e:farm-well-allocation": "node e2e/farmWellAllocationRun.mjs",
     "test:e2e:town-gate": "node e2e/townGateRun.mjs",
     "test:e2e:road-affordability": "node e2e/roadAffordabilityRun.mjs",
-    "test:e2e:reserve-affordability": "node e2e/reserveAffordabilityRun.mjs",
     "test:e2e:product-audit": "node e2e/productAuditRun.mjs",
     "test:e2e:growth": "node e2e/growthRun.mjs"
   },

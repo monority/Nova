@@ -140,7 +140,7 @@ async function main() {
     assert(status.status.includes('Housing composition'), `status: ${status.status}`);
     assert(status.roadNetworks === '2', `start networks: ${status.roadNetworks}`);
     assert(status.waterServedResidences === '1', `start served: ${status.waterServedResidences}`);
-    assert(status.construction === '30', `start material: ${status.construction}`);
+    assert(status.money === '30', `start material: ${status.money}`);
     assert(status.food === '40', `start food: ${status.food}`);
     // No staffed Farm at the start: the Food flow is 0 while one colonist eats.
     assert(status.waterProduction === '2', `start water production: ${status.waterProduction}`);
@@ -150,7 +150,7 @@ async function main() {
     assert(startProgression.stage === 'wilderness', `start stage: ${startProgression.stage}`);
     const startObjective = await objective(page);
     assert(startObjective.state === 'in_progress', `start objective: ${startObjective.state}`);
-    ok(`start: stage ${startProgression.stage}, objective ${startObjective.state} (${startObjective.blockers.join(', ')}), material ${status.construction}, food ${status.food}`);
+    ok(`start: stage ${startProgression.stage}, objective ${startObjective.state} (${startObjective.blockers.join(', ')}), material ${status.money}, food ${status.food}`);
 
     const constraintText = await page.evaluate(
       () => document.querySelector('[data-testid="progression-objective"]')?.textContent ?? ''
@@ -201,8 +201,8 @@ async function main() {
     // Step 10CZ: Phase 7 income credits the staffed Farm/Well workers, so the
     // 30 - 25 = 5 budget leftover grows by the income earned during the
     // completion ticks that reach Village. Measured: +4 -> 9.
-    assert(s.construction === '9', `bridge leftover material: ${s.construction}`);
-    ok(`bridge solution: Village at tick ${s.tick}, population ${s.colonists}, staffed Farm "${s.staffedFarmIds}", material left ${s.construction}`);
+    assert(s.money === '9', `bridge leftover material: ${s.money}`);
+    ok(`bridge solution: Village at tick ${s.tick}, population ${s.colonists}, staffed Farm "${s.staffedFarmIds}", material left ${s.money}`);
     await page.screenshot({ path: `${ART}/03-village.png` });
 
     // --- 4. the stranded solution fails with a visible cause ------------------
@@ -241,8 +241,8 @@ async function main() {
     // Step 10CZ: same Phase 7 income effect. The 30 Material budget is fully
     // spent (25 Residence + 5 road), and the completion ticks to Village add
     // the staffed workers' income. Measured: 6.
-    assert(s.construction === '6', `recovery material: ${s.construction}`);
-    ok(`recovery: road join at tick ${s.tick} → ${recoveredProgression.stage}, networks ${s.roadNetworks}, material ${s.construction}`);
+    assert(s.money === '6', `recovery material: ${s.money}`);
+    ok(`recovery: road join at tick ${s.tick} → ${recoveredProgression.stage}, networks ${s.roadNetworks}, material ${s.money}`);
     await page.screenshot({ path: `${ART}/05-recovery.png` });
 
     // --- 6. narrow viewports --------------------------------------------------

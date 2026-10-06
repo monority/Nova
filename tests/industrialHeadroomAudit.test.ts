@@ -26,20 +26,18 @@ import {
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getProgression,
   getWaterNeedPerTick,
   getWaterProductionPerTick,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   iterateBuildings,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   SCENARIOS,
   stepSimulation,
   WATER_PER_COLONIST_PER_TICK,
@@ -100,7 +98,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 500,
+      money: spec.material ?? 500,
       food: spec.food ?? 1000,
       water: spec.water ?? 50,
     },
@@ -178,9 +176,9 @@ const flow = (state: SimulationState): Flow => {
     waterProduction: getWaterProductionPerTick(state),
     waterNeed: getWaterNeedPerTick(state),
     waterNet: getWaterProductionPerTick(state) - getWaterNeedPerTick(state),
-    materialProduction: getMaterialProductionPerTick(state),
-    materialUpkeep: getMaterialUpkeepPerTick(state),
-    materialNet: getNetMaterialPerTick(state),
+    materialProduction: getRevenuePerTick(state),
+    materialUpkeep: getMaintenanceDuePerTick(state),
+    materialNet: getNetMoneyPerTick(state),
     storageCapacity: getMaterialStorageCapacity(state),
     buildings: Object.keys(state.buildings).length,
     stage: getProgression(state).stage,
@@ -232,13 +230,13 @@ describe('1. Current economic contract', { timeout: 30000 }, () => {
       catalog,
       foodPerFarm: FOOD_PER_FARM_PER_TICK,
       waterPerWell: WATER_PER_WELL_PER_TICK,
-      materialPerWorker: MATERIAL_PER_WORKER_PER_TICK,
-      workshopUpkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
       roadCost: 5,
-      initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+      initialMaterial: INITIAL_TREASURY,
     }
     audit('ECONOMIC_CONTRACT', contract)
     expect(contract.catalog).toEqual([
@@ -366,7 +364,7 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     const d = flow(after20)
     audit('INDUSTRIAL_STATES_C_D', {
       staffed: c,
-      after20Ticks: { ...d, water: after20.resources.water, food: after20.resources.food, material: after20.resources.construction },
+      after20Ticks: { ...d, water: after20.resources.water, food: after20.resources.food, material: after20.resources.money },
       waterDrained: waterStart - after20.resources.water,
     })
     expect(c.workshopWorkers).toBe(1)
@@ -380,7 +378,7 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     expect(after20.resources.water).toBeLessThan(waterStart)
     // Workshop-only income: climb +3/tick (2 stored + 2 income − 1 upkeep)
     // to the 25 cap, then drift +1/tick: 37 at tick 20.
-    expect(after20.resources.construction).toBe(37)
+    expect(after20.resources.money).toBe(37)
   })
 
   it('measures state E (industrial recovery) and the temporary-industry loop', () => {
@@ -398,7 +396,7 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
       state = stepSimulation(state)
       industrialTicks += 1
     }
-    const materialGained = state.resources.construction
+    const materialGained = state.resources.money
     const waterDebt = waterStart - state.resources.water
     // Recovery: return the worker to the Well and let the colony run.
     state = stepSimulation(state, { type: 'reassignColonist', colonistId: wellWorker, workplaceId: wellId })
@@ -509,13 +507,13 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
     // 5. aggressive industrialisation: keep the Workshop staffed until the
     //    Water reserve is exhausted, then recover.
     let aggressive = manual
-    const stockAtIndustryStart = aggressive.resources.construction
+    const stockAtIndustryStart = aggressive.resources.money
     let ticks = 0
     while (aggressive.resources.water > 0 && ticks < 50) {
       aggressive = stepSimulation(aggressive)
       ticks += 1
     }
-    const aggressiveMaterial = aggressive.resources.construction
+    const aggressiveMaterial = aggressive.resources.money
     const materialGained = aggressiveMaterial - stockAtIndustryStart
     aggressive = stepSimulation(aggressive, { type: 'reassignColonist', colonistId: wellWorker, workplaceId: wellId })
     aggressive = runTicks(aggressive, 5)
@@ -527,7 +525,7 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
       manualStaffing: manualFlow,
       manualAfter10Ticks: {
         ...measure(manualAfter10),
-        material: manualAfter10.resources.construction,
+        material: manualAfter10.resources.money,
         water: manualAfter10.resources.water,
         waterBurned: waterBefore - manualAfter10.resources.water,
       },
@@ -605,7 +603,7 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
         if (step.kind === 'roads') {
           const cells = step.cells
           let guard = 0
-          while (guard < 300 && state.resources.construction < cells.length * 5) {
+          while (guard < 300 && state.resources.money < cells.length * 5) {
             state = stepSimulation(state)
             observe()
             guard += 1
@@ -638,7 +636,7 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
         settlementTick,
         wipeTick,
         population: getPopulationCount(state),
-        material: state.resources.construction,
+        material: state.resources.money,
         food: state.resources.food,
         water: state.resources.water,
         wellWorkers: staffed(state, 'well'),
@@ -652,7 +650,7 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
     audit('OPENING_AUDIT', {
       rows,
       minimumVillage,
-      initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+      initialMaterial: INITIAL_TREASURY,
       workshopFirstLegal: illegal.affordable,
       workshopFirstReason: illegal.placement.valid ? 'valid' : illegal.placement.reason,
       verdict:
@@ -662,7 +660,7 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
     expect(rows.find((row) => row.opening === 'Residence-first')?.settlementTick).not.toBeNull()
     expect(illegal.affordable).toBe(false)
     expect(minimumVillage).toBe(105)
-    expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
+    expect(INITIAL_TREASURY).toBe(100)
   })
 })
 
@@ -698,13 +696,13 @@ describe('7-8. Sensitivity and classification', { timeout: 30000 }, () => {
     // Mechanisms whose change cannot create headroom: the Workshop economy and
     // the starting Material. Measured against the runtime.
     const workshopEconomy = {
-      production: MATERIAL_PER_WORKER_PER_TICK,
-      upkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      production: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      upkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       storage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
       note: 'changing production or upkeep changes the NET Material rate, never the worker count: headroom is unchanged',
     }
     const startingMaterial = {
-      initial: INITIAL_CONSTRUCTION_MATERIAL,
+      initial: INITIAL_TREASURY,
       minimumVillage: 105,
       note: 'a larger initial stock unlocks the Village opening but creates no worker: headroom is unchanged',
     }
@@ -857,7 +855,7 @@ describe('9-10. Town implication and content candidates', { timeout: 30000 }, ()
           requirements: [{ kind: 'stage', stage: 'settlement' }],
           failsWithoutColonists: false,
         },
-        resources: { material: 100, food: 100, water: 0 },
+        resources: { money: 100, food: 100, water: 0 },
         buildings: [
           ...candidate.data.residences.map((cell) => ({
             type: 'residence' as const,

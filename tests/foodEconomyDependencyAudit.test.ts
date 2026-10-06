@@ -14,6 +14,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+  commerceRevenueForTick,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -34,10 +37,7 @@ import {
   iterateBuildings,
   isOperationalFarm,
   countWorkersAt,
-  materialProductionForTick,
   produceFood,
-  creditMaterialIncome,
-  produceMaterial,
   produceWater,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -45,7 +45,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   waterProductionForTick,
   type BuildingType,
   type SimulationConfig,
@@ -105,7 +105,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -182,7 +182,7 @@ const stepMirror = (state: SimulationState, opts: MirrorOptions): SimulationStat
     // Each staffed operational Farm (ascending id) pays its input atomically;
     // an unpaid Farm produces 0 this tick.
     const output = opts.farmOutput ?? FOOD_PER_FARM_PER_TICK
-    let material = produced.resources.construction
+    let material = produced.resources.money
     let food = produced.resources.food
     for (const building of iterateBuildings(produced)) {
       if (!isOperationalFarm(building) || countWorkersAt(produced, building.id) === 0) continue
@@ -190,7 +190,7 @@ const stepMirror = (state: SimulationState, opts: MirrorOptions): SimulationStat
       material -= opts.farmInput
       food += output
     }
-    produced = { ...produced, resources: { ...produced.resources, construction: material, food } }
+    produced = { ...produced, resources: { ...produced.resources, money: material, food } }
   } else {
     produced = produceFood(constructed)
   }
@@ -220,11 +220,10 @@ const stepMirror = (state: SimulationState, opts: MirrorOptions): SimulationStat
         }
   )
   const staffed = assignJobs(populated)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, undefined)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(maintained)
 }
 
@@ -266,7 +265,7 @@ const record = (state: SimulationState): FoodRecord => {
     tick: state.time.tick,
     population: getPopulationCount(state),
     food: state.resources.food,
-    material: state.resources.construction,
+    material: state.resources.money,
     water: state.resources.water,
     staffedFarms: countStaffedOperationalFarms(state),
     staffedWorkshops,
@@ -303,11 +302,10 @@ const stepBaselineMirror = (state: SimulationState): SimulationState => {
         }
   )
   const staffed = assignJobs(populated)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, undefined)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(maintained)
 }
 
@@ -482,7 +480,7 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
         material: r.material,
         staffedFarms: r.staffedFarms,
         staffedWorkshops: r.staffedWorkshops,
-        materialNetPerTick: materialProductionForTick(run.state) - r.staffedWorkshops,
+        materialNetPerTick: commerceRevenueForTick(run.state) - r.staffedWorkshops,
       }
     })
     audit('FARM_INPUT_RATIOS', rows)
@@ -498,18 +496,18 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
     const withInput = runMirror(start, 60, { farmInput: 1, farmOutput: 2 }).state
     audit('FARM_INPUT_TAX', {
       baseline: {
-        material: baseline.resources.construction,
+        material: baseline.resources.money,
         food: baseline.resources.food,
         population: getPopulationCount(baseline),
       },
       withInput: {
-        material: withInput.resources.construction,
+        material: withInput.resources.money,
         food: withInput.resources.food,
         population: getPopulationCount(withInput),
       },
       note: 'the 2 staffed Farms consume the 2 net Material the Workshops produce',
     })
-    expect(baseline.resources.construction).toBeGreaterThan(withInput.resources.construction)
+    expect(baseline.resources.money).toBeGreaterThan(withInput.resources.money)
   })
 
   it('without generic employment income, the hypothetical Farm-input configuration deadlocks', () => {
@@ -522,7 +520,7 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
     audit('FARM_INPUT_DEADLOCK', {
       population: getPopulationCount(run.state),
       food: run.state.resources.food,
-      material: run.state.resources.construction,
+      material: run.state.resources.money,
       starved: run.trace.some((r) => r.population === 0),
       note: 'Workshop-only income: no Farm income pays the hypothetical input; the deadlock starves the colony',
     })
@@ -716,12 +714,12 @@ describe('§16/§17 — Water and Material boundary regressions', () => {
     const baseline = advance(start, 120)
     const input = runMirror(start, 120, { farmInput: 1, farmOutput: 2 }).state
     audit('MATERIAL_BOUNDARY', {
-      baselineMaterial: baseline.resources.construction,
-      inputMaterial: input.resources.construction,
+      baselineMaterial: baseline.resources.money,
+      inputMaterial: input.resources.money,
       storageCap: '25 per operational Workshop (unchanged)',
       upkeep: '1 per staffed Workshop (unchanged)',
     })
-    expect(baseline.resources.construction).toBeGreaterThan(input.resources.construction)
+    expect(baseline.resources.money).toBeGreaterThan(input.resources.money)
   })
 })
 
@@ -735,7 +733,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       saveVersionNow: SAVE_VERSION,
       foodStorageDerivedCap: 'if derived, no new canonical state and no version bump',
       granaryBuilding: 'if added, a new building type string only — no shape change',
-      farmInput: 'no new state (reads resources.construction)',
+      farmInput: 'no new state (reads resources.money)',
     })
     expect(SAVE_VERSION).toBe(8)
   })

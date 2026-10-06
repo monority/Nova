@@ -24,7 +24,6 @@ import {
   getPopulationCount,
   hashCanonicalState,
   loadSave,
-  materialStorageCapacityForTick,
   SAVE_VERSION,
   serializeCanonicalState,
   serializeSave,
@@ -83,7 +82,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -162,20 +161,20 @@ describe('§1/§3 — current model surface', () => {
 // ---------------------------------------------------------------------------
 
 describe('§2 — existing real pressures (measured)', () => {
-  it('Material is developmental: cap 25×W, income-driven growth, no ongoing sink (Step 10CQ.1)', () => {
+  it('Material is developmental: uncapped linear growth, no ongoing sink (Step001)', () => {
     const rows = [1, 2, 3].map((w) => {
       const start = rowWorld({ residences: w, farms: 0, workshops: w, material: 0, food: 4000 })
       const at240 = advance(start, 240)
       return {
         workshops: w,
-        storage: materialStorageCapacityForTick(start),
-        equilibrium: at240.resources.construction,
+        maintenance: maintenanceDueForTick(start),
+        equilibrium: at240.resources.money,
       }
     })
     audit('MATERIAL_PRESSURE', rows)
-    // Step 10CQ.1 (per Workshop): +3/tick to 24 at t8, 26 at t9, then +1/tick
-    // (income − upkeep): 26 + 231 = 257 after 240 ticks, linear in W.
-    expect(rows.map((r) => r.equilibrium)).toEqual([257, 514, 771])
+    // Per Workshop pair: revenue 3 − maintenance 2 = +1/tick from zero:
+    // 240 after 240 ticks, linear in W.
+    expect(rows.map((r) => r.equilibrium)).toEqual([240, 480, 720])
   })
 
   it('Food is uncapped: a Food-surplus colony accumulates without bound', () => {

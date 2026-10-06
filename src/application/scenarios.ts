@@ -12,7 +12,7 @@
  *
  * Initial states are deliberately minimal (Step 10AL §13): the smallest
  * valid state that expresses the scenario, with every value inside the
- * existing economy (25 Material per building, 5 per road cell, 2 Food per
+ * existing economy (25 Money per building, 5 per road cell, 2 Food per
  * staffed Farm, 2 Water per staffed Well).
  */
 
@@ -30,7 +30,7 @@ import type { SimulationConfig } from '../domain/simulation/state.js'
 import type { ObjectiveDefinition } from './queries/objective.js'
 
 export interface ScenarioResources {
-  readonly material: number
+  readonly money: number
   readonly food: number
   readonly water: number
 }
@@ -96,7 +96,7 @@ export const createScenarioState = (
   state = {
     ...state,
     resources: {
-      construction: scenario.resources.material,
+      money: scenario.resources.money,
       food: scenario.resources.food,
       water: scenario.resources.water,
     },
@@ -178,12 +178,12 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     objective: {
       label: 'Reach Settlement.',
       description: 'A first sustainable settlement: a colonist, a Food-producing Farm and a road network.',
-      constraint: 'Material 100 funds a Residence, a road and a Farm with 45 to spare.',
+      constraint: 'Money 100 funds a Residence, a road and a Farm with 45 to spare.',
       requirements: [{ kind: 'stage', stage: 'settlement' }],
       // Starts empty: population 0 is the opening, not a collapse.
       failsWithoutColonists: false,
     },
-    resources: { material: 100, food: 100, water: 0 },
+    resources: { money: 100, food: 100, water: 0 },
     buildings: [],
     roads: [],
     colonists: [],
@@ -200,7 +200,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       requirements: [{ kind: 'stage', stage: 'village' }],
       failsWithoutColonists: true,
     },
-    resources: { material: 100, food: 50, water: 0 },
+    resources: { money: 100, food: 50, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -213,20 +213,20 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     id: 'industrial-expansion',
     name: 'Industrial expansion',
     description:
-      'A Village whose stores are already larger than a Workshop can hold: the Workshop can be built, but it cannot add to them until they are spent.',
+      'A Village with a full treasury and no commerce yet: the Workshop must be connected before it pays.',
     objective: {
       label: 'Reach Village and build a Workshop.',
       description:
-        'Industry costs 25 Material, 1 Water and a worker. A Workshop stores only 25 Material, so the 100 this colony already holds cannot be added to until it is spent, and running the Workshop needs a fourth pair of hands the colony does not have.',
+        'Industry costs 25 Money, 1 Water and a worker. A connected Workshop earns commerce every tick, so the 100 this colony already holds keeps growing once trade flows — but staffing the Workshop needs a fourth pair of hands the colony does not have.',
       constraint:
-        'Two limits: the Water admission gate caps the population at its current capacity, and one Workshop stores 25 Material — less than the stores this colony already holds.',
+        'Two limits: the Water admission gate caps the population at its current capacity, and commerce requires a road-connected Workshop.',
       requirements: [
         { kind: 'stage', stage: 'village' },
         { kind: 'building', buildingType: 'workshop', atLeast: 1 },
       ],
       failsWithoutColonists: true,
     },
-    resources: { material: 100, food: 50, water: 10 },
+    resources: { money: 100, food: 50, water: 10 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -237,21 +237,20 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     colonists: [{ residence: { x: 1, y: 0 } }, { residence: { x: 3, y: 0 } }],
   },
   {
-    // Step 10AQ: the industrial CONVERSION archetype. Material 25 is exactly
-    // the Workshop, so the only way to pay for the second Well is the burst:
-    // 50 Water (25 ticks x 2 Water/tick) becomes 24-25 Material, which the
-    // 25-per-Workshop storage permits and the placement query accepts on the
-    // tick whose production crests the cap. Water 51 = 25 x 2 + the Workshop's
-    // 1 construction Water. Every number is derived from the canonical rates.
+    // Step001: the industrial archetype. Money 25 is exactly the Workshop;
+    // the second Well is paid from the treasury as taxes and Workshop
+    // commerce accumulate. Water 51 covers the Workshop's 1 construction
+    // Water with a reserve to spare. Every number is derived from the
+    // canonical rates.
     id: 'water-reserve-industry',
     name: 'Water reserve industry',
     description:
-      'A Village whose Water reserve is the only construction budget left: the Workshop turns Water into Material.',
+      'A Village with just enough treasury for a Workshop: connect it and let commerce fund the second Well.',
     objective: {
       label: 'Reach Village, build a Workshop and a second Well.',
       description:
-        'Material 25 buys the Workshop and nothing else. The second Well must be paid for by the Workshop itself: run it on the Water reserve, then build.',
-      constraint: 'Material 25, Water 51: the Workshop first, then the reserve buys the Well.',
+        'Money 25 buys the Workshop and nothing else. The second Well is paid from the treasury as taxes and Workshop commerce accumulate: build the Workshop, connect it, then build.',
+      constraint: 'Money 25, Water 51: the Workshop first, then commerce funds the Well.',
       requirements: [
         { kind: 'stage', stage: 'village' },
         { kind: 'building', buildingType: 'workshop', atLeast: 1 },
@@ -259,7 +258,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       ],
       failsWithoutColonists: true,
     },
-    resources: { material: 25, food: 50, water: 51 },
+    resources: { money: 25, food: 50, water: 51 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -278,15 +277,15 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     id: 'spatial-efficiency',
     name: 'Spatial efficiency',
     description:
-      'Exactly enough Material for one Residence, one road cell and one Farm: the road budget is the whole margin.',
+      'Exactly enough Money for one Residence, one road cell and one Farm: the road budget is the whole margin.',
     objective: {
       label: 'Reach Settlement.',
-      description: 'Exactly enough Material for one Residence, one road cell and one Farm: the road budget is the whole margin.',
-      constraint: 'Material 55 = Residence (25) + road (5) + Farm (25).',
+      description: 'Exactly enough Money for one Residence, one road cell and one Farm: the road budget is the whole margin.',
+      constraint: 'Money 55 = Residence (25) + road (5) + Farm (25).',
       requirements: [{ kind: 'stage', stage: 'settlement' }],
       failsWithoutColonists: false,
     },
-    resources: { material: 55, food: 100, water: 0 },
+    resources: { money: 55, food: 100, water: 0 },
     buildings: [],
     roads: [],
     colonists: [],
@@ -299,7 +298,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     objective: {
       label: 'Grow to 4 colonists with Water capacity 4 and Food balanced.',
       description: 'Two Wells support four colonists and two Farms feed them: the objective costs the whole budget.',
-      constraint: 'Material 100 = two Wells (50) plus two Farms (50).',
+      constraint: 'Money 100 = two Wells (50) plus two Farms (50).',
       requirements: [
         { kind: 'population', atLeast: 4 },
         { kind: 'waterCapacity', atLeast: 4 },
@@ -307,7 +306,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       ],
       failsWithoutColonists: true,
     },
-    resources: { material: 100, food: 100, water: 0 },
+    resources: { money: 100, food: 100, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -334,11 +333,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     objective: {
       label: 'Reach Settlement by reconnecting the stranded Farm.',
       description: 'The Farm stands one road cell outside the network, so nobody staffs it and the reserve is draining.',
-      constraint: 'Material 30 and Food 30: the reserve is finite.',
+      constraint: 'Money 30 and Food 30: the reserve is finite.',
       requirements: [{ kind: 'stage', stage: 'settlement' }],
       failsWithoutColonists: true,
     },
-    resources: { material: 30, food: 30, water: 0 },
+    resources: { money: 30, food: 30, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'farm', x: 4, y: 2, operational: true },
@@ -356,7 +355,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     // Farm on the west side. The next Residence decides whether its colonist is
     // refused (unserved), admitted but unemployed (served, cannot reach the
     // Farm), or admitted AND productive (a cell that touches both networks, or a
-    // 5-Material road that joins them). Material 30 is exactly one Residence
+    // 5-Money road that joins them). Money 30 is exactly one Residence
     // plus one road cell, so a wrong placement is recoverable but not free.
     id: 'housing-composition',
     name: 'Housing composition',
@@ -367,11 +366,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       description:
         'Village needs a second colonist, and a second colonist needs a water-served Residence. Food has to be produced as well, and the only Farm is on the other network.',
       constraint:
-        'Material 30: one Residence (25) plus at most one road cell (5). The Well and the Farm are on separate networks.',
+        'Money 30: one Residence (25) plus at most one road cell (5). The Well and the Farm are on separate networks.',
       requirements: [{ kind: 'stage', stage: 'village' }],
       failsWithoutColonists: true,
     },
-    resources: { material: 30, food: 40, water: 0 },
+    resources: { money: 30, food: 40, water: 0 },
     buildings: [
       { type: 'residence', x: 3, y: 0, operational: true },
       { type: 'well', x: 3, y: 2, operational: true },
@@ -393,11 +392,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       description:
         'The Village already feeds and waters four colonists. Build the Workshop and let the idle colonist staff it: the staffed Workshop is the last Town condition.',
       constraint:
-        'Material 30 = Workshop (25) with 5 to spare; Water 5 pays the Workshop water cost (1). Staffing comes from the idle fourth colonist.',
+        'Money 30 = Workshop (25) with 5 to spare; Water 5 pays the Workshop water cost (1). Staffing comes from the idle fourth colonist.',
       requirements: [{ kind: 'stage', stage: 'town' }],
       failsWithoutColonists: true,
     },
-    resources: { material: 30, food: 60, water: 5 },
+    resources: { money: 30, food: 60, water: 5 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -433,11 +432,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       description:
         'Industry is staffed but five mouths eat more than two Farms grow. Build the third Farm and keep the Workshop running: Town needs the staffed Workshop AND a balanced Food supply.',
       constraint:
-        'Material 30 = third Farm (25) with 5 to spare; the idle fifth colonist staffs it once it completes.',
+        'Money 30 = third Farm (25) with 5 to spare; the idle fifth colonist staffs it once it completes.',
       requirements: [{ kind: 'stage', stage: 'town' }],
       failsWithoutColonists: true,
     },
-    resources: { material: 30, food: 60, water: 0 },
+    resources: { money: 30, food: 60, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -478,11 +477,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       description:
         'Food and Water are balanced and the Workshop is operational, but it has no road access so nobody can staff it. Extend the network to the Workshop door: access is the last Town condition.',
       constraint:
-        'Material 15 = two road cells (10) with 5 to spare; the idle fourth colonist staffs the Workshop once it is connected.',
+        'Money 15 = two road cells (10) with 5 to spare; the idle fourth colonist staffs the Workshop once it is connected.',
       requirements: [{ kind: 'stage', stage: 'town' }],
       failsWithoutColonists: true,
     },
-    resources: { material: 15, food: 60, water: 0 },
+    resources: { money: 15, food: 60, water: 0 },
     buildings: [
       { type: 'residence', x: 1, y: 0, operational: true },
       { type: 'residence', x: 3, y: 0, operational: true },
@@ -540,7 +539,7 @@ export const findScenario = (id: string): ScenarioDefinition | undefined =>
  * served by a Well of its own — the connector road is the only Water route
  * that exists, and no stock change can make a blocked cell legal.
  *
- * Material 30 is exactly one Residence (25) plus the connector road (5): the
+ * Money 30 is exactly one Residence (25) plus the connector road (5): the
  * last building and the only connection compete for the same budget. Both
  * outcomes complete the objective, with structurally different results —
  * which is precisely the cell-role competition 10AU identified.
@@ -553,16 +552,16 @@ export const TERRAIN_CHOKEPOINT_FIXTURE: ScenarioDefinition = {
   objective: {
     label: 'Reach Village with 3 colonists.',
     description:
-      'The third colonist needs a Water-served Residence. Material 30 is exactly one Residence (25) plus the connector road (5), and the west Well site is blocked by terrain.',
+      'The third colonist needs a Water-served Residence. Money 30 is exactly one Residence (25) plus the connector road (5), and the west Well site is blocked by terrain.',
     constraint:
-      'Material 30 = Residence (25) + connector road (5); the west Well site (0,1) is terrain-blocked.',
+      'Money 30 = Residence (25) + connector road (5); the west Well site (0,1) is terrain-blocked.',
     requirements: [
       { kind: 'stage', stage: 'village' },
       { kind: 'population', atLeast: 3 },
     ],
     failsWithoutColonists: true,
   },
-  resources: { material: 30, food: 30, water: 20 },
+  resources: { money: 30, food: 30, water: 20 },
   buildings: [
     { type: 'residence', x: 1, y: 0, operational: true },
     { type: 'residence', x: 5, y: 0, operational: true },

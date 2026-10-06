@@ -36,10 +36,9 @@ import {
   getFoodProductionPerTick,
   getHousingSummary,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getRoadNetworks,
@@ -83,7 +82,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -244,13 +243,13 @@ const snapshot = (state: SimulationState): Snapshot => {
   const foodConsumption = getFoodConsumptionPerTick(state)
   const waterProduction = getWaterProductionPerTick(state)
   const waterConsumption = getWaterNeedPerTick(state)
-  const materialProduction = getMaterialProductionPerTick(state)
-  const materialUpkeep = getMaterialUpkeepPerTick(state)
+  const materialProduction = getRevenuePerTick(state)
+  const materialUpkeep = getMaintenanceDuePerTick(state)
   return {
     tick: state.time.tick,
     population: getPopulationCount(state),
     food: state.resources.food,
-    material: state.resources.construction,
+    material: state.resources.money,
     water: state.resources.water,
     housingCapacity: housing.totalCapacity,
     housingAvailable: housing.availableCapacity,
@@ -270,7 +269,7 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterShortage: getWaterShortage(state),
     materialProduction,
     materialUpkeep,
-    materialNet: getNetMaterialPerTick(state),
+    materialNet: getNetMoneyPerTick(state),
     storageCapacity: getMaterialStorageCapacity(state),
     operationalBuildings: [...iterateBuildings(state)].filter((b) => b.status === 'operational').length,
     residences: [...iterateBuildings(state)].filter((b) => b.type === 'residence').length,
@@ -443,7 +442,7 @@ describe('2. Population scaling', { timeout: 30000 }, () => {
           matGross: row.snapshot.materialProduction,
           matUpkeep: row.snapshot.materialUpkeep,
           matNet: row.snapshot.materialNet,
-          storage: row.snapshot.storageCapacity,
+          maintenance: row.snapshot.maintenance,
           material: row.snapshot.material,
           water: row.snapshot.water,
           food: row.snapshot.food,

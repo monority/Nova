@@ -24,7 +24,7 @@
  *
  * Rules verified in src (Step 10E):
  *   Farm staffed -> +2 Food/tick             (FOOD_PER_FARM_PER_TICK)
- *   Workshop staffed -> +2 Material/tick     (MATERIAL_PER_WORKER_PER_TICK)
+ *   Workshop staffed -> +2 Material/tick     (COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK)
  *   Food need = population x 1               (FOOD_PER_COLONIST_PER_TICK)
  *   Upkeep = 1 per staffed operational Workshop per tick
  *   Storage = 25 per operational Workshop
@@ -37,6 +37,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getRevenuePerTick,
+
+  commerceRevenueForTick,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+
   assignJobs,
   countStaffedOperationalFarms,
   countStaffedOperationalWorkshops,
@@ -50,9 +55,7 @@ import {
   getPopulationCount,
   hashCanonicalState,
   loadSave,
-  materialProductionForTick,
-  materialStorageCapacityForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   SAVE_VERSION,
   serializeCanonicalState,
   serializeSave,
@@ -118,7 +121,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -179,21 +182,20 @@ interface Reading {
   readonly jobCapacity: number
   readonly foodProd: number
   readonly matProd: number
-  readonly storedMat: number
+  readonly revenue: number
   readonly upkeep: number
   readonly food: number
   readonly material: number
-  readonly storage: number
+  readonly maintenance: number
   readonly netFood: number
   readonly netMaterial: number
 }
 
 const read = (state: SimulationState): Reading => {
   const employment = getEmploymentSummary(state)
-  const storage = materialStorageCapacityForTick(state)
-  const matProd = materialProductionForTick(state)
-  const upkeep = materialUpkeepDueForTick(state)
-  const storedMat = Math.min(matProd, Math.max(0, storage - state.resources.construction))
+  const matProd = commerceRevenueForTick(state)
+  const revenue = getRevenuePerTick(state)
+  const upkeep = maintenanceDueForTick(state)
   const farmWorkers = countStaffedOperationalFarms(state)
   return {
     pop: getPopulationCount(state),
@@ -204,13 +206,13 @@ const read = (state: SimulationState): Reading => {
     jobCapacity: employment.jobCapacity,
     foodProd: farmWorkers * FOOD_PER_FARM_PER_TICK,
     matProd,
-    storedMat,
+    revenue,
     upkeep,
     food: state.resources.food,
-    material: state.resources.construction,
-    storage,
+    material: state.resources.money,
+    maintenance: upkeep,
     netFood: farmWorkers * FOOD_PER_FARM_PER_TICK - getPopulationCount(state),
-    netMaterial: storedMat - upkeep,
+    netMaterial: revenue - upkeep,
   }
 }
 
@@ -261,7 +263,7 @@ describe('§3 — labor budget matrix', () => {
         vacant: r.jobCapacity - r.employed,
         foodProd: r.foodProd,
         matProd: r.matProd,
-        storedMat: r.storedMat,
+        revenue: r.revenue,
         upkeep: r.upkeep,
         netFood: r.netFood,
         netMaterial: r.netMaterial,
@@ -486,85 +488,83 @@ describe('§6 — Material-side pressure', () => {
       workshopStaffed: {
         material: rs.material,
         upkeep: rs.upkeep,
-        storage: rs.storage,
+        revenue: rs.revenue,
         food: rs.food,
         pop: rs.pop,
       },
       farmStaffed: {
         material: rf.material,
         upkeep: rf.upkeep,
-        storage: rf.storage,
+        revenue: rf.revenue,
         food: rf.food,
         pop: rf.pop,
       },
     })
-    // One staffed Workshop: +2 gross, -1 upkeep, capacity 25.
-    expect(rs.upkeep).toBe(1)
-    expect(rs.storage).toBe(25)
-    // 10 + 3/tick (2 stored + 2 income − 1 upkeep) to 25 at t5, then +1/tick
-    // (income − upkeep): 35 after 15 ticks.
-    expect(rs.material).toBe(35)
-    // Farm branch: no Material production and no income (Workshop-only), so
-    // the stock rests at 10 while the Farm pays in Food (farm staffing costs
-    // no upkeep).
-    expect(rf.material).toBe(10)
-    expect(rf.upkeep).toBe(0)
+    // One connected Workshop: revenue 3 (1 tax + 2 commerce), maintenance 2.
+    expect(rs.upkeep).toBe(2)
+    expect(rs.revenue).toBe(3)
+    // 10 + 1/tick (revenue − maintenance): 25 after 15 ticks.
+    expect(rs.material).toBe(25)
+    // Farm branch: no commerce, so revenue 1 < maintenance 2 — the treasury
+    // drains to the floor while the Farm pays in Food.
+    expect(rf.material).toBe(0)
+    expect(rf.upkeep).toBe(2)
+    expect(rf.revenue).toBe(1)
     expect(rf.food).toBe(100 + 15 * (2 - 1))
     // Food is the mirror image: the Workshop branch burns it.
     expect(rs.food).toBe(100 - 15)
   })
 
-  it('CRITICAL: one staffed Workshop now funds the 25 build cost (Step 10CQ.1)', () => {
-    // Capacity 25, stock 0: Step 10CQ.1 income (+2) exceeds upkeep (1), so the
-    // old 24 equilibrium is gone and the stock keeps climbing.
+  it('CRITICAL: one connected Workshop funds the 25 build cost (Step001)', () => {
+    // No cap: revenue 3 (1 tax + 2 commerce) minus maintenance 2 = +1/tick
+    // from a zero treasury, so the stock climbs linearly past any cost.
     let state = rowWorld({ residences: 1, farms: 0, workshops: 1, material: 0, food: 200 })
     const trace: number[] = []
     for (let i = 0; i < 40; i += 1) {
       state = stepSimulation(state)
-      trace.push(state.resources.construction)
+      trace.push(state.resources.money)
     }
     audit('MATERIAL_EQUILIBRIUM_ONE_WORKSHOP', {
       after20: trace[19],
       after24: trace[23],
       after40: trace[39],
-      storage: materialStorageCapacityForTick(state),
-      upkeep: materialUpkeepDueForTick(state),
-      storedMat: read(state).storedMat,
+      maintenance: maintenanceDueForTick(state),
+      upkeep: maintenanceDueForTick(state),
+      commerce: read(state).matProd,
       buildCost: 25,
-      affordable: state.resources.construction >= 25,
+      affordable: state.resources.money >= 25,
     })
-    // Step 10CQ.1: +3/tick to 24 at t8, 26 at t9, then +1/tick:
-    // t20 = 37, t24 = 41, t40 = 57 — always above the 25 build cost.
-    expect(trace[19]).toBe(37)
-    expect(trace[23]).toBe(41)
-    expect(trace[39]).toBe(57)
-    expect(state.resources.construction).toBeGreaterThanOrEqual(25)
+    // +1/tick: t20 = 20, t24 = 24, t40 = 40 — above the 25 build cost.
+    expect(trace[19]).toBe(20)
+    expect(trace[23]).toBe(24)
+    expect(trace[39]).toBe(40)
+    expect(state.resources.money).toBeGreaterThanOrEqual(25)
   })
 
-  it('a second operational Workshop raises capacity to 50 and breaks the deadlock', () => {
-    // Two colonists, two staffed Workshops: gross 4, upkeep 2, capacity 50.
+  it('a second connected Workshop doubles commerce and breaks the deadlock', () => {
+    // Two colonists, two connected Workshops: commerce 4, maintenance 4.
     let state = rowWorld({ residences: 2, farms: 0, workshops: 2, material: 0, food: 200 })
     const r = read(state)
     expect(r.matProd).toBe(4)
-    expect(r.upkeep).toBe(2)
-    expect(r.storage).toBe(50)
+    expect(r.upkeep).toBe(4)
+    expect(r.maintenance).toBe(4)
     let ticks = 0
-    while (state.resources.construction < 25 && ticks < 200) {
+    while (state.resources.money < 25 && ticks < 200) {
       state = stepSimulation(state)
       ticks += 1
     }
     audit('MATERIAL_BREAK_DEADLOCK', {
       grossProduction: r.matProd,
       upkeep: r.upkeep,
-      netPerTick: r.storedMat - r.upkeep,
+      netPerTick: r.revenue - r.upkeep,
       ticksTo25: ticks,
-      material: state.resources.construction,
+      material: state.resources.money,
     })
-    expect(state.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(state.resources.money).toBeGreaterThanOrEqual(25)
     expect(ticks).toBeLessThan(200)
   })
 
-  it('Storage capacity, not labour, becomes the binding limit once labour is free', () => {
+  it('Maintenance, not labour, becomes the binding limit once labour is free', () => {
     // Four colonists: 1 Farm feeds 2 of them, leaving 2 Workshop workers.
     const r = read(rowWorld({ residences: 4, farms: 1, workshops: 2, material: 0, food: 100 }))
     audit('MATERIAL_BINDING_LIMIT', {
@@ -574,13 +574,13 @@ describe('§6 — Material-side pressure', () => {
       unemployed: r.unemployed,
       matProd: r.matProd,
       upkeep: r.upkeep,
-      storage: r.storage,
+      maintenance: r.maintenance,
       netMaterial: r.netMaterial,
     })
     expect(r.workshopWorkers).toBe(2)
-    expect(r.storage).toBe(50)
-    // Gross 4 minus upkeep 2 = +2/tick, but only while space remains.
-    expect(r.netMaterial).toBe(2)
+    expect(r.maintenance).toBe(7)
+    // Revenue 8 (4 taxes + 4 commerce) minus maintenance 7 = +1/tick.
+    expect(r.netMaterial).toBe(1)
   })
 })
 
@@ -1024,20 +1024,20 @@ describe('§11 — construction feedback loops', () => {
     audit('LOOP_B_BOOTSTRAP', {
       workshopWorkers: built.workshopWorkers,
       material: built.material,
-      storage: built.storage,
+      maintenance: built.maintenance,
       matProd: built.matProd,
       upkeep: built.upkeep,
       netMaterial: built.netMaterial,
     })
     expect(built.workshopWorkers).toBe(1)
-    expect(built.storage).toBe(50)
+    expect(built.maintenance).toBe(50)
     let ticks = 0
-    while (state.resources.construction < 25 && ticks < 200) {
+    while (state.resources.money < 25 && ticks < 200) {
       state = stepSimulation(state)
       ticks += 1
     }
-    audit('LOOP_B_REFILL', { ticksTo25: ticks, material: state.resources.construction })
-    expect(state.resources.construction).toBeGreaterThanOrEqual(25)
+    audit('LOOP_B_REFILL', { ticksTo25: ticks, material: state.resources.money })
+    expect(state.resources.money).toBeGreaterThanOrEqual(25)
     // The Residence the labour paid for.
     state = stepSimulation(state, { type: 'placeBuilding', x: 3, y: 0, buildingType: 'residence' })
     state = advance(state, 4)
@@ -1054,7 +1054,7 @@ describe('§11 — construction feedback loops', () => {
     // Continuing the chain: the extra worker must pay for the Farm, and the
     // Farm then stays VACANT because no worker is left (Loop C gate).
     let farmTicks = 0
-    while (state.resources.construction < 25 && farmTicks < 200) {
+    while (state.resources.money < 25 && farmTicks < 200) {
       state = stepSimulation(state)
       farmTicks += 1
     }
@@ -1090,7 +1090,7 @@ describe('§11 — construction feedback loops', () => {
     audit('LOOP_B_ONE_WORKSHOP', {
       workshopWorkers: r.workshopWorkers,
       material: r.material,
-      storage: r.storage,
+      maintenance: r.maintenance,
       upkeep: r.upkeep,
       buildCost: 25,
       canAffordResidence: r.material >= 25,
@@ -1112,14 +1112,14 @@ describe('§11 — construction feedback loops', () => {
     state = advance(state, 2)
     state = withStocks(state, { material: 5, food: 200 })
     let ticks = 0
-    while (state.resources.construction < 25 && ticks < 100) {
+    while (state.resources.money < 25 && ticks < 100) {
       state = stepSimulation(state)
       ticks += 1
     }
     audit('LOOP_B_TWO_WORKSHOPS', {
       ticksToAfford25: ticks,
-      material: state.resources.construction,
-      storage: materialStorageCapacityForTick(state),
+      material: state.resources.money,
+      maintenance: maintenanceDueForTick(state),
     })
     expect(ticks).toBeLessThan(100)
     // Build the Residence the labour paid for.
@@ -1241,7 +1241,7 @@ describe('§15 — Farm vs Workshop production timing', () => {
     const shopSeries: { tick: number; material: number }[] = []
     for (let i = 0; i < 4; i += 1) {
       shop = stepSimulation(shop)
-      shopSeries.push({ tick: shop.time.tick, material: shop.resources.construction })
+      shopSeries.push({ tick: shop.time.tick, material: shop.resources.money })
     }
     // Farm: the stock only moves up one tick after staffing.
     let farm = runCommands('farm')

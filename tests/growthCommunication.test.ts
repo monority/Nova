@@ -66,7 +66,7 @@ const base = (): SimulationState => {
   const state = createInitialState(config)
   return {
     ...state,
-    resources: { ...state.resources, food: 10_000, water: 100, construction: 1_000 },
+    resources: { ...state.resources, food: 10_000, water: 100, money: 1_000 },
   }
 }
 
@@ -115,7 +115,7 @@ describe('G1.3 — blocker to message mapping', () => {
         { ...townFixture(), resources: { ...townFixture().resources, water: 0 } },
       ],
       ['noWaterHeadroom', withoutSecondWell(townFixture())],
-      ['unaffordable', { ...townFixture(), resources: { ...townFixture().resources, construction: 0 } }],
+      ['unaffordable', { ...townFixture(), resources: { ...townFixture().resources, money: 0 } }],
       [null, townFixture()],
     ]
     const messages: string[] = []
@@ -147,7 +147,7 @@ describe('G1.3 — blocker to message mapping', () => {
   it('uses the catalog Residence cost in the Material message', () => {
     const broke: SimulationState = {
       ...townFixture(),
-      resources: { ...townFixture().resources, construction: 0 },
+      resources: { ...townFixture().resources, money: 0 },
     }
     const cost = getBuildingDefinition('residence').constructionCost
     expect(getGrowthMessage(broke)).toBe(`Growth — needs ${cost} Material`)
@@ -192,12 +192,12 @@ describe('G1.3 — derived, stable, persistent', () => {
   it('changes with the condition it describes', () => {
     const broke: SimulationState = {
       ...townFixture(),
-      resources: { ...townFixture().resources, construction: 0 },
+      resources: { ...townFixture().resources, money: 0 },
     }
     expect(getGrowthMessage(broke)).toBe('Growth — needs 25 Material')
     const funded: SimulationState = {
       ...broke,
-      resources: { ...broke.resources, construction: 25 },
+      resources: { ...broke.resources, money: 25 },
     }
     expect(getGrowthMessage(funded)).toBe('Growth — ready')
   })

@@ -182,7 +182,7 @@ async function main() {
     assert(text.objective.includes('Constraint —'), `constraint not displayed: "${text.objective}"`);
     assert(text.objective.includes('Material 25, Water 51'), `constraint budget wrong: "${text.objective}"`);
     assert(text.stage === 'Village', `stage expected Village, got "${text.stage}"`);
-    assert(s.construction === '25', `Material expected 25, got ${s.construction}`);
+    assert(s.money === '25', `Material expected 25, got ${s.money}`);
     assert(s.water === '51', `Water expected 51, got ${s.water}`);
     assert(s.food === '50', `Food expected 50, got ${s.food}`);
     assert(s.buildings === '4' && s.operational === '4', `initial buildings wrong: ${JSON.stringify(s)}`);
@@ -197,7 +197,7 @@ async function main() {
       `initial blockers wrong: ${JSON.stringify(objectiveState.blockers)}`
     );
     assert(text.objectiveStatus.includes('1 / 3'), `objective status line wrong: "${text.objectiveStatus}"`);
-    ok(`framing: "${text.stage}", objective "${info.objective}", Material ${s.construction}, Water ${s.water}, blockers ${JSON.stringify(objectiveState.blockers)}`);
+    ok(`framing: "${text.stage}", objective "${info.objective}", Material ${s.money}, Water ${s.water}, blockers ${JSON.stringify(objectiveState.blockers)}`);
     await shot('01-scenario-start.png');
 
     // --- 2. Workshop construction costs 25 Material + 1 Water ------------
@@ -205,7 +205,7 @@ async function main() {
     s = await placeAt(page, { x: 4, y: 2 });
     // Workshop-only income: the Farm/Well workers earn nothing before the
     // command, so the 25-cost placement leaves exactly 0.
-    assert(s.construction === '0', `Workshop must spend the whole Material: ${s.construction}`);
+    assert(s.money === '0', `Workshop must spend the whole Material: ${s.money}`);
     assert(s.water === '50', `Workshop must spend 1 Water: ${s.water}`);
     s = await step(page);
     s = await step(page);
@@ -215,7 +215,7 @@ async function main() {
       JSON.stringify(objectiveState.blockers) === JSON.stringify(['Well built']),
       `after the Workshop the only blocker must be the Well: ${JSON.stringify(objectiveState.blockers)}`
     );
-    ok(`Workshop built: Material 25 -> ${s.construction}, Water 51 -> ${s.water}, blockers ${JSON.stringify(objectiveState.blockers)}`);
+    ok(`Workshop built: Material 25 -> ${s.money}, Water 51 -> ${s.water}, blockers ${JSON.stringify(objectiveState.blockers)}`);
     await shot('02-workshop-built.png');
 
     // --- 3. The industrial burst is a manual conversion ------------------
@@ -242,7 +242,7 @@ async function main() {
     const waterAtBurstStart = Number(s.water);
     for (let i = 0; i < 25; i += 1) s = await step(page);
     assert(Number(s.water) === 0, `the reserve must be exhausted after 25 ticks: ${s.water}`);
-    assert(Number(s.construction) >= 24, `Material must reach the storage bound: ${s.construction}`);
+    assert(Number(s.money) >= 24, `Material must reach the storage bound: ${s.money}`);
     assert(s.storageCapacity === '25', `one Workshop stores 25: ${s.storageCapacity}`);
     assert(s.materialProduction === '2' && s.materialUpkeep === '1', `production/upkeep wrong: ${s.materialProduction}/${s.materialUpkeep}`);
     assert(s.staffedWorkshopIds !== '', `the Workshop must still be staffed: "${s.staffedWorkshopIds}"`);
@@ -260,7 +260,7 @@ async function main() {
       assert(st.blockers.includes('Reach Village'), `the Village requirement must be the blocker during the burst: ${JSON.stringify(st.blockers)}`);
     }
     assert(text.stage === 'Settlement', `industrialising must drop the stage out of Village: "${text.stage}"`);
-    ok(`burst: Water ${waterAtBurstStart} -> ${s.water}, Material -> ${s.construction}, stage "${text.stage}" (Village requirement unmet while the Well is unstaffed)`);
+    ok(`burst: Water ${waterAtBurstStart} -> ${s.water}, Material -> ${s.money}, stage "${text.stage}" (Village requirement unmet while the Well is unstaffed)`);
     await shot('04-burst-converted.png');
 
     // --- 4. The burst Material pays for the second Well ------------------
@@ -269,7 +269,7 @@ async function main() {
     // Step 10CZ: with Phase 7 income the burst stock exceeds the 25 cost on its
     // own, so the placement is accepted (proven by placeAt) and this checks the
     // post-spend stock stays a valid non-negative value.
-    assert(Number(s.construction) >= 0, `the second Well must leave a valid stock: ${s.construction}`);
+    assert(Number(s.money) >= 0, `the second Well must leave a valid stock: ${s.money}`);
     for (let i = 0; i < 3; i += 1) s = await step(page);
     assert(s.buildings === '6' && s.operational === '6', `the second Well must be operational: ${JSON.stringify(s)}`);
     // Step 10AR: still no serving Well (the burst worker holds the Workshop).
@@ -279,7 +279,7 @@ async function main() {
       JSON.stringify(objectiveState.blockers) === JSON.stringify(['Reach Village']),
       `only the Village requirement may remain: ${JSON.stringify(objectiveState.blockers)}`
     );
-    ok(`second Well built from the burst Material (${s.construction} left), blockers ${JSON.stringify(objectiveState.blockers)}`);
+    ok(`second Well built from the burst Material (${s.money} left), blockers ${JSON.stringify(objectiveState.blockers)}`);
     await shot('05-second-well.png');
 
     // --- 5. The recovery restores Village and completes the objective ----

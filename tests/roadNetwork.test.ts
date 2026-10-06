@@ -191,7 +191,7 @@ describe('road network connectivity (Step 09D)', () => {
     state = mid.state
     expect(getRoadNetworkCount(state)).toBe(1)
     expect(getConnectedRoadIds(state, leftId)).toEqual([leftId, mid.id, rightId].sort())
-    // Demote the middle road to under construction: two networks again.
+    // Demote the middle road to under money: two networks again.
     const demoted: SimulationState = {
       ...state,
       roads: {

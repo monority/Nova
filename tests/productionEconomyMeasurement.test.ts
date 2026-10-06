@@ -37,21 +37,17 @@ import {
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
   getHousingSummary,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialStoredProductionPerTick,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getServedColonistCount,
   getWaterNeedPerTick,
   getWaterProductionPerTick,
-  getWorkforceIncome,
   iterateBuildings,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   stepSimulation,
   WATER_PER_COLONIST_PER_TICK,
   WATER_PER_WELL_PER_TICK,
@@ -61,7 +57,6 @@ import {
 } from '@/index'
 import {
   DEFAULT_STORAGE_CAPACITIES,
-  PROTECTED_MATERIAL_RESERVE,
   createInitialStorageHub,
 } from '@/domain/storage/storage.js'
 
@@ -81,7 +76,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -196,19 +191,19 @@ const snapshot = (state: SimulationState): Row => ({
   housingAvailable: getHousingSummary(state).availableCapacity,
   food: state.resources.food,
   water: state.resources.water,
-  material: state.resources.construction,
+  material: state.resources.money,
   storageMaterial: state.storage.material,
   foodProd: getFoodProductionPerTick(state),
   foodConsumed: getFoodConsumptionPerTick(state),
   waterProd: getWaterProductionPerTick(state),
   waterNeed: getWaterNeedPerTick(state),
   waterServed: getServedColonistCount(state),
-  materialGross: getMaterialProductionPerTick(state),
-  materialUpkeep: getMaterialUpkeepPerTick(state),
-  materialNet: getNetMaterialPerTick(state),
+  materialGross: getRevenuePerTick(state),
+  materialUpkeep: getMaintenanceDuePerTick(state),
+  materialNet: getNetMoneyPerTick(state),
   storageCapacity: getMaterialStorageCapacity(state),
   storedProduction: getMaterialStoredProductionPerTick(state),
-  workforceIncome: getWorkforceIncome(state),
+  workforceIncome: getRevenuePerTick(state),
 })
 
 const trace = (state: SimulationState, horizons: readonly number[]): Row[] => {
@@ -240,8 +235,8 @@ describe('1. Production dependency (measured from the catalog and the runtime)',
   it('pins the production/consumption rates and the one recurring cost', () => {
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
-    expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
-    expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
     expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(WATER_PER_COLONIST_PER_TICK).toBe(1)
@@ -251,7 +246,7 @@ describe('1. Production dependency (measured from the catalog and the runtime)',
     for (const [type, query, nominal] of [
       ['farm', getFoodProductionPerTick, 2],
       ['well', getWaterProductionPerTick, 2],
-      ['workshop', getMaterialProductionPerTick, 2],
+      ['workshop', getRevenuePerTick, 2],
     ] as const) {
       const disconnected = build({
         residences: 1,
@@ -271,12 +266,12 @@ describe('1. Production dependency (measured from the catalog and the runtime)',
 
   it('staffing gates production and upkeep together', () => {
     const vacant = build({ residences: 1, workshops: 1, colonists: 0 })
-    expect(getMaterialProductionPerTick(vacant)).toBe(0)
-    expect(getMaterialUpkeepPerTick(vacant)).toBe(0)
+    expect(getRevenuePerTick(vacant)).toBe(0)
+    expect(getMaintenanceDuePerTick(vacant)).toBe(0)
 
     const staffed = build({ residences: 1, workshops: 1, colonists: 1 })
-    expect(getMaterialProductionPerTick(staffed)).toBe(2)
-    expect(getMaterialUpkeepPerTick(staffed)).toBe(1)
+    expect(getRevenuePerTick(staffed)).toBe(2)
+    expect(getMaintenanceDuePerTick(staffed)).toBe(1)
   })
 })
 
@@ -377,7 +372,7 @@ describe('3. Input/output coupling (measured)', () => {
     // construction (Material); no building consumes another building output.
     const oneFarm = build({ residences: 1, farms: 1, colonists: 1, food: 0, material: 0 })
     expect(getFoodProductionPerTick(oneFarm)).toBe(2)
-    expect(getMaterialProductionPerTick(oneFarm)).toBe(0)
+    expect(getRevenuePerTick(oneFarm)).toBe(0)
     expect(getWaterProductionPerTick(oneFarm)).toBe(0)
   })
 })
@@ -487,7 +482,7 @@ describe('5. Decision pressure per resource (measured)', () => {
     // Income scales with which job the single colonist takes.
     const perJob = (['farm', 'well', 'workshop'] as const).map((type) => {
       const only = build({ residences: 1, [type === 'farm' ? 'farms' : type === 'well' ? 'wells' : 'workshops']: 1, colonists: 1, material: 0 })
-      return { type, income: getWorkforceIncome(only) }
+      return { type, income: getRevenuePerTick(only) }
     })
     audit('ONE_JOB_INCOME', { rows: perJob })
     expect(perJob).toHaveLength(3)
@@ -565,9 +560,9 @@ describe('6. Candidate Phase 8 directions — evidence only (no ranking)', () =>
         type,
         food: getFoodProductionPerTick(state),
         water: getWaterProductionPerTick(state),
-        material: getMaterialProductionPerTick(state),
-        income: getWorkforceIncome(state),
-        upkeep: getMaterialUpkeepPerTick(state),
+        material: getRevenuePerTick(state),
+        income: getRevenuePerTick(state),
+        upkeep: getMaintenanceDuePerTick(state),
       }
     })
     audit('DIRECTION_D_SPECIALIZATION', { rows })
@@ -589,11 +584,11 @@ describe('7. Anti-feature / decision gate evidence', () => {
   it('every measured flow is already coupled to a decision that exists today', () => {
     const decisions = {
       producers: ['farm', 'well', 'workshop'],
-      construction: ['placeBuilding', 'placeRoads'],
+      money: ['placeBuilding', 'placeRoads'],
       survival: ['food', 'water'],
     }
     expect(decisions.producers).toHaveLength(3)
-    expect(decisions.construction).toHaveLength(2)
+    expect(decisions.money).toHaveLength(2)
     expect(decisions.survival).toHaveLength(2)
   })
 

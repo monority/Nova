@@ -106,9 +106,9 @@ async function main() {
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     ok('load, app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.food !== '100' || s.construction !== '100' || s.colonists !== '0') {
+    if (s.tick !== '0' || s.food !== '100' || s.money !== '100' || s.colonists !== '0') {
       fail(`initial stats bad: ${JSON.stringify(s)}`);
-    } else ok(`initial stock: food ${s.food}, material ${s.construction}, colonists ${s.colonists}`);
+    } else ok(`initial stock: food ${s.food}, material ${s.money}, colonists ${s.colonists}`);
     await shot('01-initial.png');
 
     // B. Build four residences with real clicks (ticks 1-4).
@@ -118,9 +118,9 @@ async function main() {
       await waitFor(async () => (await stats(page)).buildings === String(cells.indexOf(cell) + 1), `building placed at ${cell.x},${cell.y}`);
     }
     s = await stats(page);
-    if (s.construction !== '0' || s.buildings !== '4') {
-      fail(`after 4 placements expected material 0 / buildings 4, got ${s.construction}/${s.buildings}`);
-    } else ok(`material depleted 100 -> ${s.construction}, ${s.buildings} residences`);
+    if (s.money !== '0' || s.buildings !== '4') {
+      fail(`after 4 placements expected material 0 / buildings 4, got ${s.money}/${s.buildings}`);
+    } else ok(`material depleted 100 -> ${s.money}, ${s.buildings} residences`);
 
     // STEP until the last residence is operational and all 4 colonists fed.
     // Step 10Y: a placed 2-tick building needs two construction ticks, so the

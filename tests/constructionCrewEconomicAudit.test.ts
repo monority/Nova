@@ -61,7 +61,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -233,7 +233,7 @@ const read = (state: SimulationState): Reading => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   water: state.resources.water,
   residences: Object.values(state.buildings).filter((b) => b.type === 'residence').length,
   farms: Object.values(state.buildings).filter((b) => b.type === 'farm').length,
@@ -252,7 +252,7 @@ const deltas = (before: SimulationState, after: SimulationState): {
   readonly water: number
 } => ({
   food: after.resources.food - before.resources.food,
-  material: after.resources.construction - before.resources.construction,
+  material: after.resources.money - before.resources.money,
   water: after.resources.water - before.resources.water,
 })
 
@@ -495,7 +495,7 @@ describe('§3 — expansion throughput', () => {
     )
   })
 
-  it('Scenario 4 — parallel construction: crews scale with colonists, not with sites', () => {
+  it('Scenario 4 — parallel money: crews scale with colonists, not with sites', () => {
     const parallel = (crews: number): { completions: number[]; staffed: Reading } => {
       let state = world({ residences: 2, farms: 1, workshops: 1, colonists: 2, material: 100000 })
       const first = placed(state, 'well', 11, 2)
@@ -549,15 +549,15 @@ describe('§5 — constrained states', () => {
       uncrewedCompletionTick: uncrewedTick,
       crewedCompletionTick: crewedTick,
       materialAfter6: {
-        uncrewed: control.resources.construction,
-        crewed: withCrew.resources.construction,
+        uncrewed: control.resources.money,
+        crewed: withCrew.resources.money,
       },
       note: 'stock sits above the 25 storage cap, so stored production is discarded either way; the crew tick skips one upkeep but also skips one Step 10CQ income credit (2), so the crewed run ends exactly 1 Material BEHIND while still completing the Well a tick earlier',
     })
     expect(crewedTick).toBeLessThan(uncrewedTick)
     // Control: +2 income − 1 upkeep = +1/tick × 6. Crewed: tick 0 earns no
     // income and pays no upkeep (0), ticks 1-5 run +1 → exactly 1 behind.
-    expect(withCrew.resources.construction).toBe(control.resources.construction - 1)
+    expect(withCrew.resources.money).toBe(control.resources.money - 1)
   })
 
   it('material-constrained: a crew tick costs the next 25-cost build a tick of Material', () => {
@@ -582,7 +582,7 @@ describe('§5 — constrained states', () => {
       let probe = state
       let firstAffordableAfter = -1
       for (let i = 0; i < 40; i += 1) {
-        trace.push(probe.resources.construction)
+        trace.push(probe.resources.money)
         const attempt = stepSimulation(probe, {
           type: 'placeBuilding',
           x: 17,

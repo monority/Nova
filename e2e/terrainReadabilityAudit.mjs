@@ -95,10 +95,10 @@ async function main() {
     const before = await stats(page);
     await page.mouse.click(hover.x, hover.y);
     const after = await stats(page);
-    if (after.buildings !== before.buildings || after.construction !== before.construction || after.tick !== before.tick) {
+    if (after.buildings !== before.buildings || after.money !== before.money || after.tick !== before.tick) {
       fail('a refused click mutated the state');
     } else {
-      ok(`refused click mutates nothing (${after.buildings} buildings, material ${after.construction}, tick ${after.tick})`);
+      ok(`refused click mutates nothing (${after.buildings} buildings, material ${after.money}, tick ${after.tick})`);
     }
     report.refused.click = after.status;
 

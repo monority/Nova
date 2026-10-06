@@ -1,18 +1,19 @@
 /**
- * Resource domain model (docs/09-economy-foundation.md, Step 4 + Step 05).
+ * Resource domain model (docs/game/08-RESOURCES.md, Step001).
  *
- * Step 4: an abstract construction material used to start building.
- * Step 05: food, the first colonist need, consumed all-or-nothing at the
- * colony level. Step 06B added food production (farms); Step 07C added
- * material production (employed colonists). Food is uncapped; construction
- * material inflow is bounded by operational Workshop storage (Step 08F).
+ * Money is the colony treasury: taxes per inhabitant plus commerce per
+ * connected Workshop flow in every tick, construction and maintenance flow
+ * out. Food is the first colonist need, consumed all-or-nothing at the
+ * colony level; farms produce it. The treasury is uncapped by design —
+ * money is accounted, not stored as a physical good — while food and water
+ * keep their physical stocks and storage-hub buffering.
  * Stocks are canonical simulation state — the UI/renderer never mutate or
  * interpret them beyond queries.
  */
 
 export interface ResourceStock {
-  /** Abstract material used to start building construction. */
-  readonly construction: number
+  /** Public treasury in whole money units (Step001). Pays construction. */
+  readonly money: number
   /** Colony food reserve in whole meal-units (Step 5). */
   readonly food: number
   /**
@@ -24,8 +25,8 @@ export interface ResourceStock {
   readonly water: number
 }
 
-/** Deterministic starting construction stock (Step 4 §2: never random). */
-export const INITIAL_CONSTRUCTION_MATERIAL = 100
+/** Deterministic starting treasury (never random). Buys the day-0 setup. */
+export const INITIAL_TREASURY = 100
 /** Deterministic starting food stock (Step 05B §Food resource semantics). */
 export const INITIAL_FOOD = 100
 /** Deterministic starting water stock (Step 10P: explicitly zero). */
@@ -35,27 +36,26 @@ export const FOOD_PER_COLONIST_PER_TICK = 1
 /** One operational farm produces exactly two food units per tick (Step 06B). */
 export const FOOD_PER_FARM_PER_TICK = 2
 /**
- * One employed colonist produces exactly two construction-material units per
- * tick (Step 07C §6). Direct output into the existing construction stock: no
- * intermediate `labour` resource, no recipe, no efficiency, no cap.
+ * Public revenue per live inhabitant per tick (Step001 taxes). Counted from
+ * live colonists; the aggregate-population migration (Step002) keeps the
+ * per-capita contract and only changes how the headcount is derived.
  */
-export const MATERIAL_PER_WORKER_PER_TICK = 2
+export const TAX_PER_INHABITANT_PER_TICK = 1
 /**
- * One staffed operational Workshop costs exactly one construction-material
- * unit per tick (Step 08C). Only Workshops that are operational AND staffed
- * pay; vacant Workshops, Residences and Farms cost 0. Integer, deducted
- * after production, clamped to the available stock (partial payment, never
- * negative, no deactivation, no debt).
+ * Commerce revenue per connected operational Workshop per tick (Step001).
+ * A Workshop is connected when operational and road-accessible, vacant
+ * included, under-construction excluded — trade flows through the network,
+ * not through individual employment.
  */
-export const MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK = 1
+export const COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK = 2
 /**
- * Material storage per operational Workshop (Step 08F). Capacity is an
- * infrastructure-derived gameplay constant on the construction-cost scale:
- * one operational Workshop stores one building's worth of Material.
- * Staffing-independent (vacant counts, under-construction does not).
- * Bounds production inflow only — never retroactively mutates stock.
+ * Maintenance due per operational building per tick (Step001). Every
+ * operational building pays, whatever its type or staffing; vacant and
+ * under-construction buildings cost 0. Deducted after revenue, clamped to
+ * the available treasury (partial payment, never negative, no
+ * deactivation, no debt).
  */
-export const MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP = 25
+export const MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK = 1
 
 /** One staffed operational Well produces two water units per tick (Step 10P). */
 export const WATER_PER_WELL_PER_TICK = 2
@@ -70,25 +70,23 @@ export const WATER_PER_COLONIST_PER_TICK = 1
 export const STORAGE_ALLOCATION_PHASE = 'townStorage'
 
 export const createInitialResourceStock = (): ResourceStock => ({
-  construction: INITIAL_CONSTRUCTION_MATERIAL,
+  money: INITIAL_TREASURY,
   food: INITIAL_FOOD,
   water: INITIAL_WATER,
 })
 
 export const hasSufficientResources = (stock: ResourceStock, cost: number): boolean =>
-  stock.construction >= cost
+  stock.money >= cost
 
-/** Atomic deduction. Pure: never mutates the input stock. */
+/** Atomic deduction from the treasury. Pure: never mutates the input stock. */
 export const deductResources = (stock: ResourceStock, cost: number): ResourceStock => {
   if (cost < 0) {
-    throw new Error(`Negative construction cost: ${cost}`)
+    throw new Error(`Negative money cost: ${cost}`)
   }
   if (!hasSufficientResources(stock, cost)) {
-    throw new Error(
-      `Insufficient construction material: ${stock.construction} < ${cost}`
-    )
+    throw new Error(`Insufficient funds: ${stock.money} < ${cost}`)
   }
-  return { ...stock, construction: stock.construction - cost }
+  return { ...stock, money: stock.money - cost }
 }
 
 /**

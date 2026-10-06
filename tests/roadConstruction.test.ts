@@ -10,6 +10,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  commerceRevenueForTick,
+  getCommerceRevenuePerTick,
+
   countWorkersAt,
   createRoads,
   expandRoadDrag,
@@ -18,9 +21,7 @@ import {
   hashCanonicalState,
   isOperationalRoad,
   loadSave,
-  materialProductionForTick,
-  materialStoredProductionForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   ROAD_CONSTRUCTION_COST,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -99,8 +100,8 @@ describe('road construction command path (Step 09H)', () => {
     expect(road?.status).toBe('underConstruction')
     expect(road?.constructionRemaining).toBe(1)
     // Existing 09C cost, paid from authoritative Material, one tick advanced.
-    expect(after.resources.construction).toBe(
-      before.resources.construction - ROAD_CONSTRUCTION_COST
+    expect(after.resources.money).toBe(
+      before.resources.money - ROAD_CONSTRUCTION_COST
     )
     expect(after.time.tick).toBe(before.time.tick + 1)
   })
@@ -108,7 +109,7 @@ describe('road construction command path (Step 09H)', () => {
   it('B — single cell placement', () => {
     const state = stepSimulation(createTestState(), roads([{ x: 1, y: 1 }]))
     expect(Object.keys(state.roads)).toEqual(['road-1'])
-    expect(state.resources.construction).toBe(100 - ROAD_CONSTRUCTION_COST)
+    expect(state.resources.money).toBe(100 - ROAD_CONSTRUCTION_COST)
   })
 
   it('C — vertical drag uses the existing 09C expansion and price', () => {
@@ -121,7 +122,7 @@ describe('road construction command path (Step 09H)', () => {
     ])
     const state = stepSimulation(createTestState(), roads(cells ?? []))
     expect(Object.keys(state.roads).length).toBe(4)
-    expect(state.resources.construction).toBe(100 - 4 * ROAD_CONSTRUCTION_COST)
+    expect(state.resources.money).toBe(100 - 4 * ROAD_CONSTRUCTION_COST)
     expect(Object.values(state.roads).map((road) => road.y)).toEqual([1, 2, 3, 4])
   })
 
@@ -135,7 +136,7 @@ describe('road construction command path (Step 09H)', () => {
     ])
     const state = stepSimulation(createTestState(), roads(cells ?? []))
     expect(Object.values(state.roads).map((road) => road.x)).toEqual([2, 3, 4, 5])
-    expect(state.resources.construction).toBe(100 - 4 * ROAD_CONSTRUCTION_COST)
+    expect(state.resources.money).toBe(100 - 4 * ROAD_CONSTRUCTION_COST)
   })
 
   it('E — diagonal drag is not a supported road geometry', () => {
@@ -166,7 +167,7 @@ describe('road construction command path (Step 09H)', () => {
       roads([{ x: 3, y: 3 }, { x: 3, y: 3 }])
     )
     expect(Object.keys(state.roads).length).toBe(1)
-    expect(state.resources.construction).toBe(100 - ROAD_CONSTRUCTION_COST)
+    expect(state.resources.money).toBe(100 - ROAD_CONSTRUCTION_COST)
   })
 
   it('H — out-of-bounds gesture is rejected with zero mutation', () => {
@@ -179,34 +180,34 @@ describe('road construction command path (Step 09H)', () => {
 
   it('I — building collision is rejected (roads never stack on buildings)', () => {
     let state = stepSimulation(createTestState(), place('residence', 3, 3))
-    const materialBefore = state.resources.construction
+    const materialBefore = state.resources.money
     const roadsBefore = Object.keys(state.roads).length
     state = stepSimulation(state, roads([{ x: 3, y: 3 }]))
     expect(Object.keys(state.roads).length).toBe(roadsBefore)
-    expect(state.resources.construction).toBe(materialBefore)
+    expect(state.resources.money).toBe(materialBefore)
   })
 
   it('J — existing road occupancy is rejected (no double spend)', () => {
     let state = stepSimulation(createTestState(), roads([{ x: 3, y: 3 }]))
-    const materialAfterFirst = state.resources.construction
+    const materialAfterFirst = state.resources.money
     state = stepSimulation(state, roads([{ x: 3, y: 3 }]))
     expect(Object.keys(state.roads).length).toBe(1)
-    expect(state.resources.construction).toBe(materialAfterFirst)
+    expect(state.resources.money).toBe(materialAfterFirst)
     // Same gesture over an already-road cell in a longer drag: rejected whole.
-    const before = state.resources.construction
+    const before = state.resources.money
     state = stepSimulation(state, roads([{ x: 3, y: 4 }, { x: 3, y: 3 }]))
-    expect(state.resources.construction).toBe(before)
+    expect(state.resources.money).toBe(before)
     expect(Object.keys(state.roads).length).toBe(1)
   })
 
   it('K — insufficient Material is rejected with zero mutation', () => {
     const poor: SimulationState = {
       ...createTestState(),
-      resources: { construction: ROAD_CONSTRUCTION_COST - 1, food: 100, water: 0 },
+      resources: { money: ROAD_CONSTRUCTION_COST - 1, food: 100, water: 0 },
     }
     const state = stepSimulation(poor, roads([{ x: 2, y: 2 }]))
     expect(Object.keys(state.roads)).toEqual([])
-    expect(state.resources.construction).toBe(ROAD_CONSTRUCTION_COST - 1)
+    expect(state.resources.money).toBe(ROAD_CONSTRUCTION_COST - 1)
   })
 })
 
@@ -241,7 +242,7 @@ describe('road placement preview contract (Step 09H)', () => {
     })
     const poor: SimulationState = {
       ...state,
-      resources: { construction: 0, food: 100, water: 0 },
+      resources: { money: 0, food: 100, water: 0 },
     }
     expect(validateRoadsPlacement(poor, [{ x: 2, y: 2 }])).toEqual({
       valid: false,
@@ -271,11 +272,11 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     let state = staffedWorkshopNoRoad()
     // Roadless: under 09K no mobility means no worker, no production.
     expect(countWorkersAt(state, 'building-2')).toBe(0)
-    expect(materialProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(0)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(false)
 
-    const materialBefore = state.resources.construction
-    const upkeep = materialUpkeepDueForTick(state)
+    const materialBefore = state.resources.money
+    const upkeep = maintenanceDueForTick(state)
     // Player gesture: a Manhattan path from residence(2,2) to workshop(4,4).
     const pathCells = [
       { x: 3, y: 2 },
@@ -284,10 +285,10 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     ]
     state = stepSimulation(state, roads(pathCells))
     // Authoritative cost (3 cells) + upkeep (0 — no worker yet).
-    expect(state.resources.construction).toBe(
+    expect(state.resources.money).toBe(
       materialBefore - pathCells.length * ROAD_CONSTRUCTION_COST - upkeep
     )
-    expect(materialProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(0)
     expect(
       Object.values(state.roads).every((r) => r.status === 'underConstruction')
     ).toBe(true)
@@ -299,7 +300,7 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
       Object.values(state.roads).every((r) => r.status === 'operational')
     ).toBe(true)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(true)
-    expect(materialProductionForTick(state)).toBe(2)
+    expect(commerceRevenueForTick(state)).toBe(2)
     // 09K: the mobility relationship is now derived and TRUE.
     expect(getColonistWorkMobility(state, 'colonist-1').mobilityConnected).toBe(
       true
@@ -314,16 +315,16 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
       state,
       roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])
     )
-    state = { ...state, resources: { ...state.resources, construction: 24 } }
-    expect(materialProductionForTick(state)).toBe(0)
+    state = { ...state, resources: { ...state.resources, money: 24 } }
+    expect(commerceRevenueForTick(state)).toBe(0)
     state = stepSimulation(state)
     // Roads complete → the worker is employed the same tick: gross 2, exactly
     // 1 unit stored (the one free space at 24), income 2, upkeep 1:
     // 24 + 1 + 2 − 1 = 26. The stored-1 evidence is the exact stock: a stored
     // 2 would have landed 27. The next tick is fully clamped (stock ≥ 25).
-    expect(materialProductionForTick(state)).toBe(2)
-    expect(state.resources.construction).toBe(26)
-    expect(materialStoredProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(2)
+    expect(state.resources.money).toBe(26)
+    expect(getCommerceRevenuePerTick(state)).toBe(0)
   })
 
   it('P — under-construction road keeps employment unchanged (09K)', () => {
@@ -337,7 +338,7 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     expect(after.buildings).toEqual(before.buildings)
     expect(after.colonists).toEqual(before.colonists)
     // No worker → no upkeep.
-    expect(materialUpkeepDueForTick(after)).toBe(0)
+    expect(maintenanceDueForTick(after)).toBe(0)
   })
 })
 
@@ -471,6 +472,6 @@ describe('road cost display source (Step 09H)', () => {
     // constant is the single source the label reads.
     expect(ROAD_CONSTRUCTION_COST).toBe(5)
     const state = stepSimulation(createTestState(), roads([{ x: 0, y: 0 }]))
-    expect(state.resources.construction).toBe(100 - ROAD_CONSTRUCTION_COST)
+    expect(state.resources.money).toBe(100 - ROAD_CONSTRUCTION_COST)
   })
 })

@@ -7,13 +7,13 @@
  *     meaningful construction-order pressure, or an accidental mismatch?
  *     (Measured: it is pressure — 3 outcome classes, and Village is reachable
  *     in ~116 ticks through an industrial bootstrap. Classification A.)
- *  2. Should Industrial Expansion's starting state change because its stock sits
- *     above the 25-per-Workshop storage cap? (Measured: no — the cap interaction
- *     IS its content; the defect is that the cap is invisible. Classification A
+ *  2. Should Industrial Expansion's starting state change now that the
+ *     treasury is uncapped? (Measured: no — the deficit interaction IS its
+ *     content; the defect is that the deficit is invisible. Classification A
  *     plus a readability fix, no scenario data change.)
  *
- * No economic constant, no scenario resource, no domain rule changed.
- * `SAVE_VERSION` bumps to 8.
+ * Step001 money migration: treasury, revenue, maintenance replace the
+ * capped Material model. `SAVE_VERSION` bumps to 9.
  *
  * Run:
  *   npx vitest run tests/openingEconomyScenarioStateAudit.test.ts --reporter=verbose
@@ -22,15 +22,18 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getMaintenanceDuePerTick,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
+
   createInitialState,
   createScenarioState,
   findScenario,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialStoredProductionPerTick,
+  getRevenuePerTick,
   getObjectiveStatus,
   getPlacementAffordability,
   getPopulationCount,
@@ -38,12 +41,11 @@ import {
   getWaterProductionPerTick,
   getWaterSupplyStatus,
   hashCanonicalState,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   INITIAL_FOOD,
   INITIAL_WATER,
   iterateBuildings,
   loadSave,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   SAVE_VERSION,
   SCENARIOS,
   serializeSave,
@@ -81,7 +83,8 @@ interface Reading {
   readonly water: number
   readonly capacity: number
   readonly supply: string
-  readonly storage: number
+  readonly revenue: number
+  readonly maintenance: number
   readonly employed: number
   readonly buildings: number
   readonly roads: number
@@ -92,11 +95,12 @@ const read = (state: SimulationState): Reading => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   water: state.resources.water,
   capacity: getWaterProductionPerTick(state),
   supply: getWaterSupplyStatus(state).state,
-  storage: getMaterialStorageCapacity(state),
+  revenue: getRevenuePerTick(state),
+  maintenance: getMaintenanceDuePerTick(state),
   employed: Object.values(state.colonists).filter((c) => c.workplaceId !== null).length,
   buildings: Object.keys(state.buildings).length,
   roads: Object.keys(state.roads).length,
@@ -151,16 +155,16 @@ const runPlan = (start: SimulationState, steps: readonly Step[], horizon: number
       case 'roads': {
         const cost = step.cells.length * 5
         let guard = 0
-        while (guard < 300 && state.resources.construction < cost) {
+        while (guard < 300 && state.resources.money < cost) {
           tick(1)
           guard += 1
         }
-        const before = state.resources.construction
+        const before = state.resources.money
         state = stepSimulation(state, { type: 'placeRoads', cells: [...step.cells] })
         placements.push({
           label: `roads x${step.cells.length}`,
           tick: state.time.tick,
-          accepted: state.resources.construction === before - cost,
+          accepted: state.resources.money === before - cost,
         })
         tick(2)
         break
@@ -349,7 +353,7 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
     const road = getPlacementAffordability(result.state, { x: 1, y: 1 }, 'residence')
     audit('GAP_105', {
       minimumVillageCost: 2 * 25 + 25 + 25 + 5,
-      initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+      initialMaterial: INITIAL_TREASURY,
       materialAfterFourBuildings: afterFour.material,
       roadCost: 5,
       shortfall: 5 - afterFour.material,
@@ -358,7 +362,7 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
     })
     // 105 = 2 Residences + Farm + Well + 1 shared road cell; the stock is 100.
     expect(2 * 25 + 25 + 25 + 5).toBe(105)
-    expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
+    expect(INITIAL_TREASURY).toBe(100)
     expect(afterFour.material).toBe(0)
     expect(road.affordable).toBe(false)
     expect(road.placement.valid).toBe(false)
@@ -516,7 +520,7 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
     const objective = definition().objective
     // Build the Workshop and run the burst immediately.
     let state = start
-    const materialAtStart = state.resources.construction
+    const materialAtStart = state.resources.money
     state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
     for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     const afterWorkshop = read(state)
@@ -530,7 +534,7 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
       colonistId: worker.id,
       workplaceId: workshopId,
     })
-    const materialAtBurst = state.resources.construction
+    const materialAtBurst = state.resources.money
     let ticks = 0
     while (state.resources.water > 0 && ticks < 30) {
       state = stepSimulation(state)
@@ -563,40 +567,51 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
         materialWhenTheWaterIsGone: waterGone.material,
         materialAfter25Ticks: afterBurst.material,
         netMaterial: afterBurst.material - materialAtBurst,
-        grossPerTick: getMaterialProductionPerTick(state),
-        storedPerTick: getMaterialStoredProductionPerTick(state),
-        storage: getMaterialStorageCapacity(state),
+        grossPerTick: getRevenuePerTick(state),
+        revenue: getRevenuePerTick(state),
+        maintenance: getMaintenanceDuePerTick(state),
         waterAfter: afterBurst.water,
         supply: afterBurst.supply,
       },
       reading:
-        'the stock (100) is four times the 25-per-Workshop storage, so burst production is discarded above the cap, but the Workshop worker still nets +1/tick (2 income − 1 upkeep): running the Workshop immediately gains Material slowly (Workshop-only income)',
+        'the treasury (100) funds the Workshop directly with no cap; running it staffed nets −1/tick here (revenue 4 < maintenance 5 across five standing buildings), so industry must earn its keep through growth, not through the burst itself',
     })
     expect(startReading.material).toBe(100)
-    expect(startReading.storage).toBe(0)
-    // Workshop-only income: 100 − 25 = 75; no income accrues while the
-    // Workshop waits for a worker.
-    expect(afterWorkshop.material).toBe(75)
-    expect(afterWorkshop.storage).toBe(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(startReading.revenue).toBe(2)
+    expect(startReading.maintenance).toBe(4)
+    // t1: 100 + 2 − 25 − 4 = 73; t2: 73 + 2 − 4 = 71;
+    // t3 (operational): 71 + 4 − 5 = 70; t4: 70 + 4 − 5 = 69.
+    expect(afterWorkshop.material).toBe(69)
+    expect(afterWorkshop.revenue).toBe(4)
+    expect(afterWorkshop.maintenance).toBe(5)
     expect(waterGone.water).toBe(0)
     expect(waterGone.supply).toBe('shortage')
-    expect(afterBurst.material).toBeGreaterThan(materialAtBurst)
-    // Above the cap stored production is 0, so the Workshop nets +1/tick
-    // (2 income − 1 upkeep): 74 + 1 × 25 = 99.
-    expect(afterBurst.material - materialAtBurst).toBe(ticks)
-    expect(afterBurst.storage).toBe(25)
-    expect(getMaterialStoredProductionPerTick(state)).toBe(0)
+    // The drain phase loses exactly 1/tick too: money at water-out equals
+    // burst start minus the drain ticks (total ticks minus the 20 tail).
+    expect(materialAtBurst - waterGone.material).toBe(ticks - 20)
+    // Deficit colony: revenue 4 < maintenance 5, so the burst SPENDS the
+    // treasury at exactly −1/tick while the Workshop stays staffed.
+    expect(materialAtBurst - afterBurst.material).toBe(ticks)
+    expect(afterBurst.revenue).toBe(4)
+    expect(afterBurst.maintenance).toBe(5)
     expect(afterBurst.supply).toBe('shortage')
     // The objective never needed the industry: the Workshop alone completes it.
     expect(objectiveAfterWorkshop.state).toBe('completed')
   })
 
-  it('shows the burst becomes productive once the stores are spent down', () => {
+  it('shows sequential spending drains the treasury and deficits stall at zero', () => {
     let state = createScenarioState(config, definition())
     state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
     for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     const atWorkshop = read(state)
-    // Spend the stores below the cap: 25 Workshop + 3 x 25 = the whole 100.
+    // t1: 100 + 2 − 25 − 4 = 73; t2: 73 + 2 − 4 = 71;
+    // t3: 71 + 4 − 5 = 70; t4: 70 + 4 − 5 = 69.
+    expect(atWorkshop.material).toBe(69)
+    // Two residences are affordable back-to-back; the Well is not, and the
+    // wait loop stalls: net flow is negative (revenue 4 < maintenance 5+),
+    // so the treasury drains to the floor instead of recovering.
+    // (Admission stays blocked by Water capacity throughout, so the
+    // population — and revenue — hold still while this is measured.)
     const spend = [
       { type: 'residence' as const, x: 2, y: 0 },
       { type: 'residence' as const, x: 0, y: 1 },
@@ -613,70 +628,58 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
         guard += 1
       }
       state = stepSimulation(state, { type: 'placeBuilding', x: item.x, y: item.y, buildingType: item.type })
-      stocksAfterEach.push(state.resources.construction)
+      stocksAfterEach.push(state.resources.money)
     }
-    // Staff the Workshop and read what it can actually store now.
-    const workshopId = [...iterateBuildings(state)].find((b) => b.type === 'workshop')?.id
-    const freeWorker = Object.values(state.colonists).find((c) => c.workplaceId !== workshopId)
-    if (workshopId === undefined || freeWorker === undefined) throw new Error('10as: spend-down setup')
-    state = stepSimulation(state, {
-      type: 'reassignColonist',
-      colonistId: freeWorker.id,
-      workplaceId: workshopId,
-    })
-    const before = read(state)
-    const gross = getMaterialProductionPerTick(state)
-    const stored = getMaterialStoredProductionPerTick(state)
+    // t5: 69 + 4 − 25 − 5 = 43; t6: 43 + 4 − 25 − 5 = 17; the Well at 17
+    // never becomes affordable, and the wait drains the rest to the floor.
+    expect(stocksAfterEach).toEqual([43, 17, 0])
+    expect(Object.values(state.buildings).filter((b) => b.type === 'well')).toHaveLength(1)
+    // The floor holds under persistent deficit: ten more ticks change
+    // nothing, every building stays operational, nobody starves.
     for (let i = 0; i < 10; i += 1) state = stepSimulation(state)
     const after = read(state)
     audit('INDUSTRIAL_SPEND_DOWN', {
       atWorkshop,
       stocksAfterEachSpend: stocksAfterEach,
-      beforeBurst: before,
-      grossPerTick: gross,
-      storedPerTick: stored,
       after,
-      gained: after.material - before.material,
       reading:
-        'below the cap the SAME Workshop output is stored (stored > 0) instead of discarded, which is why the scenario teaches the storage rule rather than being broken by it',
+        'spending is exact while affordable; a deficit colony stalls at a zero treasury instead of dying — maintenance is clamped, buildings stay operational, and recovery must come from growth, not from the burst itself',
     })
-    expect(atWorkshop.material).toBe(75)
-    expect(stocksAfterEach).toHaveLength(3)
-    expect(gross).toBe(2)
-    // The contrast with the as-is case (stored === 0): the same output is
-    // STORED below the cap, and the Workshop nets +3/tick there
-    // (2 stored + 2 income − 1 upkeep).
-    expect(stored).toBeGreaterThan(0)
-    expect(after.material).toBeGreaterThanOrEqual(before.material)
-    expect(after.material - before.material).toBe(27)
+    expect(after.material).toBe(0)
+    expect(after.revenue).toBe(4)
+    expect(after.maintenance).toBe(7)
+    for (const building of Object.values(state.buildings)) {
+      expect(building.status).toBe('operational')
+    }
+    expect(Object.keys(state.colonists)).toHaveLength(2)
   })
 
   it('tests the reframing candidates and rejects them', () => {
     const current = definition()
     const candidates = [
       {
-        name: 'R1 as-is (Material 100, Water 10)',
-        material: 100,
+        name: 'R1 as-is (Money 100, Water 10)',
+        money: 100,
         water: 10,
         derived: 'current data',
       },
       {
-        name: 'R2 Workshop-cost stock (Material 25, Water 10)',
-        material: 25,
+        name: 'R2 Workshop-cost stock (Money 25, Water 10)',
+        money: 25,
         water: 10,
-        derived: '25 = the Workshop construction cost; 10 Water buys 5 Material = one road cell',
+        derived: '25 = the Workshop construction cost; 10 Water covers its construction Water',
       },
       {
-        name: 'R3 one-building Water budget (Material 100, Water 51)',
-        material: 100,
+        name: 'R3 one-building Water budget (Money 100, Water 51)',
+        money: 100,
         water: 51,
         derived: '51 = 25 x 2 + the Workshop construction Water: one more building',
       },
     ].map((candidate) => {
       const probe: ScenarioDefinition = {
         ...current,
-        id: `probe-${candidate.material}-${candidate.water}`,
-        resources: { material: candidate.material, food: current.resources.food, water: candidate.water },
+        id: `probe-${candidate.money}-${candidate.water}`,
+        resources: { money: candidate.money, food: current.resources.food, water: candidate.water },
       }
       const start = createScenarioState(config, probe)
       let state = start
@@ -701,7 +704,7 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
       return {
         name: candidate.name,
         derived: candidate.derived,
-        startMaterial: candidate.material,
+        startMoney: candidate.money,
         startWater: candidate.water,
         afterWorkshop: afterWorkshop.material,
         afterBurst: after.material,
@@ -712,14 +715,12 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
     audit('INDUSTRIAL_REFRAMING', {
       candidates,
       verdict:
-        'R2 makes the burst more visibly positive than R1 (+15 below the cap) but adds no decision: the objective (build the Workshop) is complete before industry runs, and funding a BUILDING with the burst is water-reserve-industry (Water 51). R3 keeps the stock above the cap and duplicates that Water budget. Neither is better than making the existing rule visible, so the state stays unchanged.',
+        'Under money the burst loses exactly 1/tick in every candidate (revenue 4 < maintenance 5 across five standing buildings): R1 drains 5 ticks of Water for −5, R2 stalls at a zero treasury for 0, R3 drains 26 ticks for −26. Starting money only offsets the treasury; the dynamics are identical, so no reframe adds a decision and the state stays unchanged.',
     })
-    // Workshop-only income: even the as-is burst gains (+4) via the
-    // Workshop worker's +1/tick above the cap.
-    expect(candidates[0]!.gained).toBe(4)
-    expect(candidates[1]!.gained).toBeGreaterThan(0)
-    // R3 also gains via income (stock stays above cap)
-    expect(candidates[2]!.gained).toBeGreaterThan(0)
+    // Deficit colony: every drain tick loses exactly revenue − maintenance.
+    expect(candidates[0]!.gained).toBe(-5)
+    expect(candidates[1]!.gained).toBe(0)
+    expect(candidates[2]!.gained).toBe(-26)
     // The version that would make the burst fund a building is the other scenario.
     const wri = findScenario('water-reserve-industry')
     expect(wri?.resources.water).toBe(51)
@@ -729,15 +730,15 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
     const classification = {
       scenario: 'Industrial expansion',
       class: 'A — keep unchanged (readability fix only)',
-      startingMaterial: 100,
-      storageInteraction:
-        'the stock is 4x the 25-per-Workshop storage, so Workshop production is discarded above the cap while the Workshop worker nets +1/tick (measured +25 Material over 25 ticks, Workshop-only income)',
+      startingMoney: 100,
+      treasuryInteraction:
+        'the 100 treasury funds the Workshop directly with no cap; running it staffed nets −1/tick (revenue 4 < maintenance 5), so the scenario now teaches deficit pressure instead of cap invisibility',
       objective:
-        'Reach Village + build a Workshop: reachable at tick 1 from the stock, with no industry needed — which is the scenario\'s honest framing (a Workshop that cannot be run at this scale)',
-      excessMaterialRelevance:
-        'the excess is irrelevant to the objective but IS the scenario\'s lesson: 25-per-Workshop storage bounds what industry can add, and spending below the cap makes the same burst productive (+3/tick: 2 stored + 2 income − 1 upkeep, Workshop-only income)',
-      defect: 'the cap is invisible: the HUD showed only the stock, so "Material 75 with a Workshop that produces 2/tick" appeared to do nothing',
-      fix: 'show the storage cap (and the discard) next to the Material stock; name the cap in the scenario copy — no resource, requirement or rule change',
+        'Reach Village + build a Workshop: reachable at tick 1 from the treasury, with no industry needed — which is the scenario\'s honest framing (a Workshop whose commerce cannot yet carry five buildings)',
+      excessMoneyRelevance:
+        'the excess is irrelevant to the objective but IS the scenario\'s lesson: the treasury is uncapped, and spending it on maintenance-heavy industry drains it at exactly revenue − maintenance per tick',
+      defect: 'the deficit is invisible: the HUD showed only the stock, so "Money 69 with a connected Workshop" appeared to do nothing',
+      fix: 'show revenue and maintenance next to the Money stock; name the deficit in the scenario copy — no resource, requirement or rule change',
       reframed: 'no',
       deferred: 'no',
     }
@@ -808,7 +809,7 @@ describe('6-7. Comparison and tuning gate', () => {
     audit('TUNING_GATE', gate)
     expect(gate.classification.startsWith('A')).toBe(true)
     expect(gate.tuningJustified).toBe(false)
-    expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
+    expect(INITIAL_TREASURY).toBe(100)
     expect(INITIAL_WATER).toBe(0)
     expect(INITIAL_FOOD).toBe(100)
   })
@@ -832,8 +833,10 @@ describe('8-9. Implementation and invariants', () => {
         foodPerFarm: FOOD_PER_FARM_PER_TICK,
         waterPerWell: WATER_PER_WELL_PER_TICK,
         foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
-        storagePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-        initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+        taxPerInhabitant: TAX_PER_INHABITANT_PER_TICK,
+        commercePerWorkshop: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+        maintenancePerBuilding: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+        initialTreasury: INITIAL_TREASURY,
       },
       scenarioResources: {
         industrialExpansion: definition.resources,
@@ -841,14 +844,14 @@ describe('8-9. Implementation and invariants', () => {
       },
       scenarioCount: SCENARIOS.length,
       storageDisplayInputs: {
-        capacity: getMaterialStorageCapacity(start),
-        gross: getMaterialProductionPerTick(start),
-        stored: getMaterialStoredProductionPerTick(start),
+        revenue: getRevenuePerTick(start),
+        maintenance: getMaintenanceDuePerTick(start),
+        gross: getRevenuePerTick(start),
         foodProduction: getFoodProductionPerTick(start),
       },
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(8)
+    expect(invariants.saveVersion).toBe(9)
     expect(invariants.saveKeys).toHaveLength(8)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
@@ -859,15 +862,15 @@ describe('8-9. Implementation and invariants', () => {
       storagePerWorkshop: 25,
       initialMaterial: 100,
     })
-    // Scenario resources are untouched by this step.
-    expect(invariants.scenarioResources.industrialExpansion).toEqual({ material: 100, food: 50, water: 10 })
-    expect(invariants.scenarioResources.waterReserveIndustry).toEqual({ material: 25, food: 50, water: 51 })
+    // Scenario resources use the money stock.
+    expect(invariants.scenarioResources.industrialExpansion).toEqual({ money: 100, food: 50, water: 10 })
+    expect(invariants.scenarioResources.waterReserveIndustry).toEqual({ money: 25, food: 50, water: 51 })
     // 7 when this audit ran; Step 10BE added one content scenario and Step
     // 10CI added three Town-goal scenarios; per-scenario resources above unchanged.
     expect(invariants.scenarioCount).toBe(11)
-    // The HUD storage display is derived from existing queries only.
-    expect(invariants.storageDisplayInputs.capacity).toBe(0)
-    expect(invariants.storageDisplayInputs.stored).toBe(0)
+    // The HUD money display is derived from existing queries only.
+    expect(invariants.storageDisplayInputs.revenue).toBe(2)
+    expect(invariants.storageDisplayInputs.maintenance).toBe(4)
     expect(getObjectiveStatus(start, definition.objective).state).toBe('in_progress')
   })
 })

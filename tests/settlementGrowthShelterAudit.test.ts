@@ -86,7 +86,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -183,7 +183,7 @@ const readHousing = (state: SimulationState, ticks: number): HousingReading => {
     operationalResidences: housing.totalCapacity,
     food: state.resources.food,
     water: state.resources.water,
-    material: state.resources.construction,
+    material: state.resources.money,
     staffedFarms: countStaffedOperationalFarms(state),
     staffedWorkshops: staffedWorkshops(state),
     staffedWells: countStaffedOperationalWells(state),
@@ -536,7 +536,7 @@ describe('§11/§12 — deadlock/recovery and workforce', () => {
       out[name] = {
         populationStart: getPopulationCount(start),
         population: getPopulationCount(state),
-        material: state.resources.construction,
+        material: state.resources.money,
       }
     }
     audit('DEADLOCK_RECOVERY', out)

@@ -16,7 +16,7 @@ import {
   type ConstructionCrewReason,
   type ReassignmentReason,
 } from '../../domain/simulation/phases.js'
-import { getWorkplaceMaterialIncomeRate } from '../../domain/population/colonist.js'
+import { COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK } from '../../domain/resource/resource.js'
 import { areBuildingsMobilityConnected } from '../../domain/mobility/mobility.js'
 import { getBuildingRoadAccess } from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
@@ -148,10 +148,11 @@ export interface BuildingInspection {
    */
   readonly constructionProgressPerTick: number
   /**
-   * Step 10CQ: total Material income per tick earned by workers at this
-   * building. Zero when vacant, under construction, or inaccessible.
+   * Step001: commerce revenue per tick contributed by this building.
+   * Connected operational Workshops contribute the commerce rate;
+   * every other building contributes 0.
    */
-  readonly materialIncome: number
+  readonly revenueContribution: number
 }
 
 /** Inspection detail for one building, or null when the id is unknown. */
@@ -185,14 +186,13 @@ export const getBuildingInspection = (
       getConstructionCrewId(state, building.id) !== null
         ? 2
         : 1,
-    // Step 10CQ: sum material income from all colonists employed at this building.
-    materialIncome: [...iterateColonists(state)]
-      .filter((colonist) => colonist.workplaceId === building.id && colonist.constructionAssignmentId === null)
-      .reduce((sum, colonist) => {
-        if (building.status !== 'operational') return sum
-        if (colonist.workplaceId === null) return sum
-        return sum + getWorkplaceMaterialIncomeRate(building.type)
-      }, 0),
+    // Step001: commerce contributed by a connected operational Workshop.
+    revenueContribution:
+      building.type === 'workshop' &&
+      building.status === 'operational' &&
+      getBuildingRoadAccess(state, building.id).hasRoadAccess
+        ? COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK
+        : 0,
   }
 }
 
@@ -285,8 +285,6 @@ export interface ColonistInspection {
   readonly workplaceAssignmentMode: WorkplaceAssignmentMode
   /** Under-construction building this colonist crews, or null (Step 10Y). */
   readonly constructionAssignmentId: string | null
-  /** Step 10CQ: Material income per tick earned by this colonist (derived). */
-  readonly materialIncome: number
 }
 
 export const getColonistInspection = (
@@ -297,21 +295,12 @@ export const getColonistInspection = (
   if (colonist === undefined) {
     return null
   }
-  // Step 10CQ: compute income from workplace type.
-  let materialIncome = 0
-  if (colonist.workplaceId !== null && colonist.constructionAssignmentId === null) {
-    const workplace = state.buildings[colonist.workplaceId]
-    if (workplace !== undefined && workplace.status === 'operational') {
-      materialIncome = getWorkplaceMaterialIncomeRate(workplace.type)
-    }
-  }
   return {
     id: colonist.id,
     residenceId: colonist.residenceId,
     workplaceId: colonist.workplaceId,
     workplaceAssignmentMode: colonist.workplaceAssignmentMode,
     constructionAssignmentId: colonist.constructionAssignmentId,
-    materialIncome,
   }
 }
 
@@ -488,20 +477,11 @@ export const getConstructionCrewOptions = (
 }
 
 // ---------------------------------------------------------------------------
-// Workforce income (Step 10CQ)
+// Workforce income removed (Step001)
 // ---------------------------------------------------------------------------
 
 /**
- * Step 10CQ: total Material income per tick earned by all employed colonists.
- * Derived from canonical state; never persisted separately.
+ * Step001: employment no longer mints money. Public revenue is taxes plus
+ * commerce; see `getRevenuePerTick` in `./resources.js`. This section
+ * header is kept so the removal is visible in history.
  */
-export const getWorkforceIncome = (state: SimulationState): number => {
-  let total = 0
-  for (const colonist of iterateColonists(state)) {
-    if (colonist.workplaceId === null || colonist.constructionAssignmentId !== null) continue
-    const workplace = state.buildings[colonist.workplaceId]
-    if (workplace === undefined || workplace.status !== 'operational') continue
-    total += getWorkplaceMaterialIncomeRate(workplace.type)
-  }
-  return total
-}

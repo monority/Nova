@@ -18,7 +18,6 @@
  * site, never both. There is no generic Task/Assignment abstraction.
  */
 
-import type { BuildingType } from '../building/building.js'
 
 /**
  * How this colonist's workplace was chosen.
@@ -56,30 +55,8 @@ export interface ColonistState {
 }
 
 /**
- * Step 10CQ: construction Material earned per tick by an employed colonist.
- * Reuses the existing Material resource as the initial currency: no new
- * resource is introduced.
- *
- * Product-model correction: the Workshop is the SOLE Material producer
- * (Farm → Food, Well → Water, Workshop → Material). Farm and Well
- * employment generates no Material — their economic role is fully captured
- * by their own resource output. Only Workshop employment earns income, at a
- * higher rate because Workshops are the only producers of Material.
- * Fixed rate × employment state, no prices, no markets, no spending.
+ * Step001: workforce Material income removed. Public revenue is taxes per
+ * inhabitant plus commerce per connected Workshop (see `collectRevenue` in
+ * `../simulation/phases.js`); employment no longer mints money directly.
+ * The per-capita contract survives the Step002 aggregate migration.
  */
-export const MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK = 0
-export const MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK = 0
-export const MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK = 2
-
-/**
- * Deterministic per-tick Material income rate for a colonist employed at a
- * given workplace type (Step 10CQ).
- */
-export const getWorkplaceMaterialIncomeRate = (
-  workplaceType: BuildingType
-): number => {
-  if (workplaceType === 'farm') return MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK
-  if (workplaceType === 'well') return MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
-  if (workplaceType === 'workshop') return MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
-  return 0
-}

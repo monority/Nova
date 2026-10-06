@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
   createBuilding,
   createColonist,
   createInitialState,
@@ -7,10 +8,8 @@ import {
   getEmploymentSummary,
   getProductiveFarmWorkerCount,
   getProductiveWorkerCount,
-  getWorkplaceMaterialIncomeRate,
-  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
   type SimulationConfig,
 } from '@/index'
 
@@ -19,11 +18,10 @@ const testConfig: SimulationConfig = {
 }
 
 describe('Audit hardening regression tests', () => {
-  it('returns correct material income rate per workplace type', () => {
-    expect(getWorkplaceMaterialIncomeRate('farm')).toBe(MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK)
-    expect(getWorkplaceMaterialIncomeRate('well')).toBe(MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK)
-    expect(getWorkplaceMaterialIncomeRate('workshop')).toBe(MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK)
-    expect(getWorkplaceMaterialIncomeRate('residence')).toBe(0)
+  it('pins the Step001 money rates (taxes, commerce, maintenance)', () => {
+    expect(TAX_PER_INHABITANT_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
   })
 
   it('getProductiveWorkerCount scopes exclusively to Workshop workers in mixed economies', () => {

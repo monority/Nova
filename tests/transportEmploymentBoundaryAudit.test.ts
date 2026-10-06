@@ -17,6 +17,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+  commerceRevenueForTick,
+
   areBuildingsMobilityConnected,
   assignJobs,
   countWorkersAt,
@@ -30,9 +33,7 @@ import {
   getRoadNetworkCount,
   hashCanonicalState,
   loadSave,
-  materialProductionForTick,
-  materialUpkeepDueForTick,
-  produceMaterial,
+  maintenanceDueForTick,
   ROAD_CONSTRUCTION_COST,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -201,9 +202,9 @@ const measure = (state: SimulationState) => {
   const roadCount = Object.keys(state.roads).length
   return {
     employment: getEmploymentSummary(state),
-    production: materialProductionForTick(state),
-    upkeepDue: materialUpkeepDueForTick(state),
-    stock: state.resources.construction,
+    production: commerceRevenueForTick(state),
+    upkeepDue: maintenanceDueForTick(state),
+    stock: state.resources.money,
     networks: getRoadNetworkCount(state),
     roadCount,
     roadCost: roadCount * ROAD_CONSTRUCTION_COST,
@@ -1232,8 +1233,8 @@ describe('N — replay, persistence and derived-only audit', () => {
   }
 
   it('N1 — identical command sequences produce identical states and hashes', () => {
-    const a = assignJobs(produceMaterial(build()))
-    const b = assignJobs(produceMaterial(build()))
+    const a = assignJobs(collectRevenue(build()))
+    const b = assignJobs(collectRevenue(build()))
     expect(serializeCanonicalState(a)).toBe(serializeCanonicalState(b))
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     // Save roundtrip keeps the hash stable.

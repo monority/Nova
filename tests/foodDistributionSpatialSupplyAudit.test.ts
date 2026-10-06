@@ -32,7 +32,7 @@ import {
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
   getHousingSummary,
-  getNetMaterialPerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getRoadNetworks,
@@ -78,7 +78,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -228,8 +228,8 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterShortage: getWaterShortage(state),
     servedResidences: getWaterServedResidenceCount(state),
     servedColonists: getServedColonistCount(state),
-    material: state.resources.construction,
-    materialNet: getNetMaterialPerTick(state),
+    material: state.resources.money,
+    materialNet: getNetMoneyPerTick(state),
     employed: employment.employed,
     unemployed: employment.unemployed,
     staffedFarms: countStaffedOperationalFarms(state),
@@ -1039,7 +1039,7 @@ describe('11. Architecture invariants (src-immutable audit)', { timeout: 30000 }
     audit('PLACEMENT_UNCHANGED', {
       workshopWithoutWater: noWater.valid ? 'valid' : noWater.reason,
       affordableWithoutWater: affordableAt(state, 'workshop', { x: 9, y: 2 }),
-      farmCostUnchanged: getPlacementAffordability(state, { x: 9, y: 2 }, 'farm').materialRequired,
+      farmCostUnchanged: getPlacementAffordability(state, { x: 9, y: 2 }, 'farm').moneyRequired,
     })
     expect(noWater.valid).toBe(false)
   })

@@ -25,9 +25,9 @@ const placeResidence = (x: number, y: number): PlaceBuildingCommand => ({
   buildingType: 'residence',
 })
 
-const withStock = (state: SimulationState, construction: number): SimulationState => ({
+const withStock = (state: SimulationState, money: number): SimulationState => ({
   ...state,
-  resources: { construction, food: 100, water: 0 },
+  resources: { money, food: 100, water: 0 },
 })
 
 const withFood = (state: SimulationState, food: number): SimulationState => ({
@@ -39,7 +39,7 @@ const COST = 25
 
 describe('resource model (Step 4)', () => {
   it('initial stock is deterministic', () => {
-    expect(getResourceStock(createTestState()).construction).toBe(100)
+    expect(getResourceStock(createTestState()).money).toBe(100)
     expect(getResourceStock(createTestState())).toEqual(getResourceStock(createTestState()))
   })
 
@@ -59,14 +59,14 @@ describe('resource model (Step 4)', () => {
 
   it('accepted placement deducts the cost from the stock', () => {
     const state = stepSimulation(createTestState(), placeResidence(6, 6))
-    expect(getResourceStock(state).construction).toBe(100 - COST)
+    expect(getResourceStock(state).money).toBe(100 - COST)
     expect(Object.keys(state.buildings)).toHaveLength(1)
   })
 
   it('rejected placement leaves resources and buildings unchanged', () => {
     const low = withStock(createTestState(), 10)
     const rejected = stepSimulation(low, placeResidence(6, 6))
-    expect(getResourceStock(rejected).construction).toBe(10)
+    expect(getResourceStock(rejected).money).toBe(10)
     expect(Object.keys(rejected.buildings)).toHaveLength(0)
     expect(rejected.colonists).toEqual({})
   })
@@ -74,13 +74,13 @@ describe('resource model (Step 4)', () => {
   it('multiple accepted constructions consume the stock deterministically', () => {
     let state = createTestState()
     state = stepSimulation(state, placeResidence(6, 6))
-    expect(getResourceStock(state).construction).toBe(75)
+    expect(getResourceStock(state).money).toBe(75)
     state = stepSimulation(state, placeResidence(4, 4))
-    expect(getResourceStock(state).construction).toBe(50)
+    expect(getResourceStock(state).money).toBe(50)
     state = stepSimulation(state, placeResidence(2, 2))
-    expect(getResourceStock(state).construction).toBe(25)
+    expect(getResourceStock(state).money).toBe(25)
     state = stepSimulation(state, placeResidence(0, 0))
-    expect(getResourceStock(state).construction).toBe(0)
+    expect(getResourceStock(state).money).toBe(0)
     expect(Object.keys(state.buildings)).toHaveLength(4)
   })
 
@@ -90,10 +90,10 @@ describe('resource model (Step 4)', () => {
       state = stepSimulation(state, placeResidence(cell.x, cell.y))
     }
     const buildingsBefore = Object.keys(state.buildings).length
-    const stockBefore = getResourceStock(state).construction
+    const stockBefore = getResourceStock(state).money
     const rejected = stepSimulation(state, placeResidence(1, 1))
     expect(Object.keys(rejected.buildings)).toHaveLength(buildingsBefore)
-    expect(getResourceStock(rejected).construction).toBe(stockBefore)
+    expect(getResourceStock(rejected).money).toBe(stockBefore)
   })
 
   it('construction lifecycle is unchanged by the new resource', () => {
@@ -129,7 +129,7 @@ describe('resource model (Step 4)', () => {
     state = stepSimulation(state, placeResidence(6, 6))
     state = stepSimulation(state, placeResidence(4, 4))
     const loaded = loadSave(serializeSave(state))
-    expect(getResourceStock(loaded).construction).toBe(50)
+    expect(getResourceStock(loaded).money).toBe(50)
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
   })
 
@@ -155,13 +155,13 @@ describe('food resource (Step 05)', () => {
   })
 
   it('hasSufficientFood is a colony-level all-or-nothing check', () => {
-    expect(hasSufficientFood({ construction: 0, food: 5, water: 0 }, 5)).toBe(true)
-    expect(hasSufficientFood({ construction: 0, food: 4, water: 0 }, 5)).toBe(false)
-    expect(hasSufficientFood({ construction: 0, food: 0, water: 0 }, 0)).toBe(true)
+    expect(hasSufficientFood({ money: 0, food: 5, water: 0 }, 5)).toBe(true)
+    expect(hasSufficientFood({ money: 0, food: 4, water: 0 }, 5)).toBe(false)
+    expect(hasSufficientFood({ money: 0, food: 0, water: 0 }, 0)).toBe(true)
   })
 
   it('deductFood is atomic and pure', () => {
-    const stock = { construction: 0, food: 10, water: 0 }
+    const stock = { money: 0, food: 10, water: 0 }
     const deducted = deductFood(stock, 3)
     expect(deducted.food).toBe(7)
     expect(deducted).not.toBe(stock)
@@ -169,10 +169,10 @@ describe('food resource (Step 05)', () => {
   })
 
   it('deductFood rejects negative amounts and insufficient food', () => {
-    expect(() => deductFood({ construction: 0, food: 10, water: 0 }, -1)).toThrow(
+    expect(() => deductFood({ money: 0, food: 10, water: 0 }, -1)).toThrow(
       'Negative food deduction'
     )
-    expect(() => deductFood({ construction: 0, food: 2, water: 0 }, 5)).toThrow(
+    expect(() => deductFood({ money: 0, food: 2, water: 0 }, 5)).toThrow(
       'Insufficient food'
     )
   })

@@ -39,7 +39,7 @@ describe('scenarios — data-only definitions', () => {
       expect(scenario.objective.description.length).toBeGreaterThan(0)
       expect(scenario.objective.constraint.length).toBeGreaterThan(0)
       expect(scenario.objective.requirements.length).toBeGreaterThan(0)
-      expect(typeof scenario.resources.material).toBe('number')
+      expect(typeof scenario.resources.money).toBe('number')
       expect(Array.isArray(scenario.buildings)).toBe(true)
       expect(Array.isArray(scenario.roads)).toBe(true)
       expect(Array.isArray(scenario.colonists)).toBe(true)
@@ -107,7 +107,7 @@ describe('scenarios — deterministic assembly', () => {
   it('never changes the economy: costs and rates are the catalog values', () => {
     const state = createScenarioState(shipConfig, findScenario('industrial-expansion')!)
     // The scenario only supplies starting resources and existing buildings.
-    expect(state.resources.construction).toBe(100)
+    expect(state.resources.money).toBe(100)
     expect(state.resources.food).toBe(50)
     expect(state.resources.water).toBe(10)
     expect(getPopulationCount(state)).toBe(2)
@@ -157,7 +157,7 @@ describe('scenarios — starting states and progression framing', () => {
 
   it('keeps the default game free of scenario framing', () => {
     const state = createDefaultState(shipConfig)
-    expect(state.resources.construction).toBe(100)
+    expect(state.resources.money).toBe(100)
     expect(state.resources.food).toBe(100)
     expect(state.resources.water).toBe(0)
     expect(Object.keys(state.buildings)).toHaveLength(0)

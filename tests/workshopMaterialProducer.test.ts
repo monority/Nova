@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getCommerceRevenuePerTick,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
+
   createRoads,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   stepSimulation,
   type CellCoordinate,
   type PlaceBuildingCommand,
@@ -49,33 +53,34 @@ const step = (state: SimulationState, ticks: number): SimulationState => {
   return next
 }
 
-describe('Workshop is the sole Material producer', () => {
-  it('a staffed Farm generates no Material', () => {
+describe('Step001 — commerce flows through connected Workshops; employment mints nothing', () => {
+  it('a staffed Farm earns no commerce: revenue is taxes only', () => {
     let state = createTestState()
     state = placeCatchUp(state, place('residence', 0, 0))
     state = placeCatchUp(state, place('farm', 0, 2))
     state = withOperationalRoads(state, [{ x: 0, y: 1 }])
     // Settle: colonist admitted, assigned to the Farm, food flowing.
     state = step(state, 4)
-    const before = state.resources.construction
+    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    // One inhabitant taxed; no commerce without a Workshop.
+    expect(getRevenuePerTick(state)).toBe(TAX_PER_INHABITANT_PER_TICK)
+    const before = state.resources.money
     state = stepSimulation(state)
-    // No workshop exists, so upkeep is 0 and storage inflow is 0: any delta
-    // would be generic employment income.
-    expect(state.resources.construction).toBe(before)
+    // Net −1 for the tick: taxes 1 − maintenance 2 (residence + farm).
+    expect(state.resources.money).toBe(before - 1)
   })
 
-  it('a staffed Well generates no Material', () => {
+  it('a staffed Well earns no commerce: revenue is taxes only', () => {
     let state = createTestState()
     state = placeCatchUp(state, place('residence', 0, 0))
     state = placeCatchUp(state, place('well', 0, 2))
     state = withOperationalRoads(state, [{ x: 0, y: 1 }])
     state = step(state, 4)
-    const before = state.resources.construction
-    state = stepSimulation(state)
-    expect(state.resources.construction).toBe(before)
+    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    expect(getRevenuePerTick(state)).toBe(TAX_PER_INHABITANT_PER_TICK)
   })
 
-  it('a staffed road-connected Workshop produces Material', () => {
+  it('a staffed road-connected Workshop earns commerce', () => {
     let state = createTestState()
     state = placeCatchUp(state, place('residence', 0, 0))
     state = placeCatchUp(withWorkshopWater(state), place('workshop', 2, 0))
@@ -84,34 +89,30 @@ describe('Workshop is the sole Material producer', () => {
       { x: 1, y: 1 },
       { x: 2, y: 1 },
     ])
-    // Isolate production: empty the stock so the 08F storage clamp cannot
-    // hide the inflow.
-    state = {
-      ...state,
-      resources: { ...state.resources, construction: 0 },
-    }
     state = step(state, 2)
-    const before = state.resources.construction
+    const before = state.resources.money
     state = stepSimulation(state)
-    // Net +3 for the tick: gross 2 stored + 2 Workshop income − 1 upkeep,
-    // with no overflow to the hub.
-    expect(getMaterialProductionPerTick(state)).toBe(2)
-    expect(state.resources.construction).toBe(before + 3)
-    expect(state.storage.material).toBe(0)
+    // Net +1 for the tick: taxes 1 + commerce 2 − maintenance 2.
+    expect(getRevenuePerTick(state)).toBe(
+      TAX_PER_INHABITANT_PER_TICK + COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK
+    )
+    expect(state.resources.money).toBe(before + 1)
   })
 
-  it('a vacant Workshop produces no Material', () => {
+  it('a vacant connected Workshop still earns commerce (network, not labor)', () => {
     let state = createTestState()
     state = placeCatchUp(withWorkshopWater(state), place('workshop', 0, 0))
     state = withOperationalRoads(state, [{ x: 0, y: 1 }])
     state = step(state, 3)
-    expect(getMaterialProductionPerTick(state)).toBe(0)
+    expect(getCommerceRevenuePerTick(state)).toBe(
+      COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK
+    )
   })
 
-  it('the first Workshop stays constructible without employment income', () => {
+  it('the first Workshop stays constructible on taxes alone', () => {
     // Bootstrap path: Residence + Well (starting stock only), earn Water,
-    // then pay the 25 Material + 1 Water Workshop cost. No income exists
-    // anywhere on this path after the generic-income removal.
+    // then pay the 25 Money + 1 Water Workshop cost. Taxes accumulate
+    // while Water builds, so employment income is never required.
     let state = createTestState()
     state = placeCatchUp(state, place('residence', 0, 0))
     state = placeCatchUp(state, place('well', 0, 2))
@@ -122,7 +123,7 @@ describe('Workshop is the sole Material producer', () => {
       guard += 1
     }
     expect(state.resources.water).toBeGreaterThanOrEqual(1)
-    expect(state.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(state.resources.money).toBeGreaterThanOrEqual(25)
     state = placeCatchUp(withWorkshopWater(state), place('workshop', 2, 0))
     const workshop = Object.values(state.buildings).find(
       (building) => building.type === 'workshop'

@@ -50,18 +50,18 @@ import {
   getFarmWellAllocationSummary,
   getProductiveFarmWorkerCount,
   getHousingSummary,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialStoredProductionPerTick,
+  getCommerceRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getMoneyStock,
+  getNetMoneyPerTick,
   getPlacementAffordability,
+  getRevenuePerTick,
   getRoadsPlacementAffordability,
-  getWorkforceIncome,
   getGrowthStatus,
   getGrowthMessage,
-  getMaterialUpkeepPerTick,
   getProductiveWorkerCount,
   getVacantOperationalFarmCount,
-  getNetMaterialPerTick,
+  getTaxRevenuePerTick,
   getBuildingRoadAccess,
   getBuildingRoadFeedback,
   getColonistWorkMobility,
@@ -71,8 +71,9 @@ import {
   getWaterStock,
   getWaterSupplyStatus,
   hasOperationalWell,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
   isWaterSupplySustainable,
   WATER_PER_WELL_PER_TICK,
   expandRoadDrag,
@@ -81,13 +82,12 @@ import {
   type RoadPlacementAffordability,
   getRoadNetworkCount,
   getResourceStock,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   INITIAL_FOOD,
   isFoodSupplySustainable,
   jobCapacityOf,
   validatePlacement,
 } from '../index.js'
-import { PROTECTED_MATERIAL_RESERVE } from '../domain/storage/storage.js'
 import { createGameController } from './gameController.js'
 import { createSimulationClock } from './simulationClock.js'
 import { createNovaScene } from '../renderer/three/scene.js'
@@ -127,7 +127,6 @@ const ui = {
   tick: document.querySelector<HTMLSpanElement>('#ui-tick'),
   construction: document.querySelector<HTMLSpanElement>('#ui-construction'),
   materialStatus: document.querySelector<HTMLSpanElement>('#ui-material-status'),
-  storageMaterial: document.querySelector<HTMLSpanElement>('#ui-storage-material'),
   food: document.querySelector<HTMLSpanElement>('#ui-food'),
   foodForecast: document.querySelector<HTMLSpanElement>('#ui-food-forecast'),
   water: document.querySelector<HTMLSpanElement>('#ui-water'),
@@ -263,19 +262,21 @@ const refreshInspection = (): void => {
     } else if (building.type === 'workshop') {
       // Step 07C §12: job capacity is a Workshop property (1 once
       // operational); workers are derived from colonist assignments.
-      // Step 08C §7: upkeep cause — 1/tick when staffed, 0 when vacant.
-      // Step 10AT: the same "X production — …" language the Farm and the Well
-      // use, plus the 25-per-Workshop storage that bounds industry, so a player
-      // can tell stock, storage, production and upkeep apart at one glance.
+      // Step001: commerce cause — connected operational Workshops earn
+      // commerce whether or not they are staffed; maintenance is due for
+      // every operational building. The treasury is uncapped, so no
+      // storage figure is shown.
       const capacity = jobCapacityOf(building)
       const workers = countWorkersAt(controller.getState(), building.id)
-      const storage = MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP
+      const connected =
+        building.status === 'operational' &&
+        getBuildingRoadAccess(controller.getState(), building.id).hasRoadAccess
       ui.insHousing.textContent =
         building.status !== 'operational'
-          ? `Material production — not operational yet · jobs 0/0`
-          : workers > 0
-            ? `Material production — producing +${MATERIAL_PER_WORKER_PER_TICK}/tick (staffed) · jobs ${workers}/${capacity} · upkeep 1/tick · storage ${storage}`
-            : `Material production — vacant, producing +0/tick · jobs 0/${capacity} · upkeep 0 (vacant) · storage ${storage}`
+          ? `Commerce — not operational yet · jobs 0/0`
+          : connected
+            ? `Commerce — connected +${COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK}/tick · jobs ${workers}/${capacity} · maintenance ${MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK}/tick`
+            : `Commerce — no road access, +0/tick · jobs ${workers}/${capacity} · maintenance ${MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK}/tick`
     } else if (building.type === 'well') {
       // Step 10P: the concrete Water production contract.
       const workers = countWorkersAt(controller.getState(), building.id)
@@ -652,8 +653,7 @@ let starved = false
 let previousColonistCount = 0
 let previousFood = INITIAL_FOOD
 let previousEmployed = 0
-let previousConstruction = INITIAL_CONSTRUCTION_MATERIAL
-let previousStorageMaterial = 0
+let previousMoney = INITIAL_TREASURY
 let previousBuildingCount = 0
 let tickCausalMessage = false
 
@@ -754,8 +754,7 @@ const applyScenario = (id: string): void => {
   previousColonistCount = Object.keys(next.colonists).length
   previousFood = next.resources.food
   previousEmployed = getEmploymentSummary(next).employed
-  previousConstruction = next.resources.construction
-  previousStorageMaterial = next.storage.material
+  previousMoney = next.resources.money
   previousBuildingCount = Object.keys(next.buildings).length
   starved = false
   tickCausalMessage = false
@@ -815,40 +814,29 @@ const refreshUi = (): void => {
   const prevColonists = previousColonistCount
   const prevFood = previousFood
   const prevEmployed = previousEmployed
-  const prevConstruction = previousConstruction
-  const prevStorageMaterial = previousStorageMaterial
+  const prevMoney = previousMoney
   const prevBuildings = previousBuildingCount
   previousColonistCount = colonists
   previousFood = food
   previousEmployed = employment.employed
-  previousConstruction = getResourceStock(s).construction
-  previousStorageMaterial = s.storage.material
+  previousMoney = getResourceStock(s).money
   previousBuildingCount = Object.keys(s.buildings).length
 
   if (ui.tick !== null) {
     ui.tick.textContent = String(s.time.tick)
   }
   if (ui.construction !== null) {
-    ui.construction.textContent = String(getResourceStock(s).construction)
+    ui.construction.textContent = String(getResourceStock(s).money)
   }
-  // Step 10AS: the storage cap bounds PRODUCTION only, so it is shown exactly
-  // when a producer exists (an operational Workshop). Without it, a stock above
-  // the cap is inexplicable: the Workshop's output is discarded and only its
-  // upkeep moves the number. `full` names the discard precisely (gross output
-  // above what was actually stored, 08F).
+  // Step001: the treasury is uncapped, so the status names this tick's
+  // revenue and maintenance instead of a production cap.
   if (ui.materialStatus !== null) {
-    const storage = getMaterialStorageCapacity(s)
-    if (storage === 0) {
-      ui.materialStatus.textContent = ''
-    } else {
-      const discarded = getMaterialProductionPerTick(s) > getMaterialStoredProductionPerTick(s)
-      ui.materialStatus.textContent = ` · production cap ${storage}${discarded ? ' · full' : ''}`
-    }
-  }
-  if (ui.storageMaterial !== null) {
-    const reserve = s.storage.material
-    const capacity = s.storage.capacities.material
-    ui.storageMaterial.textContent = `${reserve} / ${capacity} · ${PROTECTED_MATERIAL_RESERVE} protected`
+    const revenue = getRevenuePerTick(s)
+    const maintenance = getMaintenanceDuePerTick(s)
+    ui.materialStatus.textContent =
+      revenue === 0 && maintenance === 0
+        ? ''
+        : ` · +${revenue} revenue −${maintenance} maintenance`
   }
   if (ui.food !== null) {
     ui.food.textContent = String(food)
@@ -945,14 +933,12 @@ const refreshUi = (): void => {
     //   delta = produced_applied - consumed_applied
     const consumed = prevColonists
     const produced = food - prevFood + consumed
-    const material = getMaterialProductionPerTick(s)
+    const revenue = getRevenuePerTick(s)
     const parts: string[] = []
-    const reserveReleased = prevStorageMaterial - s.storage.material
-    const reserveGained = s.storage.material - prevStorageMaterial
-    if (reserveReleased > 0) {
-      parts.push(`Reserve released ${reserveReleased} material`)
-    } else if (reserveGained > 0) {
-      parts.push(`Reserve +${reserveGained} material`)
+    if (revenue > 0) {
+      const taxes = getTaxRevenuePerTick(s)
+      const commerce = getCommerceRevenuePerTick(s)
+      parts.push(`treasury +${revenue} (taxes ${taxes} + commerce ${commerce})`)
     }
     if (employment.employed > prevEmployed) {
       // Step 10E: Farms joined the workplace pool, so report the type(s) that
@@ -976,38 +962,23 @@ const refreshUi = (): void => {
       const farms = produced / FOOD_PER_FARM_PER_TICK
       parts.push(`${pluralize(farms, 'farm')} produced ${produced} food`)
     }
-    if (material > 0) {
-      // Step 08E §18: X is productive workers (valid Workshop assignments),
-      // never raw population — excess unassigned colonists are excluded.
-      const productive = getProductiveWorkerCount(s)
-      parts.push(
-        `${pluralize(productive, 'worker')} produced ${material} material`
+    // Step001: maintenance cause from real values. Paid is reconstructed
+    // from the treasury transition (one command per tick, every catalog
+    // cost is 25 — Step 08C §8 frozen). The post-tick treasury is already
+    // reduced by construction spending, so revenue is added back before
+    // comparing against dues paid (a 25-build from a 25 treasury must
+    // read "shortfall — paid 0/1", not "maintenance 1").
+    const maintenanceDue = getMaintenanceDuePerTick(s)
+    if (maintenanceDue > 0) {
+      const buildCost = Math.max(0, Object.keys(s.buildings).length - prevBuildings) * 25
+      const maintenancePaid = Math.max(
+        0,
+        prevMoney + revenue - buildCost - getResourceStock(s).money
       )
-      // Step 08C §7: upkeep cause from real values. Paid is reconstructed
-      // from the stock transition (one command per tick, every catalog cost
-      // is 25 — Step 08C §8 frozen). Step 08F: production inflow is storage-
-      // clamped, so reconstruction uses STORED production, not gross.
-      // Step 08G: stored output filled the space available BEFORE the tick
-      // (capacity − pre-tick stock). The post-tick stock is already reduced
-      // by construction spending, so clamping against it would double-count
-      // stored output as upkeep paid (a 25-build from a 25 stock must read
-      // "shortfall — paid 0/1", not "upkeep 1").
-      const upkeepDue = getMaterialUpkeepPerTick(s)
-      if (upkeepDue > 0) {
-        const buildCost = Math.max(0, Object.keys(s.buildings).length - prevBuildings) * 25
-        const stored = Math.min(
-          getMaterialProductionPerTick(s),
-          Math.max(0, getMaterialStorageCapacity(s) - prevConstruction)
-        )
-        const upkeepPaid = Math.max(
-          0,
-          prevConstruction + stored - buildCost - getResourceStock(s).construction
-        )
-        if (upkeepPaid < upkeepDue) {
-          parts.push(`upkeep shortfall — paid ${upkeepPaid}/${upkeepDue}`)
-        } else {
-          parts.push(`upkeep ${upkeepDue}`)
-        }
+      if (maintenancePaid < maintenanceDue) {
+        parts.push(`maintenance shortfall — paid ${maintenancePaid}/${maintenanceDue}`)
+      } else {
+        parts.push(`maintenance ${maintenanceDue}`)
       }
     }
     if (parts.length > 0) {
@@ -1309,30 +1280,28 @@ const describeCellStatus = (cell: CellCoordinate): string => {
   }
   // Step 10AD-1: the preview and the dispatch gate share ONE affordability
   // predicate (getPlacementAffordability), so the hover can never claim
-  // "insufficient material" for a placement the domain would accept.
+  // "insufficient funds" for a placement the domain would accept.
   const affordability = getPlacementAffordability(controller.getState(), cell, tool.type)
   const definition = getBuildingDefinition(tool.type)
   const waterSuffix =
     definition.constructionWaterCost === 0 ? '' : ` · water ${definition.constructionWaterCost}`
   if (affordability.affordable) {
     const cost = definition.constructionCost
-    // Step 10CS/10CT: name what completes the shortfall — this tick's stored
-    // production + income, or the protected Storage reserve.
-    const storedSuffix = affordability.coveredBySameTickInflow
-      ? ` (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored + ${getWorkforceIncome(controller.getState())} income)`
-      : affordability.coveredByProtectedReserve
-        ? ` (incl. ${affordability.releasedFromStorage} reserve)`
-        : ''
-    return `cell ${cell.x},${cell.y} — ready · material ${cost}${storedSuffix}${waterSuffix}${describeSpatialConsequence(cell, tool.type)}`
+    // Step001: name what completes the shortfall — this tick's public
+    // revenue (taxes + commerce).
+    const revenueSuffix = affordability.coveredBySameTickInflow
+      ? ` (incl. ${getRevenuePerTick(controller.getState())} revenue)`
+      : ''
+    return `cell ${cell.x},${cell.y} — ready · ${cost} money${revenueSuffix}${waterSuffix}${describeSpatialConsequence(cell, tool.type)}`
   }
   const placement = affordability.placement
   if (!placement.valid && placement.reason === 'insufficientResources') {
     // Explainable failure (Step 4 §13): values come from real queries.
-    return `cell ${cell.x},${cell.y} — insufficient material (${affordability.materialAvailable}/${affordability.materialRequired})`
+    return `cell ${cell.x},${cell.y} — insufficient funds (${affordability.moneyAvailable}/${affordability.moneyRequired})`
   }
   if (!placement.valid && placement.reason === 'insufficientWater') {
     // Step 10AD: the Water construction investment is its own causal reason,
-    // and stored Material production never covers it.
+    // and same-tick revenue never covers it.
     return `cell ${cell.x},${cell.y} — insufficient water (${affordability.waterAvailable}/${affordability.waterRequired})`
   }
   if (!placement.valid && placement.reason === 'terrainBlocked') {
@@ -1356,12 +1325,12 @@ const describeRoadCells = (
   const prefix = `road ${cells.length} cell${cells.length === 1 ? '' : 's'}`
   const validation = affordability.placement
   if (validation.valid) {
-    return `${prefix} — ready · material ${affordability.materialRequired}`
+    return `${prefix} — ready · ${affordability.moneyRequired} money`
   }
-  // Step 10CS: same-tick stored production and workforce income complete a
-  // shortfall exactly as they do for buildings, so the hover says so.
+  // Step001: same-tick revenue completes a shortfall exactly as it does
+  // for buildings, so the hover says so.
   if (affordability.coveredBySameTickInflow) {
-    return `${prefix} — ready · material ${affordability.materialRequired} (incl. ${getMaterialStoredProductionPerTick(controller.getState())} stored + ${getWorkforceIncome(controller.getState())} income)`
+    return `${prefix} — ready · ${affordability.moneyRequired} money (incl. ${getRevenuePerTick(controller.getState())} revenue)`
   }
   switch (validation.reason) {
     case 'emptyCells':
@@ -1376,7 +1345,7 @@ const describeRoadCells = (
     case 'cellOccupiedByRoad':
       return `${prefix} — road already exists here`
     case 'insufficientResources':
-      return `${prefix} — insufficient material (${affordability.materialAvailable}/${affordability.materialRequired})`
+      return `${prefix} — insufficient funds (${affordability.moneyAvailable}/${affordability.moneyRequired})`
   }
 }
 
@@ -1504,10 +1473,10 @@ canvas.addEventListener('pointerup', (event) => {
     if (!attempt.valid && attempt.reason === 'insufficientResources') {
       // Explainable failure (Step 4 §13): explicit reason and real values.
       setStatus(
-        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — insufficient material (${affordability.materialAvailable}/${affordability.materialRequired})`
+        `Cannot build ${BUILDING_LABELS[buildingType] ?? buildingType} — insufficient funds (${affordability.moneyAvailable}/${affordability.moneyRequired})`
       )
     } else if (!attempt.valid && attempt.reason === 'insufficientWater') {
-      // Step 10AD: Water is never covered by stored Material production.
+      // Step 10AD: Water is never covered by same-tick revenue.
       const required = affordability.waterRequired
       const available = affordability.waterAvailable
       setStatus(
@@ -1563,7 +1532,7 @@ declare global {
       readonly ready: boolean
       cellToScreen: (cell: { readonly x: number; readonly y: number }) => { readonly x: number; readonly y: number } | null
       pickCell: (clientX: number, clientY: number) => { readonly x: number; readonly y: number } | null
-      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly construction: string; readonly materialProduction: string; readonly materialUpkeep: string; readonly netMaterial: string; readonly storageCapacity: string; readonly storedProduction: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string; readonly residenceService: string; readonly terrainLegend: string; readonly panelCollapsed: string; readonly growthActive: string; readonly growthDemand: string; readonly growthCell: string; readonly growthAffordable: string; readonly growthBlocker: string }
+      stats: () => { readonly tick: string; readonly buildings: string; readonly operational: string; readonly farms: string; readonly workshops: string; readonly colonists: string; readonly jobs: string; readonly employed: string; readonly unemployed: string; readonly jobCapacity: string; readonly money: string; readonly taxes: string; readonly commerce: string; readonly revenue: string; readonly maintenance: string; readonly netMoney: string; readonly accessibleBuildings: string; readonly farmIds: string; readonly staffedFarmIds: string; readonly vacantOperationalFarms: string; readonly manualWorkerIds: string; readonly crewWorkerIds: string; readonly crewedSiteIds: string; readonly contractors: string; readonly roadNetworks: string; readonly buildingsWithRoadAccess: string; readonly productionBlockedByRoad: string; readonly roads: string; readonly operationalRoads: string; readonly mobilityConnectedColonists: string; readonly food: string; readonly foodForecast: string; readonly foodStatus: string; readonly water: string; readonly waterProduction: string; readonly waterServedResidences: string; readonly servedColonists: string; readonly waterSustainable: string; readonly waterSupply: string; readonly hasOperationalWell: string; readonly status: string; readonly blockedCells: string; readonly terrainInstances: string; readonly residenceService: string; readonly terrainLegend: string; readonly panelCollapsed: string; readonly growthActive: string; readonly growthDemand: string; readonly growthCell: string; readonly growthAffordable: string; readonly growthBlocker: string }
       webgl: () => { readonly engine: string | null; readonly rendererActive: boolean }
       gpu: () => WebGLDiagnostic
       context: () => WebGLDiagnostic
@@ -1636,7 +1605,6 @@ window.__nova = {
     return {
       tick: ui.tick?.textContent ?? '',
       construction: ui.construction?.textContent ?? '',
-      storageMaterial: ui.storageMaterial?.textContent ?? '',
       food: ui.food?.textContent ?? '',
       foodForecast:
         forecast !== null
@@ -1737,11 +1705,12 @@ window.__nova = {
       employed: String(employment.employed),
       unemployed: String(employment.unemployed),
       jobCapacity: String(employment.jobCapacity),
-      materialProduction: String(getMaterialProductionPerTick(state)),
-      materialUpkeep: String(getMaterialUpkeepPerTick(state)),
-      netMaterial: String(getNetMaterialPerTick(state)),
-      storageCapacity: String(getMaterialStorageCapacity(state)),
-      storedProduction: String(getMaterialStoredProductionPerTick(state)),
+      money: String(getMoneyStock(state)),
+      taxes: String(getTaxRevenuePerTick(state)),
+      commerce: String(getCommerceRevenuePerTick(state)),
+      revenue: String(getRevenuePerTick(state)),
+      maintenance: String(getMaintenanceDuePerTick(state)),
+      netMoney: String(getNetMoneyPerTick(state)),
       accessibleBuildings: String(getAccessibleBuildingCount(state)),
       roadNetworks: String(getRoadNetworkCount(state)),
       buildingsWithRoadAccess: String(

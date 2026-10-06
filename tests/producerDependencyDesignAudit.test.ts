@@ -21,6 +21,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -42,11 +44,7 @@ import {
   hashCanonicalState,
   iterateBuildings,
   loadSave,
-  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
   produceFood,
-  produceMaterial,
-  creditMaterialIncome,
   produceWater,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
@@ -56,7 +54,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   WATER_PER_COLONIST_PER_TICK,
   waterProductionForTick,
   type BuildingType,
@@ -81,7 +79,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -280,11 +278,10 @@ const stepMirror = (
   // Material production is same-tick (assignJobs -> produceMaterial), so an
   // unpaid plant must also be idle AFTER employment.
   const gated = preGate.unpaid ? idleConsumers(staffed, rule) : staffed
-  const materialized = produceMaterial(gated)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, lateCommand)
+  const funded = collectRevenue(gated)
+    const commanded = applyCommand(funded, lateCommand)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(releaseCompletedConstructionCrew(maintained))
 }
 
@@ -315,14 +312,14 @@ const applyGate = (
   const consumers = staffedConsumers(state, rule)
   if (consumers.length === 0) return { state, unpaid: false }
   const demand = consumers.length * perProducerOf(rule)
-  const stock = rule === 'wellMaterial' ? state.resources.construction : state.resources.water
+  const stock = rule === 'wellMaterial' ? state.resources.money : state.resources.water
   if (stock < demand) {
     return { state: idleWorkersAt(state, consumers), unpaid: true }
   }
   return {
     state:
       rule === 'wellMaterial'
-        ? { ...state, resources: { ...state.resources, construction: stock - demand } }
+        ? { ...state, resources: { ...state.resources, money: stock - demand } }
         : { ...state, resources: { ...state.resources, water: stock - demand } },
     unpaid: false,
   }
@@ -384,7 +381,7 @@ const read = (state: SimulationState): Reading => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   water: state.resources.water,
   staffedFarms: countStaffedOperationalFarms(state),
   staffedWorkshops: countStaffedOperationalWorkshops(state),
@@ -499,10 +496,10 @@ describe('§2 — candidate discovery', () => {
 describe('§3 — counterfactual matrix', () => {
   const matrix = (rule: Rule, spec: Spec): Record<string, unknown> => {
     const base = world(spec)
-    const idle = { ...base, resources: { ...base.resources, water: 0, construction: 0 } }
-    const rich = { ...base, resources: { ...base.resources, water: 100, construction: 100 } }
+    const idle = { ...base, resources: { ...base.resources, water: 0, money: 0 } }
+    const rich = { ...base, resources: { ...base.resources, water: 100, money: 100 } }
     return {
-      noInput: read(stepWith({ ...base, resources: { ...base.resources, water: 0, construction: 0 } }, 'none')),
+      noInput: read(stepWith({ ...base, resources: { ...base.resources, water: 0, money: 0 } }, 'none')),
       sufficientInput: read(stepWith(rich, rule)),
       depletedInput: read(stepWith(idle, rule)),
       producerUnavailable: read(
@@ -540,13 +537,13 @@ describe('§3 — counterfactual matrix', () => {
       note: 'all-or-nothing: with 0 Water the staffed Workshop runs idle (no Material production, no upkeep); its Farm/Well coworkers still earn Step 10CQ income',
     })
     expect((rows['sufficientInput'] as Reading).material).toBeGreaterThan(0)
-    // Step 10CQ.1: the gate idles the Workshop worker (no production), but the
-    // Farm and Well workers keep their employment, so the stock after one tick
-    // is pure income: 1 (Farm) + 1 (Well).
+    // Step001: the gate idles the Workshop worker, but employment mints
+    // nothing anymore — the stock after one tick is taxes (3 inhabitants)
+    // plus any connected-Workshop commerce, minus maintenance for the
+    // standing buildings. Here revenue (5) is fully absorbed by
+    // maintenance (6, clamped to the 5 available): the treasury stays 0.
     expect((rows['depletedInput'] as Reading).staffedWorkshops).toBe(0)
-    expect((rows['depletedInput'] as Reading).material).toBe(
-      MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK + MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK
-    )
+    expect((rows['depletedInput'] as Reading).material).toBe(0)
     expect((rows['depletedInput'] as Reading).material).toBeLessThan(
       (rows['noInput'] as Reading).material
     )
@@ -680,7 +677,7 @@ describe('§4 — bootstrap trace', () => {
         staffedFarms: countStaffedOperationalFarms(after),
         staffedWorkshops: countStaffedOperationalWorkshops(after),
         staffedWells: countStaffedOperationalWells(after),
-        material: after.resources.construction,
+        material: after.resources.money,
         water: after.resources.water,
       }
     })
@@ -715,15 +712,15 @@ describe('§5 — recovery and deadlock', () => {
     const after = stepWith(dry, 'workshopWater')
     const next = stepWith(after, 'workshopWater')
     audit('RECOVERY_TEMPORARY', {
-      dryTick: { material: after.resources.construction, water: after.resources.water },
-      nextTick: { material: next.resources.construction, water: next.resources.water },
+      dryTick: { material: after.resources.money, water: after.resources.water },
+      nextTick: { material: next.resources.money, water: next.resources.water },
       note: 'the Well keeps producing, so the Workshop resumes on the following tick',
     })
-    expect(next.resources.construction).toBeGreaterThanOrEqual(0)
+    expect(next.resources.money).toBeGreaterThanOrEqual(0)
   })
 
   it('An extended shortage is recovered by manual reassignment or more Wells', () => {
-    const start = { ...base(), resources: { ...base().resources, water: 0, construction: 0 } }
+    const start = { ...base(), resources: { ...base().resources, water: 0, money: 0 } }
     const extended = run(start, 5, 'workshopWater')
     // Player correction: free the workshop colonist and put them on a second
     // Well (the existing agency mechanism, Step 10M).
@@ -766,7 +763,7 @@ describe('§5 — recovery and deadlock', () => {
       trace.push({
         tick: i + 1,
         water: next.resources.water,
-        material: next.resources.construction,
+        material: next.resources.money,
         staffed: countStaffedOperationalWorkshops(next),
       })
     }
@@ -780,7 +777,7 @@ describe('§5 — recovery and deadlock', () => {
       trace,
       note: 'Material still flows (on the paid ticks); the colony is never locked, because population consumption can never exceed the production the 10S gate admitted',
     })
-    expect(next.resources.construction).toBeGreaterThan(0)
+    expect(next.resources.money).toBeGreaterThan(0)
   })
 
   it('Input-producer loss and workforce loss are both recoverable', () => {
@@ -859,7 +856,7 @@ describe('§6 — circularity', () => {
       wellProductiveAtZeroWater: waterProductionForTick(base) > 0,
       maxWaterFromZeroOver6Ticks: maxWater,
       note: 'an over-populated fixture (served > production) keeps the stock at 0 by the all-or-nothing shortage rule; the honest signal that there is no production lock is that the Well itself produces (production capacity > 0) while Water is 0',
-      materialWithSeededWater: seeded.resources.construction,
+      materialWithSeededWater: seeded.resources.money,
       graph: {
         runtimeInputs: ['Well: worker', 'Workshop: worker + Water', 'Farm: worker'],
         buildInputs: ['every building: 25 Material'],
@@ -868,7 +865,7 @@ describe('§6 — circularity', () => {
       },
     })
     expect(waterProductionForTick(base)).toBeGreaterThan(0)
-    expect(seeded.resources.construction).toBeGreaterThan(0)
+    expect(seeded.resources.money).toBeGreaterThan(0)
   })
 })
 
@@ -944,7 +941,7 @@ describe('§7 — economic pressure and the resulting decision', () => {
       return {
         workshops,
         water: after.resources.water,
-        material: after.resources.construction,
+        material: after.resources.money,
         staffedWorkshops: countStaffedOperationalWorkshops(after),
       }
     })
@@ -1000,7 +997,7 @@ describe('§8 — Construction Crew propagation', () => {
             ? { type: 'assignConstructionCrew' as const, colonistId: crewMember, buildingId: base.wellId }
             : undefined
         next = stepMirror(next, 'workshopWater', command)
-        if (first === -1 && next.resources.construction > base.state.resources.construction) first = i
+        if (first === -1 && next.resources.money > base.state.resources.money) first = i
       }
       return { firstPaidTick: first, readings: read(next) }
     }
@@ -1032,9 +1029,9 @@ describe('§8 — Construction Crew propagation', () => {
       })
       return {
         rule,
-        material: { uncrewed: uncrewed.resources.construction, crewed: crewed.resources.construction },
+        material: { uncrewed: uncrewed.resources.money, crewed: crewed.resources.money },
         water: { uncrewed: uncrewed.resources.water, crewed: crewed.resources.water },
-        materialDelta: crewed.resources.construction - uncrewed.resources.construction,
+        materialDelta: crewed.resources.money - uncrewed.resources.money,
       }
     })
     audit('CREW_PROPAGATION_MATRIX', {
@@ -1137,7 +1134,7 @@ describe('§9/§10/§11 — workforce, spatial and build order', () => {
           state = b.state
         }
         state = stepWith(state, 'workshopWater')
-        if (firstMaterialTick === -1 && state.resources.construction > 0) firstMaterialTick = i
+        if (firstMaterialTick === -1 && state.resources.money > 0) firstMaterialTick = i
       }
       return {
         order: wellFirst ? 'Well first (t1), Workshop second (t4)' : 'Workshop first (t1), Well second (t4)',

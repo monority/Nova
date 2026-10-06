@@ -67,7 +67,7 @@ const loadFixture = (page, material) =>
     let state = nova.createInitialState(config)
     state = {
       ...state,
-      resources: { ...state.resources, construction: materialValue, food: 1000 },
+      resources: { ...state.resources, money: materialValue, food: 1000 },
     }
     const operational = (current, type, x, y) => {
       const created = nova.createBuilding(current, type, x, y, 2)
@@ -162,8 +162,8 @@ try {
   } else {
     fail(`income-covered road feedback bad: ${JSON.stringify(positive.status)}`)
   }
-  if (positive.construction === '4') ok('fixture stock is 4 before the command')
-  else fail(`fixture stock expected 4, got ${positive.construction}`)
+  if (positive.money === '4') ok('fixture stock is 4 before the command')
+  else fail(`fixture stock expected 4, got ${positive.money}`)
   await page.screenshot({ path: resolve(ART, '01-income-covered-preview.png') })
 
   const positiveAfter = await clickCell(page, FREE)
@@ -172,10 +172,10 @@ try {
   } else {
     fail(`income-covered road not accepted: ${JSON.stringify(positiveAfter.roads)}`)
   }
-  if (positiveAfter.construction === '2') {
+  if (positiveAfter.money === '2') {
     ok('exactly 5 Material spent (4 stock + 2 stored + 2 income − 5 road − 1 upkeep)')
   } else {
-    fail(`expected 2 Material after spending, got ${positiveAfter.construction}`)
+    fail(`expected 2 Material after spending, got ${positiveAfter.money}`)
   }
   await page.screenshot({ path: resolve(ART, '02-income-covered-placed.png') })
 
@@ -193,8 +193,8 @@ try {
   const controlAfter = await clickCell(page, FREE)
   if (controlAfter.roads === control.roads) ok('refused road added nothing')
   else fail(`refused road changed roads: ${control.roads} -> ${controlAfter.roads}`)
-  if (controlAfter.construction === '0') ok('refused road spent no Material')
-  else fail(`refused road changed material: ${controlAfter.construction}`)
+  if (controlAfter.money === '0') ok('refused road spent no Material')
+  else fail(`refused road changed material: ${controlAfter.money}`)
   await page.screenshot({ path: resolve(ART, '03-shortfall-refused.png') })
 
   // 3. Stock alone reads ready with no inflow breakdown.

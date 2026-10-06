@@ -91,7 +91,7 @@ try {
   await page.click('[data-testid="simulation-step"]');
   await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '2', 'step to tick 2');
   s = await page.evaluate(() => window.__nova.stats());
-  if (s.operational !== '0') fail(`tick 2 should still be under construction: ${JSON.stringify(s)}`);
+  if (s.operational !== '0') fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
   else ok(`tick 2 still under construction, ${JSON.stringify(s)}`);
 
   await page.click('[data-testid="simulation-step"]');

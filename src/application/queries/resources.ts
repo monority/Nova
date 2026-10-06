@@ -5,20 +5,24 @@
  */
 
 import {
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
   type ResourceStock,
 } from '../../domain/resource/resource.js'
 import { countEmployedWorkers } from '../../domain/jobs/jobs.js'
 import { iterateBuildings } from '../../domain/housing/housing.js'
 import {
+  commerceRevenueForTick,
+  countConnectedOperationalWorkshops,
+  countOperationalBuildings,
   countOperationalFarms,
   countStaffedOperationalFarms,
   countStaffedOperationalWorkshops,
-  materialProductionForTick,
-  materialStorageCapacityForTick,
-  materialStoredProductionForTick,
+  maintenanceDueForTick,
+  taxRevenueForTick,
 } from '../../domain/simulation/phases.js'
 import {
   countStaffedOperationalWells,
@@ -166,54 +170,47 @@ export const isFoodSupplySustainable = (state: SimulationState): boolean => {
 
 /**
  * Productive workers this tick (Step 08E): colonists actually assigned to
- * operational Workshop capacity. This is the ONLY labor that produces
- * Material — population alone never produces. Thin name over the canonical
- * employment relation so UI and tests share the 08E vocabulary.
- * Derived, never stored, never persisted, never hashed.
+ * operational Workshop capacity. Thin name over the canonical employment
+ * relation so UI and tests share the 08E vocabulary. Derived, never
+ * stored, never persisted, never hashed. (Step001: employment no longer
+ * mints money; commerce flows through connected Workshops instead.)
  */
 export const getProductiveWorkerCount = (state: SimulationState): number =>
   countStaffedOperationalWorkshops(state)
 
-/**
- * Deterministic construction-material output per tick (Step 07C §6, gated by
- * Step 09F): only staffed road-accessible operational Workshops produce —
- * every other employed colonist's output is blocked. Derived, never stored
- * as a `labour` resource. Single source of truth: the simulation phase.
- */
-export const getMaterialProductionPerTick = (
-  state: SimulationState
-): number => materialProductionForTick(state)
+/** Canonical treasury balance. */
+export const getMoneyStock = (state: SimulationState): number =>
+  state.resources.money
 
 /**
- * Deterministic upkeep due per tick (Step 08C): staffed operational
- * Workshops × 1. Pure derivation, never stored, never persisted, never
- * hashed — same conventions as the other economic queries.
+ * Deterministic tax revenue per tick (Step001): live inhabitants × rate.
+ * Single source of truth: the simulation phase.
  */
-export const getMaterialUpkeepPerTick = (state: SimulationState): number =>
-  countStaffedOperationalWorkshops(state) *
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK
-
-/** Net material flow per tick: production − upkeep (Step 08C). */
-export const getNetMaterialPerTick = (state: SimulationState): number =>
-  getMaterialProductionPerTick(state) - getMaterialUpkeepPerTick(state)
+export const getTaxRevenuePerTick = (state: SimulationState): number =>
+  taxRevenueForTick(state)
 
 /**
- * Material storage capacity (Step 08F §9): operational Workshops × 25,
- * vacant included, under-construction excluded. Pure derivation, never
- * stored, never persisted, never hashed.
+ * Deterministic commerce revenue per tick (Step001): connected operational
+ * Workshops × rate. Vacant counts, under-construction and roadless do not.
  */
-export const getMaterialStorageCapacity = (state: SimulationState): number =>
-  materialStorageCapacityForTick(state)
+export const getCommerceRevenuePerTick = (state: SimulationState): number =>
+  commerceRevenueForTick(state)
+
+/** Total public revenue per tick: taxes + commerce (Step001). */
+export const getRevenuePerTick = (state: SimulationState): number =>
+  getTaxRevenuePerTick(state) + getCommerceRevenuePerTick(state)
 
 /**
- * Production actually stored after the storage clamp (Step 08F §10):
- * gross production minus deterministically discarded overflow. The existing
- * getMaterialProductionPerTick keeps its gross contract; this query names
- * the stored part explicitly. Derived, never stored/persisted/hashed.
+ * Deterministic maintenance due per tick (Step001): operational buildings
+ * × rate. Pure derivation, never stored, never persisted, never hashed.
  */
-export const getMaterialStoredProductionPerTick = (
-  state: SimulationState
-): number => materialStoredProductionForTick(state)
+export const getMaintenanceDuePerTick = (state: SimulationState): number =>
+  maintenanceDueForTick(state)
+
+/** Net treasury flow per tick: revenue − maintenance (Step001). */
+export const getNetMoneyPerTick = (state: SimulationState): number =>
+  getRevenuePerTick(state) - getMaintenanceDuePerTick(state)
+
 
 // ---------------------------------------------------------------------------
 // Water queries (Step 10P). Derived only: coverage, service and shortage are

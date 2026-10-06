@@ -212,9 +212,9 @@ async function main() {
 
     section('INTERACTION');
     let s = await page.evaluate(() => window.__nova.stats());
-    if (s.tick !== '0' || s.buildings !== '0' || s.colonists !== '0' || s.construction !== '100') {
+    if (s.tick !== '0' || s.buildings !== '0' || s.colonists !== '0' || s.money !== '100') {
       fail(`initial stats bad: ${JSON.stringify(s)}`);
-    } else ok(`initial Tick=0 Buildings=0 Colonists=0 Material=${s.construction}`);
+    } else ok(`initial Tick=0 Buildings=0 Colonists=0 Material=${s.money}`);
 
     // --- First placement: building-1 at (6,6) ---
     const pt = await page.evaluate((c) => window.__nova.cellToScreen(c), TARGET);
@@ -228,9 +228,9 @@ async function main() {
     await page.mouse.click(pt.x, pt.y);
     await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).buildings === '1', 'building placed');
     s = await page.evaluate(() => window.__nova.stats());
-    if (s.tick !== '1' || s.buildings !== '1' || s.construction !== '75') {
+    if (s.tick !== '1' || s.buildings !== '1' || s.money !== '75') {
       fail(`after placement bad: ${JSON.stringify(s)}`);
-    } else ok(`resource deduction 100 -> ${s.construction}, ${JSON.stringify(s)}`);
+    } else ok(`resource deduction 100 -> ${s.money}, ${JSON.stringify(s)}`);
     stats.interaction = true;
 
     // Select building-1 to capture underConstruction state before depletion.
@@ -248,7 +248,7 @@ async function main() {
     await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '2', 'step to tick 2');
     s = await page.evaluate(() => window.__nova.stats());
     if (s.operational !== '0') {
-      fail(`tick 2 should still be under construction: ${JSON.stringify(s)}`);
+      fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
     } else ok(`tick 2 still under construction, ${JSON.stringify(s)}`);
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '3', 'step to tick 3');
@@ -274,9 +274,9 @@ async function main() {
       s = await page.evaluate(() => window.__nova.stats());
     }
     // After 1 (original) + 3 = 4 buildings: 100 - 4*25 = 0
-    if (s.construction !== '0' || s.buildings !== '4') {
-      fail(`depletion expected 0/4, got ${s.construction}/${s.buildings}`);
-    } else ok(`stock depleted: material ${s.construction}, buildings ${s.buildings}`);
+    if (s.money !== '0' || s.buildings !== '4') {
+      fail(`depletion expected 0/4, got ${s.money}/${s.buildings}`);
+    } else ok(`stock depleted: material ${s.money}, buildings ${s.buildings}`);
 
     // --- Rejection at depleted stock ---
     const rejCell = { x: 7, y: 7 };
@@ -287,10 +287,10 @@ async function main() {
     await page.mouse.click(rejPt.x, rejPt.y);
     await new Promise((r) => setTimeout(r, 500));
     const afterRej = await page.evaluate(() => window.__nova.stats());
-    if (afterRej.buildings !== beforeRej.buildings || afterRej.construction !== beforeRej.construction) {
-      fail(`rejection changed state: buildings ${beforeRej.buildings}->${afterRej.buildings}, stock ${beforeRej.construction}->${afterRej.construction}`);
+    if (afterRej.buildings !== beforeRej.buildings || afterRej.money !== beforeRej.money) {
+      fail(`rejection changed state: buildings ${beforeRej.buildings}->${afterRej.buildings}, stock ${beforeRej.money}->${afterRej.money}`);
     } else {
-      ok(`rejected placement at stock 0: buildings ${afterRej.buildings}, stock ${afterRej.construction} unchanged`);
+      ok(`rejected placement at stock 0: buildings ${afterRej.buildings}, stock ${afterRej.money} unchanged`);
     }
 
     // --- Temporal re-verify at depleted stock ---

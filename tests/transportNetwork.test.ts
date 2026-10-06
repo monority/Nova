@@ -163,7 +163,7 @@ describe('transport network connectivity (Step 09A)', () => {
   })
 
   it('G — lifecycle: constructing excluded, operational included', () => {
-    // Adjacent but under construction: excluded and bridges nothing.
+    // Adjacent but under money: excluded and bridges nothing.
     let state = stepSimulation(
       stepSimulation(createTestState(), place('residence', 0, 0)),
       place('farm', 1, 0)

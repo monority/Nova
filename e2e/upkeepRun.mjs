@@ -180,7 +180,7 @@ async function scenarioVacantWorkshop(page, shot) {
   await reload(page);
   ok('load, app ready');
   let s = await stats(page);
-  if (s.tick !== '0' || s.construction !== '100' || s.materialUpkeep !== '0' || s.netMaterial !== '0') {
+  if (s.tick !== '0' || s.money !== '100' || s.materialUpkeep !== '0' || s.netMaterial !== '0') {
     fail(`A fresh bad: ${JSON.stringify(s)}`);
   } else ok(`A fresh: material 100, upkeep ${s.materialUpkeep}, net ${s.netMaterial}`);
   await shot('01-fresh.png');
@@ -195,23 +195,23 @@ async function scenarioVacantWorkshop(page, shot) {
   await selectPalette(page, 'build-well', 'Well selected');
   await placeAt(page, { x: 4, y: 2 });
   s = await stepUntil(page, (v) => v.waterProduction === '2', 'Well staffed', 10);
-  ok(`A bootstrap: colonist ${s.colonists}, water production ${s.waterProduction}, material ${s.construction}`);
+  ok(`A bootstrap: colonist ${s.colonists}, water production ${s.waterProduction}, material ${s.money}`);
 
-  // J. Under construction: no capacity/production/upkeep. Workshop-only
+  // J. Under money: no capacity/production/upkeep. Workshop-only
   // income: the staffed Well earns no Material, so the stock stays at 40
   // through the water buffer and the placement leaves exactly 15.
   s = await stepUntil(page, (v) => Number(v.water) >= 1, 'water buffer', 10);
   await selectPalette(page, 'build-workshop', 'Workshop selected');
   await placeAt(page, { x: 4, y: 3 });
   s = await stats(page);
-  if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '15') {
+  if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.money !== '15') {
     fail(`J under-construction bad: ${JSON.stringify(s)}`);
-  } else ok('J under construction: capacity 0, production 0, upkeep 0, material 15 (40 − 25, no income accrues)');
+  } else ok('J under money: capacity 0, production 0, upkeep 0, material 15 (40 − 25, no income accrues)');
   await step(page); // Step 10Y: 1 construction tick left
   s = await step(page); // operational, vacant
-  if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '15' || s.storageCapacity !== '25') {
+  if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.money !== '15' || s.storageCapacity !== '25') {
     fail(`B vacant bad: ${JSON.stringify(s)}`);
-  } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.construction}, capacity ${s.storageCapacity} (no leak)`);
+  } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.money}, capacity ${s.storageCapacity} (no leak)`);
   await selectAt(page, { x: 4, y: 3 });
   const vacantInspection = await inspectionText(page);
   if (!vacantInspection.includes('upkeep 0 (vacant)')) {
@@ -222,13 +222,13 @@ async function scenarioVacantWorkshop(page, shot) {
   // B-sustain: vacant capacity is real, but with nobody producing there is no
   // upkeep leak. Workshop-only income: the staffed Well earns no Material,
   // so the stock stays exactly flat while the Workshop stands vacant.
-  let prev = Number(s.construction);
+  let prev = Number(s.money);
   for (let i = 0; i < 5; i++) {
     s = await step(page);
-    if (Number(s.construction) !== prev || s.materialUpkeep !== '0' || s.materialProduction !== '0') {
+    if (Number(s.money) !== prev || s.materialUpkeep !== '0' || s.materialProduction !== '0') {
       fail(`B vacant sustain tick ${i + 1}: ${JSON.stringify(s)}`);
     }
-    prev = Number(s.construction);
+    prev = Number(s.money);
   }
   ok(`B vacant Workshop gains nothing across 5 ticks (Workshop-only income: the Well worker earns no Material), material held at ${prev} (capacity 25, upkeep 0)`);
 }
@@ -252,14 +252,14 @@ async function scenarioStaffedWorkshop(page, shot) {
   s = await stats(page);
   if (s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.storageCapacity !== '0') {
     fail(`J under-construction flows bad: ${JSON.stringify(s)}`);
-  } else ok('J under construction: capacity 0, production 0, upkeep 0');
+  } else ok('J under money: capacity 0, production 0, upkeep 0');
   s = await stepUntil(page, (v) => v.storageCapacity === '25', 'workshop operational', 10);
 
   // C. Workshop staffed (the Well is farther): upkeep 1, net +1 below capacity.
   s = await stepUntil(page, (v) => v.materialUpkeep === '1', 'staffed workshop', 10);
-  if (s.employed !== '1' || s.storageCapacity !== '25' || Number(s.construction) > 25) {
+  if (s.employed !== '1' || s.storageCapacity !== '25' || Number(s.money) > 25) {
     fail(`C staffed bad: ${JSON.stringify(s)}`);
-  } else ok(`C 1 worker: employed ${s.employed}, upkeep ${s.materialUpkeep}, net ${s.netMaterial} (capacity ${s.storageCapacity}), material ${s.construction}`);
+  } else ok(`C 1 worker: employed ${s.employed}, upkeep ${s.materialUpkeep}, net ${s.netMaterial} (capacity ${s.storageCapacity}), material ${s.money}`);
   s = await step(page);
   const causal = await statusText(page);
   if (!causal.includes('1 worker produced 2 material') || !(causal.includes('upkeep 1') || causal.includes('upkeep shortfall'))) {
@@ -276,28 +276,28 @@ async function scenarioStaffedWorkshop(page, shot) {
   // pre-tick stored production (headroom at tick start) + workforce income (2)
   // − upkeep (1). Below the cap that is 3/tick, in the transition 2, and above
   // the cap exactly 1 — asserted per tick from the PRE-tick stored value.
-  let prev = Number(s.construction);
+  let prev = Number(s.money);
   for (let i = 0; i < 6; i++) {
     const preStored = Number(s.storedProduction);
     s = await step(page);
-    const delta = Number(s.construction) - prev;
+    const delta = Number(s.money) - prev;
     const expected = preStored + 1;
     if (delta !== expected || s.materialUpkeep !== '1' || Number(s.storageCapacity) !== 25) {
       fail(`C sustain tick ${i + 1}: delta ${delta} expected ${expected} (preStored ${preStored}), ${JSON.stringify(s)}`);
     }
-    prev = Number(s.construction);
+    prev = Number(s.money);
   }
   ok(`C income-aware refill (exact: preStored + income 2 - upkeep 1, 3/2/1 per phase), material now ${prev}`);
 
   // K. Above the cap there is no equilibrium any more (Step 10CQ): stored
   // production is 0, and the stock still climbs by income (2) - upkeep (1).
-  s = await stepUntil(page, (v) => Number(v.construction) >= 25 && v.storedProduction === '0', 'above the storage cap', 30);
+  s = await stepUntil(page, (v) => Number(v.money) >= 25 && v.storedProduction === '0', 'above the storage cap', 30);
   if (s.storageCapacity !== '25' || s.storedProduction !== '0' || s.materialUpkeep !== '1') {
     fail(`K above-cap bad: ${JSON.stringify(s)}`);
   } else {
-    const abovePrev = Number(s.construction);
+    const abovePrev = Number(s.money);
     const aboveNext = await step(page);
-    if (Number(aboveNext.construction) !== abovePrev + 1) {
+    if (Number(aboveNext.money) !== abovePrev + 1) {
       fail(`K above-cap income delta bad: ${JSON.stringify(aboveNext)}`);
     } else ok(`K above the cap: stored 0, income 2 - upkeep 1 = +1/tick (no dead equilibrium)`);
   }
@@ -308,9 +308,9 @@ async function scenarioStaffedWorkshop(page, shot) {
   await selectPalette(page, 'build-residence', 'Residence selected');
   await placeAt(page, { x: 6, y: 3 });
   s = await stats(page);
-  if (s.buildings !== '4' || Number(s.construction) < 0 || s.materialUpkeep !== '1' || s.colonists !== '1') {
+  if (s.buildings !== '4' || Number(s.money) < 0 || s.materialUpkeep !== '1' || s.colonists !== '1') {
     fail(`L construction-from-refill bad: ${JSON.stringify(s)}`);
-  } else ok(`L residence built from the refilled stock, material ${s.construction}, upkeep ${s.materialUpkeep} (no debt)`);
+  } else ok(`L residence built from the refilled stock, material ${s.money}, upkeep ${s.materialUpkeep} (no debt)`);
   const floorCausal = await statusText(page);
   if (!floorCausal.includes('Residence placed at 6,3 — under construction')) {
     fail(`L placement message bad: ${JSON.stringify(floorCausal)}`);
@@ -340,9 +340,9 @@ async function scenarioDeficitRecovery(page, shot) {
   await placeAt(page, { x: 3, y: 3 });
   s = await stepUntil(page, (v) => v.materialUpkeep === '1', 'staffed workshop', 10);
   s = await stats(page);
-  if (Number(s.construction) >= 25 || Number(s.construction) < 0) {
+  if (Number(s.money) >= 25 || Number(s.money) < 0) {
     fail(`E bootstrap stock bad: ${JSON.stringify(s)}`);
-  } else ok(`E below cost after the 10AD bootstrap: material ${s.construction}, upkeep ${s.materialUpkeep} (never negative)`);
+  } else ok(`E below cost after the 10AD bootstrap: material ${s.money}, upkeep ${s.materialUpkeep} (never negative)`);
   await shot('05-drained.png');
 
   // Step 10CZ: below the 25 cost the shared predicate now also counts this
@@ -360,25 +360,25 @@ async function scenarioDeficitRecovery(page, shot) {
   }
 
   // A plain click below cost is rejected and changes nothing.
-  const drainedStock = (await stats(page)).construction;
+  const drainedStock = (await stats(page)).money;
   const drainedBuildings = (await stats(page)).buildings;
   const rejectPt = await moveTo(page, { x: 5, y: 6 });
   await waitFor(async () => (await stats(page)).status.includes('insufficient material'), 'insufficient preview below cost');
   await page.mouse.click(rejectPt.x, rejectPt.y);
   await new Promise((r) => setTimeout(r, 300));
   s = await stats(page);
-  if (s.buildings !== drainedBuildings || s.construction !== drainedStock) {
+  if (s.buildings !== drainedBuildings || s.money !== drainedStock) {
     fail(`E rejection changed state: ${JSON.stringify(s)}`);
-  } else ok(`E rejected build keeps stock ${s.construction}, status "${s.status}"`);
+  } else ok(`E rejected build keeps stock ${s.money}, status "${s.status}"`);
 
   // F. Recovery: the staffed Workshop's net inflow (stored + income - upkeep)
   // refills the stock until construction is possible again.
-  s = await stepUntil(page, (v) => Number(v.construction) + Number(v.storedProduction) >= 25, 'recovery refill', 40);
+  s = await stepUntil(page, (v) => Number(v.money) + Number(v.storedProduction) >= 25, 'recovery refill', 40);
   await selectPalette(page, 'build-residence', 'Residence selected');
   await placeAt(page, { x: 5, y: 6 });
   s = await stats(page);
-  if (Number(s.construction) < 0) fail(`F negative after recovery build: ${JSON.stringify(s)}`);
-  else ok(`F recovery: rebuilt at material ${s.construction}, upkeep ${s.materialUpkeep}`);
+  if (Number(s.money) < 0) fail(`F negative after recovery build: ${JSON.stringify(s)}`);
+  else ok(`F recovery: rebuilt at material ${s.money}, upkeep ${s.materialUpkeep}`);
   await shot('06-recovered.png');
 }
 
@@ -389,7 +389,7 @@ async function scenarioIdle(page) {
   await step(page);
   await step(page);
   let s = await stats(page);
-  if (s.construction !== '100' || s.materialUpkeep !== '0' || s.netMaterial !== '0') {
+  if (s.money !== '100' || s.materialUpkeep !== '0' || s.netMaterial !== '0') {
     fail(`G idle bad: ${JSON.stringify(s)}`);
   } else ok('G idle 3 ticks: material still 100, upkeep 0');
   await selectPalette(page, 'build-residence', 'Residence selected');
@@ -415,14 +415,14 @@ async function scenarioStarvation(page, shot) {
   if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.materialProduction !== '0') {
     fail(`H starvation upkeep bad: ${JSON.stringify(s)}`);
   } else ok(`H starvation: workers 0, upkeep 0, net 0, food ${s.food}`);
-  const frozen = Number(s.construction);
+  const frozen = Number(s.money);
   await step(page);
   await step(page);
   await step(page);
   s = await stats(page);
-  if (Number(s.construction) !== frozen || s.materialUpkeep !== '0') {
+  if (Number(s.money) !== frozen || s.materialUpkeep !== '0') {
     fail(`H post-starvation drift: ${JSON.stringify(s)}`);
-  } else ok(`H post-starvation stable: material ${s.construction}, upkeep 0`);
+  } else ok(`H post-starvation stable: material ${s.money}, upkeep 0`);
   await shot('07-starvation.png');
 }
 
@@ -438,7 +438,7 @@ async function scenarioExcessWorkers(page, shot) {
   await placeAt(page, { x: 1, y: 1 });
   await placeAt(page, { x: 1, y: 3 });
   let s = await stepUntil(page, (v) => v.colonists === '2', 'two colonists', 20);
-  ok(`I two colonists admitted, material ${s.construction}`);
+  ok(`I two colonists admitted, material ${s.money}`);
   await selectPalette(page, 'build-road', 'Road selected');
   await placeRoad(page, { x: 2, y: 1 });
   await placeRoad(page, { x: 2, y: 2 });

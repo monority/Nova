@@ -129,7 +129,7 @@ describe('water admission deadlock (root-cause regression)', () => {
       ...state,
       resources: {
         ...state.resources,
-        construction: state.resources.construction + 25,
+        money: state.resources.money + 25,
       },
     }
     state = placeCatchUp(state, place('well', 5, 5)) // building-4, isolated

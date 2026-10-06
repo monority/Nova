@@ -22,7 +22,7 @@ import {
   getEmploymentSummary,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getNetMaterialPerTick,
+  getNetMoneyPerTick,
   getProgression,
   getResourceStock,
   getRoadNetworks,
@@ -46,7 +46,7 @@ const base = (): SimulationState => {
   const state = createInitialState(config)
   return {
     ...state,
-    resources: { construction: 1000, food: 1000, water: 1000 },
+    resources: { money: 1000, food: 1000, water: 1000 },
   }
 }
 
@@ -167,9 +167,9 @@ const metrics = (state: SimulationState) => {
     foodBalance: getFoodProductionPerTick(state) - getFoodConsumptionPerTick(state),
     waterCapacity: getWaterProductionPerTick(state),
     waterNeed: getWaterNeedPerTick(state),
-    materialNet: getNetMaterialPerTick(state),
-    material: getResourceStock(state).construction,
-    reserve: state.storage.material,
+    materialNet: getNetMoneyPerTick(state),
+    material: getResourceStock(state).money,
+
     stage: getProgression(state).stage,
     diagnoses: diagnosisKinds(state),
   }

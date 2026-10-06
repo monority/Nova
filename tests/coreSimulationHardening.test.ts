@@ -16,7 +16,7 @@ import {
   getFarmWellAllocationSummary,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   getProgression,
   getTownCapabilityStatus,
   getReassignmentOptions,
@@ -38,7 +38,7 @@ const config: SimulationConfig = { world: { seed: 'nova-step10by', width: 24, he
 
 const base = (): SimulationState => {
   const state = createInitialState(config)
-  return { ...state, resources: { construction: 1000, food: 1000, water: 1000 } }
+  return { ...state, resources: { money: 1000, food: 1000, water: 1000 } }
 }
 
 const operational = (state: SimulationState, type: BuildingType, x: number, y: number): SimulationState => {
@@ -118,17 +118,17 @@ describe('Step 10BY — core simulation hardening', () => {
     expect(getFoodConsumptionPerTick(state)).toBe(summary.foodConsumption)
     expect(getWaterProductionPerTick(state)).toBe(summary.waterCapacity)
     expect(getWaterNeedPerTick(state)).toBe(summary.waterNeed)
-    expect(getMaterialProductionPerTick(state)).toBe(2)
+    expect(getRevenuePerTick(state)).toBe(2)
     expect(state.resources.food).not.toBe(getFoodProductionPerTick(state))
     expect(state.resources.water).not.toBe(getWaterProductionPerTick(state))
-    expect(state.resources.construction).not.toBe(getMaterialProductionPerTick(state))
+    expect(state.resources.money).not.toBe(getRevenuePerTick(state))
   })
 
   it('preserves zero, one, many, and partial-world edge behavior', () => {
     const empty = base()
     expect(getFoodProductionPerTick(empty)).toBe(0)
     expect(getWaterProductionPerTick(empty)).toBe(0)
-    expect(getMaterialProductionPerTick(empty)).toBe(0)
+    expect(getRevenuePerTick(empty)).toBe(0)
     const farmOnly = fixture(1, ['farm'])
     expect(countStaffedOperationalFarms(farmOnly)).toBe(1)
     expect(countStaffedOperationalWells(farmOnly)).toBe(0)
@@ -159,7 +159,7 @@ describe('Step 10BY — core simulation hardening', () => {
     const target = source === undefined ? undefined : getReassignmentOptions(start, source.id).find((option) => option.type === 'workshop' && option.eligible)
     if (source === undefined || target === undefined) throw new Error('missing move target')
     const changed = stepSimulation(start, { type: 'reassignColonist', colonistId: source.id, workplaceId: target.workplaceId })
-    expect(getMaterialProductionPerTick(changed)).toBeGreaterThan(getMaterialProductionPerTick(start))
+    expect(getRevenuePerTick(changed)).toBeGreaterThan(getRevenuePerTick(start))
     expect(getTownCapabilityStatus(changed).available).toBe(getTownCapabilityStatus(start).available)
   })
 

@@ -19,9 +19,9 @@ import {
   evaluateSettlementGrowth,
   getGrowthCandidateCell,
   getGrowthStatus,
-  getMaterialUpkeepPerTick,
+  getMaintenanceDuePerTick,
   getProgression,
-  getWorkforceIncome,
+  getRevenuePerTick,
   hashCanonicalState,
   loadSave,
   SAVE_VERSION,
@@ -92,7 +92,7 @@ const townFixture = (
       ...state.resources,
       food: 10_000,
       water: overrides.water ?? 100,
-      construction: overrides.material ?? 100,
+      money: overrides.material ?? 100,
     },
   }
   // Network A: roads 1..3 at y=1, residences (1,0)/(3,0), wells (1,2)/(3,2).
@@ -229,15 +229,15 @@ describe('G1.1 — construction reuse and tick semantics', () => {
     expect(countBuildings(after, 'residence')).toBe(countBuildings(before, 'residence') + 1)
     // Catalog cost, deducted exactly once, plus this tick's income and upkeep
     // (income is credited before the growth phase, upkeep after it).
-    expect(after.resources.construction).toBe(
-      before.resources.construction -
+    expect(after.resources.money).toBe(
+      before.resources.money -
         BUILDING_CATALOG.residence.constructionCost +
-        getWorkforceIncome(before) -
-        getMaterialUpkeepPerTick(before)
+        getRevenuePerTick(before) -
+        getMaintenanceDuePerTick(before)
     )
-    // Growth never releases the protected Storage reserve; the hub only
-    // captures production overflow (it may therefore grow, never shrink).
-    expect(after.storage.material).toBeGreaterThanOrEqual(before.storage.material)
+    // Growth spends the treasury only; the hub (food/water buffering) is
+    // untouched by construction.
+    expect(after.storage).toEqual(before.storage)
     // The new Residence missed this tick's advanceConstruction: it starts at
     // the catalog duration like a player placement.
     const grown = Object.values(after.buildings).find(
@@ -270,18 +270,18 @@ describe('G1.1 — construction reuse and tick semantics', () => {
     expect(evaluateSettlementGrowth(after).demand).toBe(false)
   })
 
-  it('is a no-op when the Residence is unaffordable, and never uses the reserve', () => {
-    // Main stock 0 + this tick's income (7) is still below the 25 cost, so
-    // growth must not build and must not draw the 40-Material Storage reserve.
-    const broke: SimulationState = {
-      ...townFixture({ material: 0 }),
-      storage: { ...townFixture({ material: 0 }).storage, material: 40 },
-    }
+  it('is a no-op when the Residence is unaffordable, with no reserve to draw', () => {
+    // Treasury 0 + this tick's revenue is still below the 25 cost, so
+    // growth must not build. There is no reserve anymore: the treasury is
+    // directly spendable and simply stays short.
+    const broke: SimulationState = townFixture({ material: 0 })
     expect(evaluateSettlementGrowth(broke).demand).toBe(true)
     expect(evaluateSettlementGrowth(broke).affordable).toBe(false)
     const after = stepSimulation(broke)
     expect(countBuildings(after, 'residence')).toBe(countBuildings(broke, 'residence'))
-    expect(after.storage.material).toBe(40)
+    expect(after.resources.money).toBe(
+      Math.max(0, getRevenuePerTick(broke) - getMaintenanceDuePerTick(broke))
+    )
   })
 })
 

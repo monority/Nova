@@ -110,7 +110,7 @@ const scene = (spec: Spec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: 100,
       water: spec.water ?? 0,
     },
@@ -161,7 +161,7 @@ const read = (state: SimulationState): Reading => {
     servedColonists: status.servedColonists,
     supply: status.state,
     shortage: status.shortage,
-    material: state.resources.construction,
+    material: state.resources.money,
     employed: Object.values(state.colonists).filter((c) => c.workplaceId !== null).length,
     unemployed: Object.values(state.colonists).filter((c) => c.workplaceId === null).length,
     roadCells: Object.keys(state.roads).length,

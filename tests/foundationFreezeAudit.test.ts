@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
   createInitialState,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
@@ -21,11 +22,7 @@ import {
   getTownConditions,
   hashCanonicalState,
   loadSave,
-  MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK,
-  MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   MIGRATABLE_SAVE_VERSION,
   MIGRATABLE_SAVE_VERSIONS,
   ROAD_CONSTRUCTION_COST,
@@ -33,6 +30,7 @@ import {
   SCENARIOS,
   serializeSave,
   stepSimulation,
+  TAX_PER_INHABITANT_PER_TICK,
   WATER_PER_COLONIST_PER_TICK,
   WATER_PER_WELL_PER_TICK,
   type SimulationConfig,
@@ -40,7 +38,6 @@ import {
 } from '@/index'
 import {
   DEFAULT_STORAGE_CAPACITIES,
-  PROTECTED_MATERIAL_RESERVE,
 } from '@/domain/storage/storage.js'
 
 const config: SimulationConfig = {
@@ -107,13 +104,10 @@ describe('10DE — persistence contract', () => {
 
 describe('10DE — economy contracts', () => {
   it('pins the income, upkeep, capacity and storage constants', () => {
-    expect(MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK).toBe(0)
-    expect(MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK).toBe(0)
-    expect(MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK).toBe(2)
-    expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
-    expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)
-    expect(PROTECTED_MATERIAL_RESERVE).toBe(15)
-    expect(DEFAULT_STORAGE_CAPACITIES).toEqual({ food: 50, water: 30, material: 40 })
+    expect(TAX_PER_INHABITANT_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
+    expect(DEFAULT_STORAGE_CAPACITIES).toEqual({ food: 50, water: 30 })
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)

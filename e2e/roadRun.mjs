@@ -198,9 +198,9 @@ async function main() {
     await page.goto(URL, { waitUntil: 'load' });
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.roads !== '0' || s.operationalRoads !== '0' || s.construction !== '100') {
+    if (s.tick !== '0' || s.roads !== '0' || s.operationalRoads !== '0' || s.money !== '100') {
       fail(`A fresh state bad: ${JSON.stringify(s)}`);
-    } else ok(`A fresh: tick 0, roads 0, material ${s.construction}`);
+    } else ok(`A fresh: tick 0, roads 0, material ${s.money}`);
     await selectPalette(page, 'build-road', 'Road selected');
     const roadLabel = await page.textContent('[data-testid="build-road"]');
     if (!roadLabel.includes(String(ROAD_COST))) fail(`road label missing cost: ${roadLabel}`);
@@ -226,12 +226,12 @@ async function main() {
     const upkeepAtDrag = num(wellDrag.before, 'materialUpkeep');
     const expectedDrag = num(wellDrag.before, 'construction') - 3 * ROAD_COST - upkeepAtDrag;
     if (num(wellDrag.after, 'construction') !== expectedDrag) {
-      fail(`C road drag material cost wrong: ${JSON.stringify({ expectedDrag, got: wellDrag.after.construction })}`);
+      fail(`C road drag material cost wrong: ${JSON.stringify({ expectedDrag, got: wellDrag.after.money })}`);
     } else {
-      ok(`C 3-cell drag placed: material ${wellDrag.before.construction} -> ${wellDrag.after.construction} (3 x ${ROAD_COST} + upkeep ${upkeepAtDrag})`);
+      ok(`C 3-cell drag placed: material ${wellDrag.before.money} -> ${wellDrag.after.money} (3 x ${ROAD_COST} + upkeep ${upkeepAtDrag})`);
     }
     if (wellDrag.after.roads !== '3' || wellDrag.after.operationalRoads !== '0') {
-      fail(`C roads must start under construction: ${JSON.stringify(wellDrag.after)}`);
+      fail(`C roads must start under money: ${JSON.stringify(wellDrag.after)}`);
     } else ok(`C construction state visible: ${wellDrag.after.roads} roads, ${wellDrag.after.operationalRoads} operational`);
     await shot('02-roads-under-construction.png');
 

@@ -13,6 +13,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  commerceRevenueForTick,
+  getCommerceRevenuePerTick,
+
   applyCommand,
   assignJobs,
   countStaffedOperationalFarms,
@@ -26,9 +29,7 @@ import {
   getReassignmentOptions,
   hashCanonicalState,
   loadSave,
-  materialProductionForTick,
-  materialStoredProductionForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   SAVE_VERSION,
   serializeCanonicalState,
   serializeSave,
@@ -92,7 +93,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -171,18 +172,18 @@ const snapshot = (state: SimulationState): unknown => ({
   staffedFarms: countStaffedOperationalFarms(state),
   staffedWorkshops: countStaffedOperationalWorkshops(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
 })
 
 const ledger = (state: SimulationState): unknown => ({
   foodProduced: countStaffedOperationalFarms(state) * 2,
   foodConsumed: getPopulationCount(state),
-  materialGross: materialProductionForTick(state),
-  materialStored: materialStoredProductionForTick(state),
-  workshopUpkeep: materialUpkeepDueForTick(state),
-  materialNet: materialProductionForTick(state) - materialUpkeepDueForTick(state),
+  materialGross: commerceRevenueForTick(state),
+  materialStored: getCommerceRevenuePerTick(state),
+  workshopUpkeep: maintenanceDueForTick(state),
+  materialNet: commerceRevenueForTick(state) - maintenanceDueForTick(state),
   foodStock: state.resources.food,
-  materialStock: state.resources.construction,
+  materialStock: state.resources.money,
 })
 
 // ---------------------------------------------------------------------------
@@ -349,7 +350,7 @@ describe('§4 — 10K/10L dead-end recovery', () => {
     // Workshop-only income: the farm-first state is Material-flat again —
     // the two Farm workers earn nothing, so the stock rests at 5 until the
     // manual move creates the first Workshop producer.
-    expect(preRun.resources.construction).toBe(5)
+    expect(preRun.resources.money).toBe(5)
     expect(countStaffedOperationalWorkshops(preRun)).toBe(0)
 
     const manual = reassign(stuck, 'colonist-2', workshops[0]!)
@@ -361,7 +362,7 @@ describe('§4 — 10K/10L dead-end recovery', () => {
       previous = tick
       trace.push({
         tick,
-        material: state.resources.construction,
+        material: state.resources.money,
         food: state.resources.food,
         population: getPopulationCount(state),
         staffedFarms: countStaffedOperationalFarms(state),
@@ -371,7 +372,7 @@ describe('§4 — 10K/10L dead-end recovery', () => {
       })
     }
     audit('DEADEND_RECOVERY', trace)
-    expect(state.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(state.resources.money).toBeGreaterThanOrEqual(25)
     expect(countStaffedOperationalWorkshops(state)).toBe(1)
     expect(state.colonists['colonist-2']!.workplaceAssignmentMode).toBe('manual')
   })
@@ -384,8 +385,8 @@ describe('§4 — 10K/10L dead-end recovery', () => {
     const manual = reassign(shopHeavy, 'colonist-2', farms[1]!)
     const recovered = advance(manual, 30)
     audit('REVERSE_RECOVERY', {
-      automaticAfter10: { food: noFood.resources.food, material: noFood.resources.construction },
-      manualAfter30: { food: recovered.resources.food, material: recovered.resources.construction, staffedFarms: countStaffedOperationalFarms(recovered) },
+      automaticAfter10: { food: noFood.resources.food, material: noFood.resources.money },
+      manualAfter30: { food: recovered.resources.food, material: recovered.resources.money, staffedFarms: countStaffedOperationalFarms(recovered) },
     })
     expect(recovered.resources.food).toBeGreaterThan(noFood.resources.food)
     expect(countStaffedOperationalFarms(recovered)).toBe(1)
@@ -519,7 +520,7 @@ describe('§7 — construction order recovery', () => {
       farmFirst: { before: { f: 2, w: 0 }, after: snapshot(farmFixed) },
       workshopFirst: { before: { f: 0, w: 2 }, after: snapshot(shopFixed) },
     })
-    expect(farmFixed.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(farmFixed.resources.money).toBeGreaterThanOrEqual(25)
     expect(countStaffedOperationalFarms(shopFixed)).toBe(1)
     expect(shopFixed.resources.food).toBeGreaterThan(0)
   })
@@ -727,11 +728,11 @@ describe('§15 — long-run stability', () => {
     const trace: number[] = []
     for (let i = 0; i < ticks; i += 1) {
       state = stepSimulation(state)
-      if (i % 20 === 0) trace.push(state.resources.construction)
+      if (i % 20 === 0) trace.push(state.resources.money)
     }
     return {
       food: state.resources.food,
-      material: state.resources.construction,
+      material: state.resources.money,
       population: getPopulationCount(state),
       staffedFarms: countStaffedOperationalFarms(state),
       staffedWorkshops: countStaffedOperationalWorkshops(state),

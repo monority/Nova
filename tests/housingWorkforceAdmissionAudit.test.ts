@@ -21,6 +21,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  payMaintenance,
+
   availableResidenceIds,
   assignJobs,
   countStaffedOperationalFarms,
@@ -107,7 +109,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -194,7 +196,7 @@ const snapshot = (state: SimulationState): Snapshot => ({
   tick: state.time.tick,
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   staffedFarms: countStaffedOperationalFarms(state),
   staffedWorkshops: countStaffedOperationalWorkshops(state),
   unemployed: getEmploymentSummary(state).unemployed,
@@ -291,7 +293,7 @@ describe('1/3 — current admission rule and phase ordering', () => {
       '6. assignJobs (same tick as admission)',
       '7. produceMaterial (storage-clamped)',
       '8a. applyCommand (construction, pre-upkeep stock)',
-      '8b. upkeepBuildings (staffed Workshops)',
+      '8b. payMaintenance (staffed Workshops)',
       '9. advanceTime',
     ])
     expect(true).toBe(true)
@@ -366,7 +368,7 @@ describe('5 — minimal bootstrap scenarios', () => {
         final: {
           population: snapshot(result.state).population,
           food: result.state.resources.food,
-          material: result.state.resources.construction,
+          material: result.state.resources.money,
           staffedFarms: countStaffedOperationalFarms(result.state),
           staffedWorkshops: countStaffedOperationalWorkshops(result.state),
         },
@@ -534,7 +536,7 @@ describe('8 — F,F,W,W recovery', () => {
         accepted: true,
         population: getPopulationCount(recovered),
         staffedWorkshops: countStaffedOperationalWorkshops(recovered),
-        materialAfter6: recovered.resources.construction,
+        materialAfter6: recovered.resources.money,
       },
     })
     expect(countStaffedOperationalWorkshops(recovered)).toBeGreaterThanOrEqual(1)
@@ -634,7 +636,7 @@ describe('10 — construction order', () => {
         final: {
           population: snapshot(result.state).population,
           food: result.state.resources.food,
-          material: result.state.resources.construction,
+          material: result.state.resources.money,
           staffedFarms: countStaffedOperationalFarms(result.state),
           staffedWorkshops: countStaffedOperationalWorkshops(result.state),
         },
@@ -674,7 +676,7 @@ describe('10 — construction order', () => {
           staffedFarms: countStaffedOperationalFarms(result.state),
           staffedWorkshops: countStaffedOperationalWorkshops(result.state),
           unemployed: getEmploymentSummary(result.state).unemployed,
-          material: result.state.resources.construction,
+          material: result.state.resources.money,
         },
       }
     }

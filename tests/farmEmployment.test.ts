@@ -22,6 +22,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  commerceRevenueForTick,
+
   areBuildingsMobilityConnected,
   assignJobs,
   countStaffedOperationalFarms,
@@ -41,7 +43,6 @@ import {
   isOperationalWorkplace,
   jobCapacityOf,
   loadSave,
-  materialProductionForTick,
   produceFood,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -257,7 +258,7 @@ describe('C — Workshop behavior is unchanged', () => {
     const colonist = withColonist(state, residence.id)
     state = assignJobs(colonist.state)
     expect(countWorkersAt(state, workshop.id)).toBe(1)
-    expect(materialProductionForTick(state)).toBe(2)
+    expect(commerceRevenueForTick(state)).toBe(2)
     expect(foodProductionForTick(state)).toBe(0) // no farm at all
   })
 
@@ -266,7 +267,7 @@ describe('C — Workshop behavior is unchanged', () => {
     const workshop = operationalBuilding(state, 'workshop', 1, 1)
     state = workshop.state
     state = roads(state, [{ x: 2, y: 1 }])
-    expect(materialProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(0)
   })
 })
 
@@ -282,7 +283,7 @@ describe('D — Farm + Workshop + one colonist: exactly one is staffed', () => {
     expect(workplaceOf(state, 'colonist-1')).toBe(fixture.nearId)
     expect(countStaffedOperationalFarms(state)).toBe(1)
     expect(foodProductionForTick(state)).toBe(2)
-    expect(materialProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(0)
     expect(getEmploymentSummary(state)).toMatchObject({
       population: 1,
       employed: 1,
@@ -300,7 +301,7 @@ describe('D — Farm + Workshop + one colonist: exactly one is staffed', () => {
     expect(workplaceOf(state, 'colonist-1')).toBe(fixture.nearId)
     expect(state.buildings[fixture.nearId]?.type).toBe('farm')
     expect(foodProductionForTick(state)).toBe(2)
-    expect(materialProductionForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(0)
   })
 
   it('D3 — equal distance across types: lowest id wins (no type priority)', () => {
@@ -329,7 +330,7 @@ describe('D — Farm + Workshop + one colonist: exactly one is staffed', () => {
     // proving the selection is type-blind.
     expect(workplaceOf(assigned, colonist.id)).toBe(farm.id)
     expect(foodProductionForTick(assigned)).toBe(2)
-    expect(materialProductionForTick(assigned)).toBe(0)
+    expect(commerceRevenueForTick(assigned)).toBe(0)
   })
 })
 
@@ -350,7 +351,7 @@ describe('E — Farm + Workshop + two colonists: both staffed', () => {
     })
     expect(countStaffedOperationalFarms(assigned)).toBe(1)
     expect(foodProductionForTick(assigned)).toBe(2) // one staffed farm
-    expect(materialProductionForTick(assigned)).toBe(2) // one staffed workshop
+    expect(commerceRevenueForTick(assigned)).toBe(2) // one staffed workshop
   })
 })
 
@@ -416,7 +417,7 @@ describe('F — mixed Farm/Workshop capacities', () => {
       (b) => b.type === 'workshop' && countWorkersAt(state, b.id) > 0
     ).length
     expect(foodProductionForTick(state)).toBe(staffedFarms * 2)
-    expect(materialProductionForTick(state)).toBe(staffedWorkshops * 2)
+    expect(commerceRevenueForTick(state)).toBe(staffedWorkshops * 2)
   }
 
   it('F1 — 2 Farms + 1 Workshop + 2 colonists: two staffed, one vacant', () => {
@@ -456,7 +457,7 @@ describe('F — mixed Farm/Workshop capacities', () => {
     expect(staffedWorkplaceCount(state)).toBe(2)
     assertOneWorkerPerWorkplace(state)
     assertNoFreeProduction(state)
-    expect(foodProductionForTick(state) + materialProductionForTick(state)).toBe(
+    expect(foodProductionForTick(state) + commerceRevenueForTick(state)).toBe(
       4
     )
   })
@@ -627,7 +628,7 @@ describe('I — spatial preference across workplace types', () => {
     const assigned = assignJobs(state)
     expect(workplaceOf(assigned, colonist.id)).toBe(workshop.id)
     expect(foodProductionForTick(assigned)).toBe(0)
-    expect(materialProductionForTick(assigned)).toBe(2)
+    expect(commerceRevenueForTick(assigned)).toBe(2)
   })
 })
 

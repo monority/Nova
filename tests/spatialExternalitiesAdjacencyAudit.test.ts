@@ -32,7 +32,7 @@ import {
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
   getHousingSummary,
-  getNetMaterialPerTick,
+  getNetMoneyPerTick,
   getPopulationCount,
   getRoadDistanceBetweenBuildings,
   getRoadNetworks,
@@ -75,7 +75,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -197,8 +197,8 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterNet: waterProduction - waterNeed,
     servedResidences: getWaterServedResidenceCount(state),
     servedColonists: getServedColonistCount(state),
-    material: state.resources.construction,
-    materialNet: getNetMaterialPerTick(state),
+    material: state.resources.money,
+    materialNet: getNetMoneyPerTick(state),
     employed: employment.employed,
     unemployed: employment.unemployed,
     staffedFarms: countStaffedOperationalFarms(state),

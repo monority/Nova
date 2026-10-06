@@ -85,8 +85,8 @@ async function main() {
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     ok('load, app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.construction !== '100' || s.buildings !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
-    else ok(`initial stock visible: material ${s.construction}, ${JSON.stringify(s.tick)} ticks`);
+    if (s.tick !== '0' || s.money !== '100' || s.buildings !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
+    else ok(`initial stock visible: material ${s.money}, ${JSON.stringify(s.tick)} ticks`);
     await shot('01-initial.png');
 
     // Valid preview for an affordable cell.
@@ -100,32 +100,32 @@ async function main() {
     await page.mouse.click(pt1.x, pt1.y);
     await waitFor(async () => (await stats(page)).buildings === '1', 'building placed');
     s = await stats(page);
-    if (s.tick !== '1' || s.construction !== '75') fail(`after placement bad: ${JSON.stringify(s)}`);
-    else ok(`resource deduction 100 -> ${s.construction}, ${JSON.stringify(s)}`);
+    if (s.tick !== '1' || s.money !== '75') fail(`after placement bad: ${JSON.stringify(s)}`);
+    else ok(`resource deduction 100 -> ${s.money}, ${JSON.stringify(s)}`);
     await shot('03-after-construction-start.png');
 
     // STEP: construction progresses to operational (Step 10Y: two ticks).
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await stats(page)).tick === '2', 'step to tick 2');
     s = await stats(page);
-    if (s.operational !== '0') fail(`tick 2 should still be under construction: ${JSON.stringify(s)}`);
+    if (s.operational !== '0') fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await stats(page)).tick === '3', 'step to tick 3');
     s = await stats(page);
-    if (s.operational !== '1' || s.colonists !== '1' || s.construction !== '75') fail(`after STEP bad: ${JSON.stringify(s)}`);
-    else ok(`building operational, stock stable at ${s.construction}, ${JSON.stringify(s)}`);
+    if (s.operational !== '1' || s.colonists !== '1' || s.money !== '75') fail(`after STEP bad: ${JSON.stringify(s)}`);
+    else ok(`building operational, stock stable at ${s.money}, ${JSON.stringify(s)}`);
     await shot('04-operational.png');
 
     // Deplete the stock two more residences at a time.
     for (const cell of [{ x: 4, y: 4 }, { x: 2, y: 2 }, { x: 0, y: 0 }]) {
       const pt = await page.evaluate((c) => window.__nova.cellToScreen(c), cell);
       await page.mouse.click(pt.x, pt.y);
-      await waitFor(async () => (await stats(page)).construction !== s.construction, 'stock changed');
+      await waitFor(async () => (await stats(page)).money !== s.money, 'stock changed');
       s = await stats(page);
     }
     // After 4 residences: 100 - 4*25 = 0.
-    if (s.construction !== '0' || s.buildings !== '4') fail(`depletion bad: ${JSON.stringify(s)}`);
-    else ok(`stock depleted to ${s.construction} after ${s.buildings} buildings`);
+    if (s.money !== '0' || s.buildings !== '4') fail(`depletion bad: ${JSON.stringify(s)}`);
+    else ok(`stock depleted to ${s.money} after ${s.buildings} buildings`);
     await shot('05-low-resources.png');
 
     // Hover on a valid empty cell: preview must now be invalid.
@@ -138,21 +138,21 @@ async function main() {
     // Real click: rejected. No command dispatched (main.ts returns early on
     // invalid placement), so stepSimulation never runs and no tick advances.
     const buildingsBefore = (await stats(page)).buildings;
-    const stockBefore = (await stats(page)).construction;
+    const stockBefore = (await stats(page)).money;
     const tickBefore = (await stats(page)).tick;
     await page.mouse.click(pt2.x, pt2.y);
     await new Promise((r) => setTimeout(r, 500));
     s = await stats(page);
-    if (s.buildings !== buildingsBefore || s.construction !== stockBefore) fail(`rejection changed state: ${JSON.stringify(s)}`);
+    if (s.buildings !== buildingsBefore || s.money !== stockBefore) fail(`rejection changed state: ${JSON.stringify(s)}`);
     if (s.tick !== tickBefore) fail(`tick advanced during rejected placement: ${tickBefore} -> ${s.tick}`);
-    else ok(`rejected placement: buildings ${s.buildings}, stock ${s.construction}, tick ${s.tick} unchanged`);
+    else ok(`rejected placement: buildings ${s.buildings}, stock ${s.money}, tick ${s.tick} unchanged`);
 
     // PLAY/PAUSE: stock must not change spontaneously (no production yet).
-    const dontChange = s.construction;
+    const dontChange = s.money;
     await page.click('[data-testid="simulation-play"]');
     await waitFor(async () => Number((await stats(page)).tick) > Number(s.tick), 'play advances');
     s = await stats(page);
-    if (s.construction !== dontChange) fail(`stock changed during PLAY: ${dontChange} -> ${s.construction}`);
+    if (s.money !== dontChange) fail(`stock changed during PLAY: ${dontChange} -> ${s.money}`);
     else ok('resource stock stable during PLAY (no production system)');
     await page.click('[data-testid="simulation-pause"]');
     const pausedTick = Number((await stats(page)).tick);

@@ -14,6 +14,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  payMaintenance,
+
   applyCommand,
   assignJobs,
   countStaffedOperationalWells,
@@ -90,7 +92,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -179,7 +181,7 @@ interface Snap {
 const snapshot = (state: SimulationState): Snap => ({
   population: getPopulationCount(state),
   food: state.resources.food,
-  material: state.resources.construction,
+  material: state.resources.money,
   water: state.resources.water,
   staffedFarms: staffedFarms(state),
   staffedWorkshops: staffedWorkshops(state),
@@ -204,7 +206,7 @@ describe('§3 — actual Water causal loop', () => {
       'produceMaterial',
       'applyCommand',
       'progressPlaced*',
-      'upkeepBuildings',
+      'payMaintenance',
       'advanceTime',
     ])
     // Staffing lag: a Well assigned on tick N produces on tick N+1.
@@ -280,7 +282,7 @@ describe('§4 — bootstrap scenarios', () => {
     expect(getPopulationCount(current)).toBe(2)
   })
 
-  it('D — Well under construction: no operational Well, so the gate is off', () => {
+  it('D — Well under money: no operational Well, so the gate is off', () => {
     let state = waterWorld({ residences: 1, wells: 0, colonists: 0, food: 1000, water: 0 })
     const created = createBuilding(state, 'well', 20, 2, 2)
     state = created.state

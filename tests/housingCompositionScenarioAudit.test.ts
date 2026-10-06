@@ -126,7 +126,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 100,
       water: spec.water ?? 0,
     },
@@ -192,7 +192,7 @@ const read = (state: SimulationState) => {
     networks: getRoadNetworks(state).length,
     roads: Object.keys(state.roads).length,
     stage: getProgression(state).stage,
-    material: state.resources.construction,
+    material: state.resources.money,
     food: state.resources.food,
     water: state.resources.water,
   }
@@ -260,7 +260,7 @@ describe('1. controlled pair', () => {
         [...iterateBuildings(b)].map((x) => x.type).sort().join(','),
       samePopulation: Object.keys(a.colonists).length === Object.keys(b.colonists).length,
       sameResources:
-        a.resources.construction === b.resources.construction &&
+        a.resources.money === b.resources.money &&
         a.resources.food === b.resources.food &&
         a.resources.water === b.resources.water,
       sameTerrain: canonicalJson(a.config.world) === canonicalJson(b.config.world),
@@ -523,7 +523,7 @@ describe('2. player decision and recovery', () => {
     // Material 30 = the Residence (25) plus the 5 the road repair will need.
     const wrong = place(opening(30), farmNetworkCell, 3)
     const repairValidation = validateRoadsPlacement(
-      { ...wrong, resources: { ...wrong.resources, construction: 5 } },
+      { ...wrong, resources: { ...wrong.resources, money: 5 } },
       [{ x: 2, y: 1 }]
     )
 
@@ -681,7 +681,7 @@ describe('4. distinctiveness', () => {
         wells: [...iterateBuildings(state)].filter((b) => b.type === 'well').length,
         networks: getRoadNetworks(state).length,
         roads: Object.keys(state.roads).length,
-        material: state.resources.construction,
+        material: state.resources.money,
       }
     })
     const rows = [

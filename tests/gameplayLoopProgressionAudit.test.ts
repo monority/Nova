@@ -30,10 +30,9 @@ import {
   getFoodProductionPerTick,
   getHousingSummary,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getResourceStock,
@@ -73,7 +72,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -196,10 +195,10 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterProduction: getWaterProductionPerTick(state),
     waterNeed: getWaterNeedPerTick(state),
     waterNet: getWaterProductionPerTick(state) - getWaterNeedPerTick(state),
-    material: state.resources.construction,
-    materialProduction: getMaterialProductionPerTick(state),
-    materialUpkeep: getMaterialUpkeepPerTick(state),
-    materialNet: getNetMaterialPerTick(state),
+    material: state.resources.money,
+    materialProduction: getRevenuePerTick(state),
+    materialUpkeep: getMaintenanceDuePerTick(state),
+    materialNet: getNetMoneyPerTick(state),
     storageCapacity: getMaterialStorageCapacity(state),
     employed: employment.employed,
     unemployed: employment.unemployed,
@@ -283,12 +282,12 @@ const runPolicy = (
   for (const step of steps) {
     if (step.kind === 'roads') {
       let guard = 0
-      while (guard < 400 && state.resources.construction < step.cells.length * 5) {
+      while (guard < 400 && state.resources.money < step.cells.length * 5) {
         state = stepSimulation(state)
         track()
         guard += 1
       }
-      if (state.resources.construction < step.cells.length * 5) {
+      if (state.resources.money < step.cells.length * 5) {
         order.push({ label: stepLabel(step), tick: state.time.tick, skipped: true })
         continue
       }
@@ -366,7 +365,7 @@ describe('1-3. Actual gameplay loop, objectives and canonical milestones', { tim
       for (const step of steps) {
         if (step.kind === 'roads') {
           let guard = 0
-          while (guard < 400 && state.resources.construction < step.cells.length * 5) {
+          while (guard < 400 && state.resources.money < step.cells.length * 5) {
             state = stepSimulation(state)
             inspect()
             guard += 1
@@ -904,7 +903,7 @@ describe('7-10. Long term, stages and progression signals', { timeout: 30000 }, 
         state = stepSimulation(state)
         if (i >= 900) {
           traces.water.push(state.resources.water)
-          traces.material.push(state.resources.construction)
+          traces.material.push(state.resources.money)
           traces.food.push(state.resources.food)
           traces.population.push(getPopulationCount(state))
         }

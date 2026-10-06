@@ -88,7 +88,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -364,7 +364,7 @@ describe('5 — economic verification and recovery', () => {
     const next = advance(after, 1)
     expect(countStaffedOperationalFarms(next)).toBe(1)
     expect(countStaffedOperationalWorkshops(next)).toBe(1)
-    expect(next.resources.construction).toBeGreaterThan(after.resources.construction)
+    expect(next.resources.money).toBeGreaterThan(after.resources.money)
     // Food stops draining (1 Farm feeds 2 colonists exactly), unlike the
     // 0-Farm Workshop-heavy state.
     expect(next.resources.food).toBeGreaterThanOrEqual(2000)
@@ -386,11 +386,11 @@ describe('5 — economic verification and recovery', () => {
     const before = advance(state, 10)
     // Workshop-only income: both colonists start on Farms and earn nothing,
     // so the stock rests at 5 until the manual move creates a producer.
-    expect(before.resources.construction).toBe(5)
+    expect(before.resources.money).toBe(5)
     const manual = reassign(state, 'colonist-2', 'building-5')
     const after = advance(manual, 60)
     expect(countStaffedOperationalWorkshops(after)).toBe(1)
-    expect(after.resources.construction).toBeGreaterThanOrEqual(25)
+    expect(after.resources.money).toBeGreaterThanOrEqual(25)
     expect(after.resources.food).toBeGreaterThan(0)
   })
 })
@@ -523,6 +523,6 @@ describe('9 — Farm upkeep remains absent', () => {
     // income - 2 upkeep); the clamp binds from tick 9, then +2/tick
     // (income - upkeep) to 54 at tick 10.
     expect(countStaffedOperationalWorkshops(state)).toBe(2)
-    expect(after.resources.construction).toBe(54)
+    expect(after.resources.money).toBe(54)
   })
 })

@@ -25,10 +25,9 @@ import {
   getFoodProductionPerTick,
   getHousingSummary,
   getJobCapacity,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getResourceStock,
@@ -66,7 +65,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -200,10 +199,10 @@ const snapshot = (state: SimulationState): Snapshot => {
     waterProduction: getWaterProductionPerTick(state),
     waterNeed: getWaterNeedPerTick(state),
     waterNet: getWaterProductionPerTick(state) - getWaterNeedPerTick(state),
-    material: state.resources.construction,
-    materialProduction: getMaterialProductionPerTick(state),
-    materialUpkeep: getMaterialUpkeepPerTick(state),
-    materialNet: getNetMaterialPerTick(state),
+    material: state.resources.money,
+    materialProduction: getRevenuePerTick(state),
+    materialUpkeep: getMaintenanceDuePerTick(state),
+    materialNet: getNetMoneyPerTick(state),
     storageCapacity: getMaterialStorageCapacity(state),
     employed: employment.employed,
     unemployed: employment.unemployed,
@@ -291,12 +290,12 @@ const runOpening = (name: string, steps: readonly Step[], horizon: number): Open
   for (const step of steps) {
     if (step.kind === 'roads') {
       let guard = 0
-      while (guard < 400 && state.resources.construction < step.cells.length * 5) {
+      while (guard < 400 && state.resources.money < step.cells.length * 5) {
         state = stepSimulation(state)
         track()
         guard += 1
       }
-      if (state.resources.construction < step.cells.length * 5) {
+      if (state.resources.money < step.cells.length * 5) {
         executed.push({ label: `roads x${step.cells.length}`, tick: state.time.tick, skipped: true })
         continue
       }
@@ -793,7 +792,7 @@ describe('11-15. Scenario design contract', { timeout: 30000 }, () => {
         freePlay: snapshot(freePlay),
         lowMaterial: snapshot(lowMaterial),
         highMaterial: snapshot(highMaterial),
-        note: 'the three states differ only in `resources.construction`; the simulation rules are identical',
+        note: 'the three states differ only in `resources.money`; the simulation rules are identical',
       },
     })
     expect(dimensions).toHaveLength(10)

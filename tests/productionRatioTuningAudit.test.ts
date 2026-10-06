@@ -22,6 +22,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+  getCommerceRevenuePerTick,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -41,8 +44,7 @@ import {
   getBuildingRoadAccess,
   getFoodConsumptionPerTick,
   getJobCapacity,
-  getMaterialStorageCapacity,
-  getNetMaterialPerTick,
+  getNetMoneyPerTick,
   getPlacementAffordability,
   getPopulationCount,
   getProgression,
@@ -52,16 +54,12 @@ import {
   getWaterProductionPerTick,
   hashCanonicalState,
   hasOperationalWell,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   isOperationalWell,
   iterateBuildings,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
-  materialStoredProductionForTick,
-  produceMaterial,
-  creditMaterialIncome,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
   SAVE_VERSION,
@@ -71,7 +69,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   WATER_PER_COLONIST_PER_TICK,
   WATER_PER_WELL_PER_TICK,
   type BuildingType,
@@ -193,11 +191,10 @@ const shadowStepResult = (
         }
   )
   const staffed = assignJobs(populated)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, command)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, command)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   const released = releaseCompletedConstructionCrew(maintained)
   return {
     state: advanceTime(released),
@@ -266,7 +263,7 @@ const build = (fixture: Fixture): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: fixture.material ?? 500,
+      money: fixture.material ?? 500,
       food: fixture.food ?? 400,
       water: fixture.water ?? 200,
     },
@@ -377,13 +374,13 @@ const read = (state: SimulationState, rates: Rates): Reading => ({
   population: getPopulationCount(state),
   food: state.resources.food,
   water: state.resources.water,
-  material: state.resources.construction,
+  material: state.resources.money,
   staffedFarms: countStaffedFarms(state),
   staffedWells: countProductiveWells(state),
   staffedWorkshops: countStaffedWorkshops(state),
   foodNet: countStaffedFarms(state) * rates.farm - getFoodConsumptionPerTick(state),
   waterNet: countProductiveWells(state) * rates.well - getWaterNeedPerTick(state),
-  materialNet: getNetMaterialPerTick(state),
+  materialNet: getNetMoneyPerTick(state),
   storageCapacity: getMaterialStorageCapacity(state),
   stage: stageFor(state, rates),
 })
@@ -463,10 +460,10 @@ describe('1. Baseline contract', { timeout: 30000 }, () => {
       wellProduction: WATER_PER_WELL_PER_TICK,
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
-      workshopProduction: MATERIAL_PER_WORKER_PER_TICK,
-      workshopUpkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      workshopProduction: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-      initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+      initialMaterial: INITIAL_TREASURY,
       roadCost: 5,
       jobCapacityPerWorkplace: getJobCapacity(
         build({ residences: 1, types: ['farm'] })
@@ -784,7 +781,7 @@ describe('4. Qualitative headroom test', { timeout: 120000 }, () => {
     // Step 10CQ.1: the cap still clamps production to zero at the end of the
     // run — only the pre-cap buildup was production; everything past 25 is
     // employment income credited outside storage.
-    expect(materialStoredProductionForTick(current)).toBe(0)
+    expect(getCommerceRevenuePerTick(current)).toBe(0)
     expect(last.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
     expect(last.material).toBeGreaterThanOrEqual(20)
     expect(last.waterNet).toBe(-2)
@@ -1079,7 +1076,7 @@ const replayScenario = (
     if (step.kind === 'roads') {
       const cells = step.cells
       let guard = 0
-      while (guard < 300 && state.resources.construction < cells.length * 5) {
+      while (guard < 300 && state.resources.money < cells.length * 5) {
         state = shadowStep(state, rates)
         observe()
         guard += 1
@@ -1427,8 +1424,8 @@ describe('12. Design decision', () => {
     expect(WATER_PER_WELL_PER_TICK).toBe(2)
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(WATER_PER_COLONIST_PER_TICK).toBe(1)
-    expect(MATERIAL_PER_WORKER_PER_TICK).toBe(2)
-    expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
+    expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
+    expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
   })
 
   it('proves the temporary industrial phase is repeatable, not one-shot', () => {
@@ -1469,7 +1466,7 @@ describe('12. Design decision', () => {
     // Workshop cap (stored production is 0 at the final mark); the stock
     // above the cap is accumulated Step 10CQ income from the forced roles.
     expect(marks[3]!.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
-    expect(materialStoredProductionForTick(state)).toBe(0)
+    expect(getCommerceRevenuePerTick(state)).toBe(0)
   })
 })
 

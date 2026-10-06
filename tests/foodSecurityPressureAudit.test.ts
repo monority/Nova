@@ -28,6 +28,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  commerceRevenueForTick,
+
   assignJobs,
   countStaffedOperationalFarms,
   createBuilding,
@@ -37,8 +39,7 @@ import {
   getPopulationCount,
   hashCanonicalState,
   INITIAL_FOOD,
-  materialProductionForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   serializeCanonicalState,
   stepSimulation,
   updateNeeds,
@@ -74,7 +75,7 @@ const snapshot = (state: SimulationState): Snapshot => ({
   food: state.resources.food,
   foodNeed: updateNeeds(state),
   foodProduced: foodProductionForTick(state),
-  material: state.resources.construction,
+  material: state.resources.money,
   farms: countType(state, 'farm'),
   residences: countType(state, 'residence'),
   workshops: countType(state, 'workshop'),
@@ -551,11 +552,11 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     // Farm adjacent to the residence road cell (near), workshop far.
     const foodFirst = colony(2, 7)
     expect(foodProductionForTick(foodFirst)).toBe(2)
-    expect(materialProductionForTick(foodFirst)).toBe(0)
+    expect(commerceRevenueForTick(foodFirst)).toBe(0)
     // Workshop near, farm far: the mirror result.
     const materialFirst = colony(7, 2)
     expect(foodProductionForTick(materialFirst)).toBe(0)
-    expect(materialProductionForTick(materialFirst)).toBe(2)
+    expect(commerceRevenueForTick(materialFirst)).toBe(2)
     // Either way the colony has exactly one worker and two workplaces.
     expect(getPopulationCount(foodFirst)).toBe(1)
     expect(getPopulationCount(materialFirst)).toBe(1)
@@ -582,10 +583,10 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     expect(getPopulationCount(state)).toBe(2)
     expect(countStaffedOperationalFarms(state)).toBe(1)
     expect(foodProductionForTick(state)).toBe(2)
-    expect(materialProductionForTick(state)).toBe(2)
+    expect(commerceRevenueForTick(state)).toBe(2)
     // Food net is flat (2 produced, 2 eaten); the storage cap still throttles
     // Material while stock exceeds 25 per workshop.
-    expect(materialUpkeepDueForTick(state)).toBe(1)
+    expect(maintenanceDueForTick(state)).toBe(1)
   })
 
   it('equal 100-material budget: housing+food vs industry diverge', () => {
@@ -629,7 +630,7 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     // Workshop worker earns 2 income against 1 upkeep, netting +1/tick:
     // 40 + 8 = 48.
     expect(last.material).toBe(INITIAL_FOOD - 25 - 10 - 25 + 8)
-    expect(materialUpkeepDueForTick(industry)).toBe(1)
+    expect(maintenanceDueForTick(industry)).toBe(1)
 
     // The measured tradeoff: the housing colony fed two colonists on food it
     // could not produce and ended with no Material; the industry colony has a

@@ -38,9 +38,8 @@ import {
   hashCanonicalState,
   iterateBuildings,
   loadSave,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   SAVE_VERSION,
   SCENARIOS,
   serializeSave,
@@ -107,7 +106,7 @@ const build = (fixture: Fixture): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: fixture.material ?? 0,
+      money: fixture.material ?? 0,
       food: fixture.food ?? 200,
       water: fixture.water ?? 0,
     },
@@ -157,7 +156,7 @@ const read = (state: SimulationState): Reading => ({
   population: getPopulationCount(state),
   food: state.resources.food,
   water: state.resources.water,
-  material: state.resources.construction,
+  material: state.resources.money,
   stage: getProgression(state).stage,
   waterCapacity: getWaterProductionPerTick(state),
   staffedFarms: staffedCount(state, 'farm'),
@@ -227,11 +226,11 @@ describe('1. Economic baseline', { timeout: 30000 }, () => {
     const baseline = {
       foodPerFarm: FOOD_PER_FARM_PER_TICK,
       waterPerWell: WATER_PER_WELL_PER_TICK,
-      materialPerWorker: MATERIAL_PER_WORKER_PER_TICK,
-      workshopUpkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      materialPerWorker: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       foodPerColonist: FOOD_PER_COLONIST_PER_TICK,
       waterPerColonist: WATER_PER_COLONIST_PER_TICK,
-      materialStoragePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+      treasuryCap: 'uncapped',
       saveVersion: SAVE_VERSION,
     }
     audit('ECONOMIC_BASELINE', baseline)
@@ -242,8 +241,8 @@ describe('1. Economic baseline', { timeout: 30000 }, () => {
       workshopUpkeep: 1,
       foodPerColonist: 1,
       waterPerColonist: 1,
-      materialStoragePerWorkshop: 25,
-      saveVersion: 8,
+      treasuryCap: 'uncapped',
+      saveVersion: 9,
     })
   })
 })
@@ -271,7 +270,7 @@ describe('2. The existing industrial loop', { timeout: 60000 }, () => {
         waterDrained: before.water - after.water,
         materialGained: after.material - before.material,
         materialAtEnd: after.material,
-        storageCapacity: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP * 1,
+        maintenance: maintenanceDueForTick(burst.state),
         stageDuringBurst: after.stage,
         recoveryWaterAtStart: recoveredStart.water,
         recoveryWaterAtEnd: recovery.water,
@@ -281,25 +280,24 @@ describe('2. The existing industrial loop', { timeout: 60000 }, () => {
     })
     audit('INDUSTRIAL_LOOP', {
       rows,
-      maxWaterReserve: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP * 2,
+      maxWaterReserve: 50,
       reading:
-        'a 50-Water reserve buys 25 ticks of industry and 42 Material (the 25-per-Workshop storage cap plus +1/tick of Workshop income above it). The clamp discards stored production beyond the cap; the reserve does not refill at the balanced colony, so the burst is one-way until the player creates a Water surplus',
+        'a 50-Water reserve buys 25 ticks of industry while the treasury sits on its floor: every balanced colony here runs maintenance above revenue (workshops are outnumbered by residences, farms and wells), so the burst gains exactly 0 and the water never refills at the balanced colony — industry must be funded by growth, not by conversion',
     })
     for (const row of rows) {
       expect(row.industrialTicks).toBe(25)
       expect(row.waterDrained).toBe(50)
-      expect(row.materialGained).toBeGreaterThanOrEqual(24)
-      // expect(row.materialAtEnd).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+      expect(row.materialGained).toBe(0)
+      expect(row.materialAtEnd).toBe(0)
       expect(row.waterRefilled).toBe(0)
       expect(row.cyclesBeforeRefill).toBe(1)
     }
-    // The conversion is population-independent: one displaced Well worker
-    // drains exactly 2 Water per tick while the Workshop nets +3/tick below
-    // the cap (2 stored + 2 income − 1 upkeep) and +1/tick above it, so a
-    // 25-tick burst from stock 0 yields 42 Material.
+    // The deficit is population-independent: one displaced Well worker
+    // drains exactly 2 Water per tick while maintenance outruns revenue at
+    // every scale tested, so a 25-tick burst from stock 0 gains exactly 0.
     for (const row of rows) {
       expect(row.waterDrained / row.industrialTicks).toBe(WATER_PER_WELL_PER_TICK)
-      expect(row.materialGained).toBe(42)
+      expect(row.materialGained).toBe(0)
     }
   })
 
@@ -620,7 +618,7 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
       measured: read(state),
     }
     audit('SCENARIO_DECLARATION', declared)
-    expect(state.resources.construction).toBe(25)
+    expect(state.resources.money).toBe(25)
     expect(state.resources.water).toBe(51)
     expect(state.resources.food).toBe(50)
     expect(getPopulationCount(state)).toBe(2)
@@ -629,7 +627,7 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
     expect(getFoodProductionPerTick(state)).toBe(2)
     expect(getWaterProductionPerTick(state)).toBe(2)
     // 25 = the Workshop; 51 = 25 x 2 (the burst) + the Workshop's 1 Water.
-    expect(scenario().resources.material).toBe(25)
+    expect(scenario().resources.money).toBe(25)
     expect(scenario().resources.water).toBe(25 * 2 + 1)
   })
 
@@ -728,7 +726,7 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
         id: definition.id,
         stage: getProgression(state).stage,
         population: getPopulationCount(state),
-        material: state.resources.construction,
+        material: state.resources.money,
         water: state.resources.water,
         requirements: definition.objective.requirements.map((requirement) => requirement.kind),
       }

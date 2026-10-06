@@ -19,6 +19,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectRevenue,
+
   advanceConstruction,
   advanceTime,
   applyCommand,
@@ -38,8 +40,6 @@ import {
   hashCanonicalState,
   loadSave,
   produceFood,
-  produceMaterial,
-  creditMaterialIncome,
   produceWater,
   progressPlacedRoads,
   SAVE_VERSION,
@@ -48,7 +48,7 @@ import {
   stepSimulation,
   updateNeeds,
   updatePopulation,
-  upkeepBuildings,
+  payMaintenance,
   waterProductionForTick,
   WATER_PER_COLONIST_PER_TICK,
   type BuildingType,
@@ -109,7 +109,7 @@ const withStocks = (
 ): SimulationState => ({
   ...state,
   resources: {
-    construction: stocks.material ?? state.resources.construction,
+    money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
   },
@@ -236,11 +236,10 @@ const stepAudit = (state: SimulationState, model: AdmissionModel): SimulationSta
     need
   )
   const staffed = assignJobs(populated)
-  const materialized = produceMaterial(staffed)
-  const withIncome = creditMaterialIncome(materialized)
-  const commanded = applyCommand(withIncome, undefined)
+  const funded = collectRevenue(staffed)
+    const commanded = applyCommand(funded, undefined)
   const progressed = progressPlacedRoads(commanded.state, commanded)
-  const maintained = upkeepBuildings(progressed)
+  const maintained = payMaintenance(progressed)
   return advanceTime(maintained)
 }
 

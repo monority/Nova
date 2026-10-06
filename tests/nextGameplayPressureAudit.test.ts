@@ -13,7 +13,7 @@ import {
   getFarmWellAllocationSummary,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   getProgression,
   getResourceStock,
   getRoadNetworks,
@@ -34,7 +34,7 @@ const config: SimulationConfig = { world: { seed: 'nova-step10ca', width: 28, he
 
 const base = (): SimulationState => {
   const state = createInitialState(config)
-  return { ...state, resources: { construction: 1000, food: 1000, water: 1000 } }
+  return { ...state, resources: { money: 1000, food: 1000, water: 1000 } }
 }
 
 const op = (state: SimulationState, type: BuildingType, x: number, y: number): SimulationState => {
@@ -78,8 +78,8 @@ const metrics = (state: SimulationState) => {
     waterStock: getResourceStock(state).water,
     waterRate: getWaterProductionPerTick(state),
     waterNeed: getWaterNeedPerTick(state),
-    materialStock: getResourceStock(state).construction,
-    materialRate: getMaterialProductionPerTick(state),
+    materialStock: getResourceStock(state).money,
+    materialRate: getRevenuePerTick(state),
     networks: getRoadNetworks(state).length,
     accessible: Object.values(state.buildings).filter((building) => getBuildingRoadAccess(state, building.id).hasRoadAccess).length,
     stage: getProgression(state).stage,

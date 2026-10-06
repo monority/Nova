@@ -18,16 +18,19 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getCommerceRevenuePerTick,
+  getNetMoneyPerTick,
+  getTaxRevenuePerTick,
+
   assignJobs,
   createBuilding,
   createColonist,
   createInitialState,
   createRoads,
-  getMaterialStoredProductionPerTick,
-  getMaterialUpkeepPerTick,
+  getMaintenanceDuePerTick,
   getPlacementAffordability,
   getRoadsPlacementAffordability,
-  getWorkforceIncome,
+  getRevenuePerTick,
   hashCanonicalState,
   loadSave,
   ROAD_CONSTRUCTION_COST,
@@ -75,7 +78,7 @@ const operational = (
  * One staffed operational Workshop on a connected road: the ONLY employment
  * that earns Material income (product-model correction: Farm/Well workers
  * earn nothing). +2 income/tick, −1 upkeep/tick, and stored production is
- * isolated by the 08F cap below. This isolates the `getWorkforceIncome`
+ * isolated by the 08F cap below. This isolates the `getRevenuePerTick`
  * term of the affordability clause on the income source that exists.
  */
 const workshopWorkerFixture = (): SimulationState => {
@@ -103,19 +106,21 @@ const workshopWorkerFixture = (): SimulationState => {
 
 const withMaterial = (state: SimulationState, material: number): SimulationState => ({
   ...state,
-  resources: { ...state.resources, construction: material },
+  resources: { ...state.resources, money: material },
 })
 
 const roadCount = (state: SimulationState): number => Object.keys(state.roads).length
 
 describe('10CS — road expenditure affordability', () => {
-  it('R0 — the fixture isolates income: +2/tick from the Workshop worker, upkeep −1, stored production bounded by the cap', () => {
-    // Stock at the 25 cap keeps stored production at 0, so the remaining
-    // recurring flow is pure income (2) minus upkeep (1).
+  it('R0 — the fixture isolates revenue: +3/tick (1 tax + 2 commerce), maintenance 2', () => {
+    // Uncapped treasury: the recurring flow is revenue (3) minus
+    // maintenance (2) at any balance.
     const state = withMaterial(workshopWorkerFixture(), 25)
-    expect(getWorkforceIncome(state)).toBe(2)
-    expect(getMaterialStoredProductionPerTick(state)).toBe(0)
-    expect(getMaterialUpkeepPerTick(state)).toBe(1)
+    expect(getRevenuePerTick(state)).toBe(3)
+    expect(getTaxRevenuePerTick(state)).toBe(1)
+    expect(getCommerceRevenuePerTick(state)).toBe(2)
+    expect(getMaintenanceDuePerTick(state)).toBe(2)
+    expect(getNetMoneyPerTick(state)).toBe(1)
   })
 
   it('R1 — stock alone covers the road: valid, affordable, no inflow clause', () => {
@@ -124,8 +129,8 @@ describe('10CS — road expenditure affordability', () => {
     expect(affordability.placement.valid).toBe(true)
     expect(affordability.affordable).toBe(true)
     expect(affordability.coveredBySameTickInflow).toBe(false)
-    expect(affordability.materialRequired).toBe(ROAD_CONSTRUCTION_COST)
-    expect(affordability.materialAvailable).toBe(ROAD_CONSTRUCTION_COST)
+    expect(affordability.moneyRequired).toBe(ROAD_CONSTRUCTION_COST)
+    expect(affordability.moneyAvailable).toBe(ROAD_CONSTRUCTION_COST)
   })
 
   it('R2 — one below cost is completed by this tick income, then the command accepts', () => {
@@ -138,14 +143,14 @@ describe('10CS — road expenditure affordability', () => {
     const after = stepSimulation(before, { type: 'placeRoads', cells: [FREE_CELL] })
     expect(roadCount(after)).toBe(roadCount(before) + 1)
     // 4 stock + 2 stored + 2 income − 5 road − 1 upkeep = exactly 2 left.
-    expect(after.resources.construction).toBe(2)
+    expect(after.resources.money).toBe(2)
   })
 
   it('R3 — control: without the worker income the same stock is short', () => {
     const before = withMaterial(workshopWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
     const workerless: SimulationState = { ...before, colonists: {} }
     const affordability = getRoadsPlacementAffordability(workerless, [FREE_CELL])
-    expect(getWorkforceIncome(workerless)).toBe(0)
+    expect(getRevenuePerTick(workerless)).toBe(0)
     expect(affordability.coveredBySameTickInflow).toBe(false)
     expect(affordability.affordable).toBe(false)
   })
@@ -171,7 +176,7 @@ describe('10CS — road expenditure affordability', () => {
       withMaterial(workshopWorkerFixture(), required - 1),
       cells
     )
-    expect(covered.materialRequired).toBe(required)
+    expect(covered.moneyRequired).toBe(required)
     expect(covered.coveredBySameTickInflow).toBe(true)
     expect(covered.affordable).toBe(true)
 
@@ -195,7 +200,7 @@ describe('10CS — road expenditure affordability', () => {
   it('R7 — duplicate cells are priced once (normalized, like the domain)', () => {
     const state = withMaterial(workshopWorkerFixture(), 1000)
     const affordability = getRoadsPlacementAffordability(state, [FREE_CELL, FREE_CELL])
-    expect(affordability.materialRequired).toBe(ROAD_CONSTRUCTION_COST)
+    expect(affordability.moneyRequired).toBe(ROAD_CONSTRUCTION_COST)
   })
 
   it('R8 — a rejected road command spends nothing and creates no road', () => {
@@ -204,8 +209,8 @@ describe('10CS — road expenditure affordability', () => {
     expect(roadCount(after)).toBe(roadCount(before))
     // Same-tick inflow (2 stored + 2 income) is credited and upkeep (−1) is
     // paid independently of the rejected command; the road cost is not spent.
-    expect(after.resources.construction).toBe(3)
-    expect(after.resources.construction).toBeLessThan(ROAD_CONSTRUCTION_COST)
+    expect(after.resources.money).toBe(3)
+    expect(after.resources.money).toBeLessThan(ROAD_CONSTRUCTION_COST)
   })
 
   it('R9 — the query is a pure derivation: it never mutates the state', () => {

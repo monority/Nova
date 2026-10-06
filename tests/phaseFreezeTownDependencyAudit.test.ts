@@ -36,9 +36,8 @@ import {
   getWaterServedResidenceCount,
   hashCanonicalState,
   iterateBuildings,
-  MATERIAL_PER_WORKER_PER_TICK,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
-  MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   ROAD_CONSTRUCTION_COST,
   ROAD_CONSTRUCTION_TICKS,
   SAVE_VERSION,
@@ -120,7 +119,7 @@ const colony = (spec: ColonySpec, world = config()): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 100,
+      money: spec.material ?? 100,
       food: spec.food ?? 200,
       water: spec.water ?? 50,
     },
@@ -178,8 +177,8 @@ describe('1. freeze verification', () => {
     const frozen = {
       farmProduction: FOOD_PER_FARM_PER_TICK,
       wellProduction: WATER_PER_WELL_PER_TICK,
-      workshopProduction: MATERIAL_PER_WORKER_PER_TICK,
-      workshopUpkeep: MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK,
+      workshopProduction: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+      workshopUpkeep: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       foodConsumption: FOOD_PER_COLONIST_PER_TICK,
       waterConsumption: WATER_PER_COLONIST_PER_TICK,
       workshopStorage: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
@@ -445,7 +444,7 @@ describe('4. candidate audit', () => {
     // services, same network, different road budget.
     const shared = (() => {
       let state = createInitialState(config())
-      state = { ...state, resources: { ...state.resources, construction: 100, food: 200, water: 50 } }
+      state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 } }
       state = withRoad(state, 1, 1)
       state = withBuilding(state, 'residence', 1, 0)
       state = withBuilding(state, 'residence', 0, 1)
@@ -459,7 +458,7 @@ describe('4. candidate audit', () => {
     })()
     const dedicated = (() => {
       let state = createInitialState(config())
-      state = { ...state, resources: { ...state.resources, construction: 100, food: 200, water: 50 } }
+      state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 } }
       for (const x of [0, 1, 2]) state = withRoad(state, x, 1)
       state = withBuilding(state, 'residence', 0, 0)
       state = withBuilding(state, 'residence', 1, 0)
@@ -541,7 +540,7 @@ describe('4. candidate audit', () => {
     const layout = (secondResidence: { x: number; y: number }): SimulationState =>
       (() => {
         let state = createInitialState(config())
-        state = { ...state, resources: { ...state.resources, construction: 100, food: 200, water: 50 } }
+        state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 } }
         state = withRoad(state, 1, 1)
         state = withRoad(state, 3, 1)
         state = withBuilding(state, 'residence', 1, 0)
@@ -620,14 +619,14 @@ describe('5. content versus capability', () => {
     const rows = {
       lean: {
         population: Object.keys(lean.colonists).length,
-        material: lean.resources.construction,
+        material: lean.resources.money,
         food: lean.resources.food,
         water: lean.resources.water,
         buildings: Object.keys(lean.buildings).length,
       },
       rich: {
         population: Object.keys(rich.colonists).length,
-        material: rich.resources.construction,
+        material: rich.resources.money,
         food: rich.resources.food,
         water: rich.resources.water,
         buildings: Object.keys(rich.buildings).length,

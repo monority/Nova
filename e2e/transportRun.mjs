@@ -179,9 +179,9 @@ async function main() {
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     ok('load, app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.accessibleBuildings !== '0' || s.construction !== '100') {
+    if (s.tick !== '0' || s.accessibleBuildings !== '0' || s.money !== '100') {
       fail(`A fresh bad: ${JSON.stringify(s)}`);
-    } else ok(`A fresh: accessible ${s.accessibleBuildings}, material ${s.construction}`);
+    } else ok(`A fresh: accessible ${s.accessibleBuildings}, material ${s.money}`);
     await shot('01-fresh.png');
 
     // B. Residence -> operational root, accessible 1.
@@ -212,10 +212,10 @@ async function main() {
     await page.mouse.click(rejectedPt.x, rejectedPt.y);
     await new Promise((r) => setTimeout(r, 300));
     s = await stats(page);
-    if (s.buildings !== beforeRejection.buildings || s.construction !== beforeRejection.construction) {
+    if (s.buildings !== beforeRejection.buildings || s.money !== beforeRejection.money) {
       fail(`B1 zero-Water Workshop must be rejected: ${JSON.stringify(s)}`);
     } else {
-      ok(`B1 Workshop rejected with 0 Water ("${s.status}"): no building, material still ${s.construction}`);
+      ok(`B1 Workshop rejected with 0 Water ("${s.status}"): no building, material still ${s.money}`);
     }
 
     // B2. Road network + Well: the Water producer needed by Step 10AD.
@@ -226,7 +226,7 @@ async function main() {
     await selectPalette(page, 'build-road', 'Road selected');
     for (const cell of ROADS) await placeRoads(page, cell);
     s = await stepUntil(page, (v) => v.operationalRoads === String(ROADS.length), 'roads operational', 10);
-    ok(`B2 roads operational: ${s.operationalRoads}, material ${s.construction}`);
+    ok(`B2 roads operational: ${s.operationalRoads}, material ${s.money}`);
     await selectPalette(page, 'build-well', 'Well selected');
     await placeAt(page, WELL);
     s = await stepUntil(page, (v) => v.hasOperationalWell === 'true', 'well operational', 10);
@@ -246,7 +246,7 @@ async function main() {
     s = await stats(page);
     if (s.workshops !== '1' || !s.status.includes('under construction')) {
       fail(`C Workshop must be accepted once Water exists: ${JSON.stringify(s)}`);
-    } else ok(`C Workshop accepted with Water ${s.water} available, material ${s.construction}`);
+    } else ok(`C Workshop accepted with Water ${s.water} available, material ${s.money}`);
     await stepUntil(page, (v) => v.operational === '3', 'workshop operational', 10);
     s = await stats(page);
     if (s.accessibleBuildings !== '2') {
@@ -263,14 +263,14 @@ async function main() {
       'workshop staffed',
       10
     );
-    ok(`D Workshop staffed (production ${s.materialProduction}, upkeep ${s.materialUpkeep}, material ${s.construction})`);
+    ok(`D Workshop staffed (production ${s.materialProduction}, upkeep ${s.materialUpkeep}, material ${s.money})`);
     s = await stepUntil(
       page,
-      (v) => Number(v.construction) + Number(v.storedProduction) >= 25,
+      (v) => Number(v.money) + Number(v.storedProduction) >= 25,
       'labour-financed construction crest',
       60
     );
-    ok(`D labour funded the Farm: rest ${s.construction} + stored ${s.storedProduction}`);
+    ok(`D labour funded the Farm: rest ${s.money} + stored ${s.storedProduction}`);
     await selectPalette(page, 'build-farm', 'Farm selected');
     await placeAt(page, FARM);
     s = await stepUntil(page, (v) => v.operational === '4', 'farm operational', 10);

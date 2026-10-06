@@ -12,7 +12,7 @@ import {
   createInitialState,
   createRoads,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   getProgression,
   getResourceStock,
   getReassignmentOptions,
@@ -39,7 +39,7 @@ const op = (state: SimulationState, type: BuildingType, x: number, y: number): S
 
 const town = (types: readonly BuildingType[], water = 20): SimulationState => {
   let state = createInitialState(config)
-  state = { ...state, resources: { construction: 1000, food: 1000, water } }
+  state = { ...state, resources: { money: 1000, food: 1000, water } }
   for (let index = 0; index < 10; index += 1) state = op(state, 'residence', 1 + index * 2, 0)
   const created = createRoads(state, Array.from({ length: 25 }, (_, x) => ({ x, y: 1 })))
   state = created.state
@@ -65,8 +65,8 @@ const metrics = (state: SimulationState) => ({
   waterRate: getWaterProductionPerTick(state),
   waterNeed: getWaterNeedPerTick(state),
   waterHeadroom: getWaterProductionPerTick(state) - getWaterNeedPerTick(state),
-  material: getResourceStock(state).construction,
-  materialRate: getMaterialProductionPerTick(state),
+  material: getResourceStock(state).money,
+  materialRate: getRevenuePerTick(state),
   stage: getProgression(state).stage,
   townReview: getTownCapabilityStatus(state).available,
 })

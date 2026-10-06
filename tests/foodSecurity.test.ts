@@ -486,7 +486,7 @@ describe('tick ordering', () => {
     const after = runFullChain(state)
     // Famine removed the colonist before produceMaterial; stock stays 0.
     expect(getPopulationCount(after)).toBe(0)
-    expect(after.resources.construction).toBe(100)
+    expect(after.resources.money).toBe(100)
   })
 })
 

@@ -25,20 +25,23 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+  TAX_PER_INHABITANT_PER_TICK,
+
   createInitialState,
   createScenarioState,
   findScenario,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
   getBuildingDefinition,
+  getBuildingInspection,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
   getFoodTicksRemaining,
-  getMaterialProductionPerTick,
-  getMaterialStorageCapacity,
-  getMaterialStoredProductionPerTick,
-  getMaterialUpkeepPerTick,
-  getNetMaterialPerTick,
+  getRevenuePerTick,
+  getMaintenanceDuePerTick,
+  getNetMoneyPerTick,
   getObjectiveStatus,
   getPlacementAffordability,
   getPopulationCount,
@@ -47,13 +50,12 @@ import {
   getWaterProductionPerTick,
   getWaterSupplyStatus,
   hashCanonicalState,
-  INITIAL_CONSTRUCTION_MATERIAL,
+  INITIAL_TREASURY,
   INITIAL_FOOD,
   INITIAL_WATER,
   isFoodSupplySustainable,
   iterateBuildings,
   loadSave,
-  MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
   SAVE_VERSION,
   SCENARIOS,
   serializeSave,
@@ -138,7 +140,7 @@ const runScenario = (
       case 'roads': {
         const cost = step.cells.length * 5
         let guard = 0
-        while (guard < 300 && state.resources.construction < cost) {
+        while (guard < 300 && state.resources.money < cost) {
           tick(1)
           guard += 1
         }
@@ -192,7 +194,7 @@ const runScenario = (
   return {
     population: getPopulationCount(state),
     food: state.resources.food,
-    material: state.resources.construction,
+    material: state.resources.money,
     water: state.resources.water,
     stage: getProgression(state).stage,
     objective: status.state,
@@ -270,7 +272,7 @@ describe('1. Catalogue judged by state transitions', { timeout: 300000 }, () => 
         start: {
           stage: getProgression(start).stage,
           population: getPopulationCount(start),
-          material: start.resources.construction,
+          material: start.resources.money,
           food: start.resources.food,
           water: start.resources.water,
           capacity: getWaterProductionPerTick(start),
@@ -372,7 +374,7 @@ describe('2. Distinctness matrix', { timeout: 60000 }, () => {
 
     const measured = SCENARIOS.map((definition) => {
       const start = createScenarioState(config, definition)
-      const stock = start.resources.construction
+      const stock = start.resources.money
       const capacity = getWaterProductionPerTick(start)
       const population = getPopulationCount(start)
       const farms = [...iterateBuildings(start)].filter((b) => b.type === 'farm').length
@@ -550,62 +552,67 @@ describe('3-4. Objective and progression readability', { timeout: 60000 }, () =>
 // ---------------------------------------------------------------------------
 
 describe('5-6. Resource and industrial semantics', { timeout: 60000 }, () => {
-  it('keeps Material stock, storage, production, upkeep and affordability apart', () => {
+  it('keeps treasury, revenue, maintenance and affordability apart', () => {
     const definition = scenarioOf('industrial-expansion')
     let state = createScenarioState(config, definition)
     const beforeWorkshop = {
-      stock: state.resources.construction,
-      storage: getMaterialStorageCapacity(state),
-      production: getMaterialProductionPerTick(state),
-      upkeep: getMaterialUpkeepPerTick(state),
+      stock: state.resources.money,
+      revenue: getRevenuePerTick(state),
+      maintenance: getMaintenanceDuePerTick(state),
+      net: getNetMoneyPerTick(state),
       affordability: getPlacementAffordability(state, { x: 2, y: 2 }, 'workshop').affordable,
     }
     state = stepSimulation(state, { type: 'placeBuilding', x: 2, y: 2, buildingType: 'workshop' })
     for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     const vacant = {
-      stock: state.resources.construction,
-      storage: getMaterialStorageCapacity(state),
-      production: getMaterialProductionPerTick(state),
-      stored: getMaterialStoredProductionPerTick(state),
-      upkeep: getMaterialUpkeepPerTick(state),
-      net: getNetMaterialPerTick(state),
+      stock: state.resources.money,
+      revenue: getRevenuePerTick(state),
+      maintenance: getMaintenanceDuePerTick(state),
+      net: getNetMoneyPerTick(state),
     }
-    // Staff it: production becomes real, the cap discards the overflow.
+    // Staff it: revenue does not move — employment mints nothing. Commerce
+    // flows through the connected Workshop whether or not it is staffed.
     const workshopId = [...iterateBuildings(state)].find((b) => b.type === 'workshop')?.id
     const wellId = [...iterateBuildings(state)].find((b) => b.type === 'well')?.id
     const worker = Object.values(state.colonists).find((c) => c.workplaceId === wellId)
     if (workshopId === undefined || worker === undefined) throw new Error('10at: workshop setup')
     state = stepSimulation(state, { type: 'reassignColonist', colonistId: worker.id, workplaceId: workshopId })
     const staffed = {
-      stock: state.resources.construction,
-      storage: getMaterialStorageCapacity(state),
-      production: getMaterialProductionPerTick(state),
-      stored: getMaterialStoredProductionPerTick(state),
-      upkeep: getMaterialUpkeepPerTick(state),
-      net: getNetMaterialPerTick(state),
+      stock: state.resources.money,
+      revenue: getRevenuePerTick(state),
+      maintenance: getMaintenanceDuePerTick(state),
+      net: getNetMoneyPerTick(state),
+      contribution: getBuildingInspection(state, workshopId)?.revenueContribution,
     }
-    audit('MATERIAL_SEMANTICS', {
+    audit('MONEY_SEMANTICS', {
       beforeWorkshop,
       vacant,
       staffed,
       uiWording: {
-        row: 'Material: <stock> · storage 25 · full (the cap is shown only when a producer exists)',
+        row: 'Money: <stock> · +revenue revenue −maintenance maintenance',
         inspection:
-          'Material production — producing +2/tick (staffed) · jobs 1/1 · upkeep 1/tick · storage 25',
+          'Commerce — connected +2/tick · jobs 1/1 · maintenance 1/tick',
       },
     })
-    // The stock is canonical; the cap bounds production, not the stock.
+    // The treasury is canonical and uncapped; revenue and maintenance are
+    // separate flows, affordability is a third predicate.
     expect(beforeWorkshop.stock).toBe(100)
-    expect(beforeWorkshop.storage).toBe(0)
-    expect(vacant.storage).toBe(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
-    expect(vacant.production).toBe(0)
-    expect(vacant.net).toBe(0)
-    expect(staffed.production).toBe(2)
-    expect(staffed.upkeep).toBe(1)
-    expect(staffed.net).toBe(1)
-    // Above the cap production is discarded: gross 2 but nothing stored.
-    expect(staffed.stock).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
-    expect(staffed.stored).toBe(0)
+    expect(beforeWorkshop.revenue).toBe(2)
+    expect(beforeWorkshop.maintenance).toBe(4)
+    expect(beforeWorkshop.net).toBe(-2)
+    expect(beforeWorkshop.affordability).toBe(true)
+    // t1: 100 + 2 − 25 − 4 = 73; t2: 73 + 2 − 4 = 71;
+    // t3 (operational): 71 + 4 − 5 = 70; t4: 70 + 4 − 5 = 69.
+    expect(vacant.stock).toBe(69)
+    expect(vacant.revenue).toBe(4)
+    expect(vacant.maintenance).toBe(5)
+    expect(vacant.net).toBe(-1)
+    // t5 (reassign tick): 69 + 4 − 5 = 68; staffing changes nothing.
+    expect(staffed.stock).toBe(68)
+    expect(staffed.revenue).toBe(4)
+    expect(staffed.maintenance).toBe(5)
+    expect(staffed.net).toBe(-1)
+    expect(staffed.contribution).toBe(2)
   })
 
   it('keeps Water capacity, balance, reserve, service and shortage apart', () => {
@@ -692,10 +699,10 @@ describe('5-6. Resource and industrial semantics', { timeout: 60000 }, () => {
       const workshop = getBuildingDefinition('workshop')
       return {
         id,
-        material: state.resources.construction,
+        money: state.resources.money,
         water: state.resources.water,
-        storage: getMaterialStorageCapacity(state),
-        workshopCost: `${workshop.constructionCost} Material + ${workshop.constructionWaterCost} Water`,
+        revenue: getRevenuePerTick(state),
+        workshopCost: `${workshop.constructionCost} Money + ${workshop.constructionWaterCost} Water`,
         objective: definition.objective.label,
         requirements: definition.objective.requirements.map((r) => r.kind),
         canAffordWorkshop: getPlacementAffordability(state, { x: 4, y: 2 }, 'workshop').affordable,
@@ -705,12 +712,14 @@ describe('5-6. Resource and industrial semantics', { timeout: 60000 }, () => {
     audit('INDUSTRIAL_READABILITY', {
       table,
       reading:
-        'Industrial expansion starts ABOVE the storage cap (100 > 25) so its Workshop cannot add to the stores; Water reserve industry starts BELOW it (25 = the Workshop) so the same Workshop manufactures the next building',
+        'Industrial expansion starts with a full treasury (100) and no commerce yet, so its Workshop must be connected before it pays; Water reserve industry starts with exactly one Workshop (25) so treasury growth funds the next building',
     })
     const ie = table[0]!
     const wri = table[1]!
-    expect(ie.material).toBeGreaterThan(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
-    expect(wri.material).toBeLessThanOrEqual(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP)
+    expect(ie.money).toBe(100)
+    expect(ie.revenue).toBe(2)
+    expect(wri.money).toBe(25)
+    expect(wri.revenue).toBe(2)
     expect(ie.requirements).toHaveLength(2)
     expect(wri.requirements).toHaveLength(3)
   })
@@ -732,11 +741,11 @@ describe('7-8. Opening discoverability and failure/recovery', { timeout: 60000 }
     const discoverability = {
       palette,
       roadCost,
-      initialMaterial: INITIAL_CONSTRUCTION_MATERIAL,
+      initialMaterial: INITIAL_TREASURY,
       initialFood: INITIAL_FOOD,
       initialWater: INITIAL_WATER,
       minimumVillage: 2 * 25 + 25 + 25 + roadCost,
-      gap: 2 * 25 + 25 + 25 + roadCost - INITIAL_CONSTRUCTION_MATERIAL,
+      gap: 2 * 25 + 25 + 25 + roadCost - INITIAL_TREASURY,
       affordabilityFeedback: getPlacementAffordability(opening, { x: 1, y: 0 }, 'residence'),
       workshopNeedsWater: getBuildingDefinition('workshop').constructionWaterCost,
     }
@@ -761,7 +770,7 @@ describe('7-8. Opening discoverability and failure/recovery', { timeout: 60000 }
     // 3. Inaccessible workforce: a Workplace whose Residence cannot reach it.
     const partitioned = createScenarioState(config, scenarioOf('water-constraint'))
     const options = getReassignmentOptions(partitioned, Object.keys(partitioned.colonists).sort()[0]!)
-    // 4. Stalled construction: the 10AS opening case — four purchases leave 20
+    // 4. Stalled money: the 10AS opening case — four purchases leave 20
     // Material and the Well costs 25.
     let stalledState = createInitialState(config)
     for (const step of [
@@ -770,7 +779,7 @@ describe('7-8. Opening discoverability and failure/recovery', { timeout: 60000 }
       { type: 'residence' as const, x: 1, y: 2 },
     ]) {
       let guard = 0
-      while (guard < 40 && stalledState.resources.construction < 25) {
+      while (guard < 40 && stalledState.resources.money < 25) {
         stalledState = stepSimulation(stalledState)
         guard += 1
       }
@@ -779,7 +788,7 @@ describe('7-8. Opening discoverability and failure/recovery', { timeout: 60000 }
     }
     const stalledRoad = stepSimulation(stalledState, { type: 'placeRoads', cells: [{ x: 1, y: 1 }] })
     const stalledProbe = getPlacementAffordability(stalledRoad, { x: 2, y: 1 }, 'well')
-    const stalledMaterial = stalledRoad.resources.construction
+    const stalledMaterial = stalledRoad.resources.money
     // 5. Industrial depletion: the reserve is spent, the flow stops, recovery is possible.
     const wri = createScenarioState(config, scenarioOf('water-reserve-industry'))
     let depleted = wri
@@ -811,7 +820,7 @@ describe('7-8. Opening discoverability and failure/recovery', { timeout: 60000 }
       },
       stalledConstruction: {
         material: stalledMaterial,
-        required: stalledProbe.materialRequired,
+        required: stalledProbe.moneyRequired,
         affordable: stalledProbe.affordable,
         reason: stalledProbe.placement.valid ? null : stalledProbe.placement.reason,
       },
@@ -878,12 +887,14 @@ describe('11. Architectural checkpoint', () => {
           JSON.stringify(['buildings', 'colonists', 'description', 'id', 'name', 'objective', 'resources', 'roads'])
       ),
       scenarioHasNoHiddenResource: SCENARIOS.every(
-        (scenario) => Object.keys(scenario.resources).sort().join(',') === 'food,material,water'
+        (scenario) => Object.keys(scenario.resources).sort().join(',') === 'food,money,water'
       ),
       economicConstants: {
         foodPerFarm: FOOD_PER_FARM_PER_TICK,
         waterPerWell: WATER_PER_WELL_PER_TICK,
-        storagePerWorkshop: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP,
+        taxPerInhabitant: TAX_PER_INHABITANT_PER_TICK,
+        commercePerWorkshop: COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+        maintenancePerBuilding: MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
       },
     }
     audit('ARCHITECTURE_CHECKPOINT', invariants)

@@ -17,7 +17,7 @@ import {
   createRoads,
   getFoodConsumptionPerTick,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   getPopulationCount,
   getProgression,
   getRoadDistanceBetweenBuildings,
@@ -76,7 +76,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   state = {
     ...state,
     resources: {
-      construction: spec.material ?? 500,
+      money: spec.material ?? 500,
       food: spec.food ?? 1000,
       water: spec.water ?? 50,
     },
@@ -175,7 +175,7 @@ describe('Town audit — workforce and industrialization', { timeout: 30000 }, (
       return {
         population,
         staffedWorkshops: staffed(state, 'workshop'),
-        materialProduction: getMaterialProductionPerTick(state),
+        materialProduction: getRevenuePerTick(state),
         foodNet: getFoodProductionPerTick(state) - getFoodConsumptionPerTick(state),
         waterCapacity: getWaterProductionPerTick(state),
         waterNeed: Object.keys(state.colonists).length,

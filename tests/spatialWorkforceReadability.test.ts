@@ -108,7 +108,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   let state = createInitialState(config())
   state = {
     ...state,
-    resources: { construction: 200, food: 200, water: spec.water ?? 0 },
+    resources: { money: 200, food: 200, water: spec.water ?? 0 },
   }
   for (const [x, y] of spec.residences) {
     state = withBuilding(state, 'residence', x, y)
@@ -473,7 +473,7 @@ describe('3. placement spatial preview', () => {
     )
     // Shuffled road insertion order in an otherwise identical world.
     let shuffled = createInitialState(config())
-    shuffled = { ...shuffled, resources: { ...shuffled.resources, construction: 200 } }
+    shuffled = { ...shuffled, resources: { ...shuffled.resources, money: 200 } }
     shuffled = withBuilding(shuffled, 'residence', 1, 0)
     shuffled = withBuilding(shuffled, 'farm', 1, 2)
     shuffled = withBuilding(shuffled, 'well', 3, 2)

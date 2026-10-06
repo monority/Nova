@@ -13,7 +13,7 @@ import {
   createRoads,
   getBuildingRoadAccess,
   getFoodProductionPerTick,
-  getMaterialProductionPerTick,
+  getRevenuePerTick,
   getProgression,
   getResourceStock,
   getRoadNetworks,
@@ -41,7 +41,7 @@ const op = (state: SimulationState, type: BuildingType, x: number, y: number): S
 
 const fixture = (workers: number, types: readonly BuildingType[], split = false, water = 100): SimulationState => {
   let state = createInitialState(config)
-  state = { ...state, resources: { construction: 1000, food: 1000, water } }
+  state = { ...state, resources: { money: 1000, food: 1000, water } }
   for (let index = 0; index < workers; index += 1) state = op(state, 'residence', 1 + index * 2, 0)
   const cells = Array.from({ length: 29 }, (_, x) => ({ x, y: 1 })).filter(({ x }) => !(split && x === 8))
   const created = createRoads(state, cells)
@@ -68,8 +68,8 @@ const metrics = (state: SimulationState) => ({
   waterRate: getWaterProductionPerTick(state),
   waterNeed: getWaterNeedPerTick(state),
   waterStock: getResourceStock(state).water,
-  materialRate: getMaterialProductionPerTick(state),
-  materialStock: getResourceStock(state).construction,
+  materialRate: getRevenuePerTick(state),
+  materialStock: getResourceStock(state).money,
   networks: getRoadNetworks(state).length,
   accessible: Object.values(state.buildings).filter((building) => getBuildingRoadAccess(state, building.id).hasRoadAccess).length,
   stage: getProgression(state).stage,

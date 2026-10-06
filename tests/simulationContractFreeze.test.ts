@@ -31,7 +31,7 @@ const config: SimulationConfig = { world: { seed: 'nova-step10bz', width: 24, he
 
 const base = (): SimulationState => {
   const state = createInitialState(config)
-  return { ...state, resources: { construction: 1000, food: 1000, water: 1000 } }
+  return { ...state, resources: { money: 1000, food: 1000, water: 1000 } }
 }
 
 const op = (state: SimulationState, type: BuildingType, x: number, y: number): SimulationState => {
@@ -108,7 +108,7 @@ describe('Step 10BZ — simulation contract freeze', () => {
     expect(summary.waterHeadroom).toBe(-1)
     expect(getResourceStock(state).food).toBe(1000)
     expect(getResourceStock(state).water).toBe(1000)
-    expect(getResourceStock(state).construction).toBe(1000)
+    expect(getResourceStock(state).money).toBe(1000)
   })
 
   it('freezes invalid command boundaries and no-op behavior', () => {

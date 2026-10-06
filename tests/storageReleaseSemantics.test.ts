@@ -1,3 +1,10 @@
+/**
+ * Step001 — storage allocate/release semantics (food and water only).
+ *
+ * The hub buffers physical surpluses with fixed priorities; money is never
+ * stored. Allocation and release are pure and deterministic.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,124 +13,68 @@ import {
   loadSave,
   serializeSave,
   stepSimulation,
-  type SimulationState,
 } from '@/index'
 import {
-  PROTECTED_MATERIAL_RESERVE,
   allocateToStorage,
-  releaseProtectedMaterialReserve,
+  createInitialStorageHub,
+  releaseFromStorage,
 } from '@/domain/storage/storage.js'
 import { testConfig } from './helpers.js'
 
-const withStorageMaterial = (state: SimulationState, material: number): SimulationState => ({
-  ...state,
-  storage: { ...state.storage, material },
-})
-
-const withMainMaterial = (state: SimulationState, material: number): SimulationState => ({
-  ...state,
-  resources: { ...state.resources, construction: material },
-})
-
 const placeResidence = { type: 'placeBuilding' as const, x: 6, y: 6, buildingType: 'residence' as const }
 
-describe('Step 10BJ — protected Material release semantics', () => {
-  it('uses a derived 15-unit protected floor and never releases without a deficit', () => {
-    const storage = { ...createInitialState(testConfig).storage, material: 40 }
-    const result = releaseProtectedMaterialReserve(storage, 25, 25)
-    expect(PROTECTED_MATERIAL_RESERVE).toBe(15)
-    expect(result.releaseAmount).toBe(0)
-    expect(result.operationalMaterial).toBe(25)
-    expect(result.storage.material).toBe(40)
+describe('Step001 — storage allocate/release semantics', () => {
+  it('allocates food first, up to capacity', () => {
+    const result = allocateToStorage(createInitialStorageHub(), 100, 0)
+    expect(result.storage.food).toBe(50)
+    expect(result.remainingFood).toBe(50)
+    expect(result.storage.water).toBe(0)
   })
 
-  it('releases only the excess above the floor and only the deficit', () => {
-    const storage = { ...createInitialState(testConfig).storage, material: 30 }
-    const result = releaseProtectedMaterialReserve(storage, 0, 25)
-    expect(result.releaseAmount).toBe(15)
-    expect(result.operationalMaterial).toBe(15)
-    expect(result.storage.material).toBe(15)
+  it('allocates water after food headroom', () => {
+    const result = allocateToStorage(createInitialStorageHub(), 10, 100)
+    expect(result.storage.food).toBe(10)
+    expect(result.remainingFood).toBe(0)
+    expect(result.storage.water).toBe(30)
+    expect(result.remainingWater).toBe(70)
   })
 
-  it('preserves exact floor, empty, and full-reserve boundaries', () => {
-    const empty = releaseProtectedMaterialReserve(createInitialState(testConfig).storage, 0, 25)
-    expect(empty.releaseAmount).toBe(0)
-    const floor = releaseProtectedMaterialReserve(
-      { ...createInitialState(testConfig).storage, material: 15 }, 0, 25
-    )
-    expect(floor.releaseAmount).toBe(0)
-    const full = releaseProtectedMaterialReserve(
-      { ...createInitialState(testConfig).storage, material: 40 }, 0, 25
-    )
-    expect(full.releaseAmount).toBe(25)
-    expect(full.storage.material).toBe(15)
+  it('releases food before water, capped at the shortfall', () => {
+    const hub = { ...createInitialStorageHub(), food: 20, water: 30 }
+    const result = releaseFromStorage(hub, 8, 40)
+    expect(result.storage.food).toBe(12)
+    expect(result.unmetFood).toBe(0)
+    expect(result.storage.water).toBe(0)
+    expect(result.unmetWater).toBe(10)
   })
 
-  it('releases pre-existing reserve before a building command, then construction spends operational stock', () => {
-    const initial = withMainMaterial(withStorageMaterial(createInitialState(testConfig), 40), 0)
+  it('empty hub releases nothing', () => {
+    const result = releaseFromStorage(createInitialStorageHub(), 5, 5)
+    expect(result.unmetFood).toBe(5)
+    expect(result.unmetWater).toBe(5)
+  })
+
+  it('hub state is orthogonal to construction: a build touches money only', () => {
+    const initial = createInitialState(testConfig)
     const result = stepSimulation(initial, placeResidence)
-    expect(result.resources.construction).toBe(0)
-    expect(result.storage.material).toBe(15)
+    expect(result.storage.food).toBe(0)
+    expect(result.storage.water).toBe(0)
+    expect(result.resources.money).toBe(75)
     expect(result.buildings['building-1']?.status).toBe('underConstruction')
   })
 
-  it('does not release when the protected floor blocks the request', () => {
-    const initial = withMainMaterial(withStorageMaterial(createInitialState(testConfig), 15), 0)
-    const result = stepSimulation(initial, placeResidence)
-    expect(result.resources.construction).toBe(0)
-    expect(result.storage.material).toBe(15)
-    expect(result.buildings['building-1']).toBeUndefined()
-  })
-
-  it('does not release for sufficient main stock', () => {
+  it('save/load and hash preserve hub state', () => {
     const initial = {
-      ...withStorageMaterial(createInitialState(testConfig), 40),
-      resources: { ...createInitialState(testConfig).resources, construction: 25 },
+      ...createInitialState(testConfig),
+      storage: { ...createInitialState(testConfig).storage, food: 12, water: 7 },
     }
-    const result = stepSimulation(initial, placeResidence)
-    expect(result.storage.material).toBe(40)
-    expect(result.resources.construction).toBe(0)
-  })
-
-  it('does not release for invalid construction commands', () => {
-    const initial = withMainMaterial(withStorageMaterial(createInitialState(testConfig), 40), 0)
-    const result = stepSimulation(initial, { ...placeResidence, x: 99, y: 99 })
-    expect(result.storage.material).toBe(40)
-    expect(result.resources.construction).toBe(0)
-  })
-
-  it('does not collapse newly produced overflow into same-tick release', () => {
-    const initial = withMainMaterial(withStorageMaterial(createInitialState(testConfig), 39), 0)
-    const result = stepSimulation(initial, placeResidence)
-    expect(result.storage.material).toBe(15)
-    expect(result.resources.construction).toBe(24)
-    expect(result.buildings['building-1']).toBeUndefined()
-  })
-
-  it('does not ping-pong when the released operational amount is not consumed', () => {
-    const initial = withStorageMaterial(createInitialState(testConfig), 40)
-    const first = releaseProtectedMaterialReserve(initial.storage, 0, 10)
-    const second = releaseProtectedMaterialReserve(first.storage, first.operationalMaterial, 10)
-    expect(first.releaseAmount).toBe(10)
-    expect(second.releaseAmount).toBe(0)
-    expect(second.storage.material).toBe(30)
-  })
-
-  it('save/load and hash preserve released state without persisting transient calculations', () => {
-    const initial = withStorageMaterial(createInitialState(testConfig), 40)
     const restored = loadSave(serializeSave(initial))
     expect(restored.storage).toEqual(initial.storage)
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(initial))
-    const changed = withStorageMaterial(initial, 39)
+    const changed = {
+      ...initial,
+      storage: { ...initial.storage, food: 11 },
+    }
     expect(hashCanonicalState(changed)).not.toBe(hashCanonicalState(initial))
-  })
-
-  it('retains pure overflow bounds and resource independence', () => {
-    const base = createInitialState(testConfig).storage
-    const result = allocateToStorage(base, 0, 0, 100)
-    expect(result.storage.material).toBe(40)
-    expect(result.remainingMaterial).toBe(60)
-    expect(result.storage.food).toBe(0)
-    expect(result.storage.water).toBe(0)
   })
 })

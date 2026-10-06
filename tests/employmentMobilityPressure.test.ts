@@ -18,6 +18,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  commerceRevenueForTick,
+  getCommerceRevenuePerTick,
+
   areBuildingsMobilityConnected,
   assignJobs,
   countStaffedOperationalWorkshops,
@@ -33,9 +36,7 @@ import {
   getRoadNetworks,
   hashCanonicalState,
   loadSave,
-  materialProductionForTick,
-  materialStoredProductionForTick,
-  materialUpkeepDueForTick,
+  maintenanceDueForTick,
   ROAD_CONSTRUCTION_COST,
   SAVE_VERSION,
   serializeCanonicalState,
@@ -196,11 +197,11 @@ const facts = (state: SimulationState): Facts => {
     employed: employment.employed,
     unemployed: employment.unemployed,
     jobCapacity: employment.jobCapacity,
-    production: materialProductionForTick(state),
-    stored: materialStoredProductionForTick(state),
-    upkeep: materialUpkeepDueForTick(state),
+    production: commerceRevenueForTick(state),
+    stored: getCommerceRevenuePerTick(state),
+    upkeep: maintenanceDueForTick(state),
     staffedWorkshops: countStaffedOperationalWorkshops(state),
-    material: state.resources.construction,
+    material: state.resources.money,
     workerByWorkshop,
     workplaceByColonist,
     mobilityByColonist,
@@ -1289,8 +1290,8 @@ describe('audit persistence and determinism', () => {
       getBuildingRoadAccess(state, id)
     }
     getRoadNetworks(state)
-    materialProductionForTick(state)
-    materialUpkeepDueForTick(state)
+    commerceRevenueForTick(state)
+    maintenanceDueForTick(state)
     assignJobs(state)
     expect(hashCanonicalState(state)).toBe(before)
   })

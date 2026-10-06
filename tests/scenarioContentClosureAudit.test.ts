@@ -106,7 +106,7 @@ const measure = (state: SimulationState, objective: ObjectiveDefinition): Measur
     capacity: getWaterProductionPerTick(state),
     foodPerTick: getFoodProductionPerTick(state),
     foodConsumption: getFoodConsumptionPerTick(state),
-    material: getResourceStock(state).construction,
+    material: getResourceStock(state).money,
     food: getResourceStock(state).food,
     water: getResourceStock(state).water,
     networks: getRoadNetworks(state).length,
@@ -342,7 +342,7 @@ describe('1. Housing composition — the four branches', () => {
     expect(getRoadNetworks(fromUnserved.state).length).toBe(1)
     // Workshop-only income: the 5-cost repair spends the remainder and the
     // Farm/Well workers accrue nothing, so the stock rests at 0.
-    expect(getResourceStock(fromUnserved.state).construction).toBe(0)
+    expect(getResourceStock(fromUnserved.state).money).toBe(0)
     // The same repair also rescues the serviced-but-stranded (east) mistake.
     const fromStranded = driveHousing([
       { kind: 'building', type: 'residence', x: 4, y: 1 },
@@ -502,7 +502,7 @@ const structureOf = (definition: ScenarioDefinition): string => {
     `population:${getPopulationCount(state)}`,
     `capacity:${getWaterProductionPerTick(state)}`,
     `foodNet:${getFoodProductionPerTick(state) - getFoodConsumptionPerTick(state)}`,
-    `material:${state.resources.construction}`,
+    `material:${state.resources.money}`,
     `water:${state.resources.water}`,
     `kinds:${kinds.join('+')}`,
     `buildings:${buildings}`,
@@ -526,7 +526,7 @@ describe('3. Catalogue matrix and redundancy', () => {
           population: getPopulationCount(state),
           capacity: getWaterProductionPerTick(state),
           foodNet: getFoodProductionPerTick(state) - getFoodConsumptionPerTick(state),
-          material: state.resources.construction,
+          material: state.resources.money,
           water: state.resources.water,
           objective: status.state,
           blockers: status.blockers,
@@ -573,7 +573,7 @@ describe('3. Catalogue matrix and redundancy', () => {
       ) {
         differences.push('foodNet')
       }
-      if (housing.resources.construction !== other.resources.construction) {
+      if (housing.resources.money !== other.resources.money) {
         differences.push('material')
       }
       const kinds = (definition: ScenarioDefinition): string =>
@@ -642,7 +642,7 @@ describe('4. Entry conditions', () => {
         id: definition.id,
         label: definition.objective.label,
         resourceNumbersVisible:
-          definition.resources.material === stock.construction &&
+          definition.resources.money === stock.money &&
           definition.resources.food === stock.food &&
           definition.resources.water === stock.water,
         objectiveComplete: {
@@ -768,7 +768,7 @@ const driveToObjective = (
       case 'roads': {
         const cost = step.cells.length * 5
         let guard = 0
-        while (guard < 300 && state.resources.construction < cost) {
+        while (guard < 300 && state.resources.money < cost) {
           tick(1)
           guard += 1
         }
@@ -906,7 +906,7 @@ describe('5. Completion quality', { timeout: 300000 }, () => {
           stage: getProgression(start).stage,
           population: getPopulationCount(start),
           networks: getRoadNetworks(start).length,
-          material: start.resources.construction,
+          material: start.resources.money,
           blockers: getObjectiveStatus(start, definition.objective).blockers,
         },
         firstDecision: FIRST_DECISION[definition.id] ?? '',
@@ -1071,7 +1071,7 @@ describe('7. Content versus capability', () => {
       waterCoverage: getWaterCoverage(housingState()).servedResidenceIds.length > 0,
       workforceMobility: getEmploymentSummary(housingState()).jobCapacity === 2,
       resourceBudgeting: SCENARIOS.some(
-        (definition) => createScenarioState(config, definition).resources.construction === 55
+        (definition) => createScenarioState(config, definition).resources.money === 55
       ),
       constructionTiming: SCENARIOS.some((definition) =>
         [...iterateBuildings(createScenarioState(config, definition))].some(

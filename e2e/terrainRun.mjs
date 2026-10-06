@@ -170,7 +170,7 @@ async function main() {
     let after = await stats(page);
     assert(after.status.includes('blocked by terrain'), `click status: ${after.status}`);
     assert(after.buildings === before.buildings, `building count changed: ${after.buildings}`);
-    assert(after.construction === before.construction, `material changed: ${after.construction}`);
+    assert(after.money === before.money, `material changed: ${after.money}`);
     assert(after.tick === before.tick, `tick changed: ${after.tick}`);
     ok(`building refused on ${BLOCKED_CELL.x},${BLOCKED_CELL.y} with zero mutation (${after.status})`);
 
@@ -182,7 +182,7 @@ async function main() {
     after = await stats(page);
     assert(after.status.includes('blocked by terrain'), `well status: ${after.status}`);
     assert(after.buildings === before.buildings, 'the west Well was built on terrain');
-    assert(after.construction === before.construction, 'the west Well spent Material');
+    assert(after.money === before.money, 'the west Well spent Material');
     ok(`west Well site ${WEST_WELL_SITE.x},${WEST_WELL_SITE.y} unusable (${after.status})`);
     await page.screenshot({ path: `${ART}/03-west-well-refused.png` });
 
@@ -195,7 +195,7 @@ async function main() {
     await page.mouse.click(pt.x, pt.y);
     after = await stats(page);
     assert(after.roads === before.roads, `road count changed: ${after.roads}`);
-    assert(after.construction === before.construction, 'a refused road spent Material');
+    assert(after.money === before.money, 'a refused road spent Material');
     assert(after.tick === before.tick, 'a refused road advanced the tick');
     ok(`road refused on a blocked cell (${after.status})`);
 
@@ -212,7 +212,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 250));
     after = await stats(page);
     assert(after.roads === before.roads, `partial road placed: ${after.roads}`);
-    assert(after.construction === before.construction, 'an atomic refusal spent Material');
+    assert(after.money === before.money, 'an atomic refusal spent Material');
     ok('a road drag crossing the ridge is refused atomically (no partial road)');
     await page.screenshot({ path: `${ART}/04-road-drag-refused.png` });
 

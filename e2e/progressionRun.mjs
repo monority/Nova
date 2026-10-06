@@ -177,7 +177,7 @@ async function main() {
     assert(text.blocked.includes('Blocked by'), `blockers line missing: "${text.blocked}"`);
     assert((await scenario(page)).id === 'default', 'default scenario id expected');
     const dflt = await stats(page);
-    assert(dflt.construction === '100' && dflt.food === '100', `default resources changed: ${JSON.stringify(dflt)}`);
+    assert(dflt.money === '100' && dflt.food === '100', `default resources changed: ${JSON.stringify(dflt)}`);
     ok(`default start: Wilderness -> Settlement, blockers ${JSON.stringify(status.blockers)}`);
     await shot('01-free-play-wilderness.png');
 
@@ -197,7 +197,7 @@ async function main() {
     await placeAt(page, { x: 1, y: 2 });
     for (let i = 0; i < 3; i += 1) await step(page);
     const opening = await stats(page);
-    assert(opening.construction === '20', `opening stock expected 20 after four purchases (Workshop-only income), got ${opening.construction}`);
+    assert(opening.money === '20', `opening stock expected 20 after four purchases (Workshop-only income), got ${opening.money}`);
     await moveTo(page, { x: 2, y: 1 });
     await waitFor(
       async () => (await stats(page)).status.includes('insufficient material (20/25)'),
@@ -208,7 +208,7 @@ async function main() {
       (await materialStatusText(page)) === '',
       `no Workshop means no storage claim, got "${await materialStatusText(page)}"`
     );
-    ok(`opening boundary: Material ${opening.construction}, Well rejected with "${shortStatus}", no storage claim`);
+    ok(`opening boundary: Material ${opening.money}, Well rejected with "${shortStatus}", no storage claim`);
     await shot('01b-opening-boundary.png');
     await loadScenario(page, 'default');
 
@@ -328,10 +328,10 @@ async function main() {
     // stock is above it — the reason a staffed Workshop cannot add to it.
     const industrialStats = await stats(page);
     assert(industrialStats.storageCapacity === '25', `Workshop storage expected 25, got ${industrialStats.storageCapacity}`);
-    assert(Number(industrialStats.construction) > 25, `the stock must exceed the cap: ${industrialStats.construction}`);
+    assert(Number(industrialStats.money) > 25, `the stock must exceed the cap: ${industrialStats.money}`);
     const storageNote = await materialStatusText(page);
     assert(storageNote.includes('cap 25'), `Material row must name the cap, got "${storageNote}"`);
-    ok(`industrial storage display: Material ${industrialStats.construction}, "${storageNote}"`);
+    ok(`industrial storage display: Material ${industrialStats.money}, "${storageNote}"`);
     ok('objective evaluation: Industrial expansion completes when the Workshop is built (in progress -> complete)');
 
     // --- Reproducibility: progression is recomputed, never stored ----------
@@ -351,7 +351,7 @@ async function main() {
     // --- Return to free play: the default game is unchanged ----------------
     const freePlay = await loadScenario(page, 'default');
     const freeProgression = await progression(page);
-    assert(freePlay.construction === '100' && freePlay.food === '100' && freePlay.roads === '0', `free play resources changed: ${JSON.stringify(freePlay)}`);
+    assert(freePlay.money === '100' && freePlay.food === '100' && freePlay.roads === '0', `free play resources changed: ${JSON.stringify(freePlay)}`);
     assert(freeProgression.stage === 'wilderness' && freeProgression.blockers.length === 3, 'free play progression changed');
     assert((await progressionText(page)).objective === '', 'free play must not show an objective');
     ok('free play restored: unchanged starting state, no objective, Wilderness');
