@@ -257,6 +257,10 @@ async function main() {
     if (!roadlessText.includes('upkeep 0 (vacant)')) {
       fail(`C roadless workshop inspection bad: ${JSON.stringify(roadlessText)}`);
     } else ok(`C inspection: "${roadlessText}"`);
+    const roadlessRoadText = await page.locator('[data-testid="inspection-road"]').textContent();
+    if (!roadlessRoadText.includes('Road access: Missing') || !roadlessRoadText.includes('Workers cannot reach this Workshop')) {
+      fail(`C roadless workshop road feedback bad: ${JSON.stringify(roadlessRoadText)}`);
+    } else ok(`C inspection road: "${roadlessRoadText}"`);
     await shot('03-roadless-production-blocked.png');
 
     // D. Invalid gestures never spend Material: building cell + diagonal drag.
@@ -305,6 +309,11 @@ async function main() {
     ok(
       `F mobility connected -> employed ${s.employed}, production ${s.materialProduction}/tick, upkeep ${s.materialUpkeep}, mobilityConnected ${s.mobilityConnectedColonists}`
     );
+    await selectAt(page, WORKSHOP);
+    const connectedRoadText = await page.locator('[data-testid="inspection-road"]').textContent();
+    if (connectedRoadText !== 'Road access: Connected') {
+      fail(`F connected workshop road feedback bad: ${JSON.stringify(connectedRoadText)}`);
+    } else ok(`F inspection road: "${connectedRoadText}"`);
     await shot('05-roads-operational-production.png');
 
     // =====================================================================

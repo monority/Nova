@@ -258,9 +258,11 @@ describe('10DD — workforce depth', () => {
     expect(getWaterProductionPerTick(well)).toBe(2)
     expect(getMaterialProductionPerTick(workshop)).toBe(2)
 
-    // Income and upkeep differ by workplace: the allocation is a real trade-off.
-    expect(getWorkforceIncome(farm)).toBe(1)
-    expect(getWorkforceIncome(well)).toBe(1)
+    // Income and upkeep differ by workplace: the allocation is a real
+    // trade-off. Workshop-only income: only the Workshop worker earns
+    // Material; Farm/Well employment pays in its own resource instead.
+    expect(getWorkforceIncome(farm)).toBe(0)
+    expect(getWorkforceIncome(well)).toBe(0)
     expect(getWorkforceIncome(workshop)).toBe(2)
     expect(getMaterialUpkeepPerTick(workshop)).toBe(1)
     expect(getMaterialUpkeepPerTick(farm)).toBe(0)

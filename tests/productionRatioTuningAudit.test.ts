@@ -901,13 +901,10 @@ describe('5. Industrial phase policies', { timeout: 120000 }, () => {
       rows,
       objective: 'does the freed worker create a new strategic choice, or merely bigger numbers?',
     })
-    // Step 10CQ.1: the survival policy runs NO Workshop, yet its 3 Well +
-    // 2 Farm workers still earn 1 Material each per tick — no Workshop
-    // upkeep applies, so the stock after 600 ticks is exactly income.
-    expect(rows.survival.at600.material).toBe(
-      (rows.survival.at600.staffedWells + rows.survival.at600.staffedFarms) * 600
-    )
-    expect(rows.survival.at600.material).toBe(3000)
+    // Workshop-only income: the survival policy runs NO Workshop, and its 3
+    // Well + 2 Farm workers earn nothing — the colony simply persists at
+    // Material 0, exactly as the policy's description says.
+    expect(rows.survival.at600.material).toBe(0)
     expect(rows.survival.at600.staffedWorkshops).toBe(0)
     expect(rows.industry.at600.staffedWorkshops).toBe(1)
     expect(rows.industry.at600.material).toBeGreaterThan(20)

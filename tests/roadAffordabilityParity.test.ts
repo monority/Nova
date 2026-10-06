@@ -72,14 +72,16 @@ const operational = (
 }
 
 /**
- * One staffed operational Farm on a connected road: +1 Material income per
- * tick, no stored Workshop production and no upkeep. This isolates the
- * `getWorkforceIncome` term of the affordability clause.
+ * One staffed operational Workshop on a connected road: the ONLY employment
+ * that earns Material income (product-model correction: Farm/Well workers
+ * earn nothing). +2 income/tick, −1 upkeep/tick, and stored production is
+ * isolated by the 08F cap below. This isolates the `getWorkforceIncome`
+ * term of the affordability clause on the income source that exists.
  */
-const farmWorkerFixture = (): SimulationState => {
+const workshopWorkerFixture = (): SimulationState => {
   let state = createInitialState(config)
   state = operational(state, 'residence', 0, 0)
-  state = operational(state, 'farm', 0, 2)
+  state = operational(state, 'workshop', 0, 2)
   const roadCreated = createRoads(state, [{ x: 0, y: 1 }])
   const roads = { ...roadCreated.state.roads }
   for (const roadId of roadCreated.roadIds) {
@@ -107,15 +109,17 @@ const withMaterial = (state: SimulationState, material: number): SimulationState
 const roadCount = (state: SimulationState): number => Object.keys(state.roads).length
 
 describe('10CS — road expenditure affordability', () => {
-  it('R0 — the fixture isolates income: +1/tick, no stored production, no upkeep', () => {
-    const state = withMaterial(farmWorkerFixture(), 0)
-    expect(getWorkforceIncome(state)).toBe(1)
+  it('R0 — the fixture isolates income: +2/tick from the Workshop worker, upkeep −1, stored production bounded by the cap', () => {
+    // Stock at the 25 cap keeps stored production at 0, so the remaining
+    // recurring flow is pure income (2) minus upkeep (1).
+    const state = withMaterial(workshopWorkerFixture(), 25)
+    expect(getWorkforceIncome(state)).toBe(2)
     expect(getMaterialStoredProductionPerTick(state)).toBe(0)
-    expect(getMaterialUpkeepPerTick(state)).toBe(0)
+    expect(getMaterialUpkeepPerTick(state)).toBe(1)
   })
 
   it('R1 — stock alone covers the road: valid, affordable, no inflow clause', () => {
-    const state = withMaterial(farmWorkerFixture(), ROAD_CONSTRUCTION_COST)
+    const state = withMaterial(workshopWorkerFixture(), ROAD_CONSTRUCTION_COST)
     const affordability = getRoadsPlacementAffordability(state, [FREE_CELL])
     expect(affordability.placement.valid).toBe(true)
     expect(affordability.affordable).toBe(true)
@@ -125,7 +129,7 @@ describe('10CS — road expenditure affordability', () => {
   })
 
   it('R2 — one below cost is completed by this tick income, then the command accepts', () => {
-    const before = withMaterial(farmWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
+    const before = withMaterial(workshopWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
     const affordability = getRoadsPlacementAffordability(before, [FREE_CELL])
     expect(affordability.placement.valid).toBe(false)
     expect(affordability.coveredBySameTickInflow).toBe(true)
@@ -133,12 +137,12 @@ describe('10CS — road expenditure affordability', () => {
 
     const after = stepSimulation(before, { type: 'placeRoads', cells: [FREE_CELL] })
     expect(roadCount(after)).toBe(roadCount(before) + 1)
-    // 4 stock + 1 income = exactly the 5 cost, spent once.
-    expect(after.resources.construction).toBe(0)
+    // 4 stock + 2 stored + 2 income − 5 road − 1 upkeep = exactly 2 left.
+    expect(after.resources.construction).toBe(2)
   })
 
   it('R3 — control: without the worker income the same stock is short', () => {
-    const before = withMaterial(farmWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
+    const before = withMaterial(workshopWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
     const workerless: SimulationState = { ...before, colonists: {} }
     const affordability = getRoadsPlacementAffordability(workerless, [FREE_CELL])
     expect(getWorkforceIncome(workerless)).toBe(0)
@@ -148,7 +152,7 @@ describe('10CS — road expenditure affordability', () => {
 
   it('R4 — the query agrees with the authoritative command across a material sweep', () => {
     for (let material = 0; material <= 8; material += 1) {
-      const before = withMaterial(farmWorkerFixture(), material)
+      const before = withMaterial(workshopWorkerFixture(), material)
       const affordable = getRoadsPlacementAffordability(before, [FREE_CELL]).affordable
       const after = stepSimulation(before, { type: 'placeRoads', cells: [FREE_CELL] })
       const accepted = roadCount(after) > roadCount(before)
@@ -164,7 +168,7 @@ describe('10CS — road expenditure affordability', () => {
     const required = 2 * ROAD_CONSTRUCTION_COST
 
     const covered = getRoadsPlacementAffordability(
-      withMaterial(farmWorkerFixture(), required - 1),
+      withMaterial(workshopWorkerFixture(), required - 1),
       cells
     )
     expect(covered.materialRequired).toBe(required)
@@ -172,14 +176,15 @@ describe('10CS — road expenditure affordability', () => {
     expect(covered.affordable).toBe(true)
 
     const short = getRoadsPlacementAffordability(
-      withMaterial(farmWorkerFixture(), required - 2),
+      withMaterial(workshopWorkerFixture(), required - 5),
       cells
     )
+    // Stock 5 + 4 same-tick inflow (2 stored + 2 income) = 9 < 10.
     expect(short.affordable).toBe(false)
   })
 
   it('R6 — a spatial failure is never masked by available Material', () => {
-    const state = withMaterial(farmWorkerFixture(), 1000)
+    const state = withMaterial(workshopWorkerFixture(), 1000)
     // (0,0) holds the fixture residence.
     const affordability = getRoadsPlacementAffordability(state, [{ x: 0, y: 0 }])
     expect(affordability.placement.valid).toBe(false)
@@ -188,29 +193,30 @@ describe('10CS — road expenditure affordability', () => {
   })
 
   it('R7 — duplicate cells are priced once (normalized, like the domain)', () => {
-    const state = withMaterial(farmWorkerFixture(), 1000)
+    const state = withMaterial(workshopWorkerFixture(), 1000)
     const affordability = getRoadsPlacementAffordability(state, [FREE_CELL, FREE_CELL])
     expect(affordability.materialRequired).toBe(ROAD_CONSTRUCTION_COST)
   })
 
   it('R8 — a rejected road command spends nothing and creates no road', () => {
-    const before = withMaterial(farmWorkerFixture(), 0)
+    const before = withMaterial(workshopWorkerFixture(), 0)
     const after = stepSimulation(before, { type: 'placeRoads', cells: [FREE_CELL] })
     expect(roadCount(after)).toBe(roadCount(before))
-    // Income is credited independently of the command; the road cost is not spent.
-    expect(after.resources.construction).toBe(getWorkforceIncome(before))
+    // Same-tick inflow (2 stored + 2 income) is credited and upkeep (−1) is
+    // paid independently of the rejected command; the road cost is not spent.
+    expect(after.resources.construction).toBe(3)
     expect(after.resources.construction).toBeLessThan(ROAD_CONSTRUCTION_COST)
   })
 
   it('R9 — the query is a pure derivation: it never mutates the state', () => {
-    const state = withMaterial(farmWorkerFixture(), 3)
+    const state = withMaterial(workshopWorkerFixture(), 3)
     const before = hashCanonicalState(state)
     getRoadsPlacementAffordability(state, [FREE_CELL])
     expect(hashCanonicalState(state)).toBe(before)
   })
 
   it('R10 — the domain validator is unchanged: it still reports the raw stock shortfall', () => {
-    const state = withMaterial(farmWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
+    const state = withMaterial(workshopWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
     expect(validateRoadsPlacement(state, [FREE_CELL])).toEqual({
       valid: false,
       reason: 'insufficientResources',
@@ -219,14 +225,14 @@ describe('10CS — road expenditure affordability', () => {
   })
 
   it('R11 — building affordability (Step 10CR) stays income-aware', () => {
-    const before = withMaterial(farmWorkerFixture(), 24)
+    const before = withMaterial(workshopWorkerFixture(), 24)
     const affordability = getPlacementAffordability(before, { x: 8, y: 8 }, 'residence')
     expect(affordability.coveredBySameTickInflow).toBe(true)
     expect(affordability.affordable).toBe(true)
   })
 
   it('R12 — affordability stays derived: save/load is identical and SAVE_VERSION is 8', () => {
-    const state = withMaterial(farmWorkerFixture(), 4)
+    const state = withMaterial(workshopWorkerFixture(), 4)
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
     expect(getRoadsPlacementAffordability(restored, [FREE_CELL])).toEqual(

@@ -145,6 +145,64 @@ export const hasOperationalWell = (state: SimulationState): boolean => {
 }
 
 /**
+ * Potential Water production this tick: staffed Wells PLUS vacant Wells
+ * that a worker could actually reach (deadlock fix). A vacant operational
+ * road-accessible Well counts iff it shares a road network with at least
+ * one operational Residence — the exact staffability condition `assignJobs`
+ * enforces (09K), minus the worker, whom the pending admission supplies.
+ * Wells on residence-less networks can never be staffed and contribute 0.
+ *
+ * This extends the documented Step 10P correction (unstaffed Wells provide
+ * coverage but no supply) to the admission gate: the gate in
+ * `domain/simulation/step.ts` reads potential, not actual, production, so
+ * the colony that only lacks the worker the admission itself provides can
+ * progress. Anti-treadmill is preserved: potential is still bounded by
+ * built infrastructure, and any gap between potential and actual production
+ * surfaces as a real stock shortage that blocks further admissions.
+ */
+export const waterPotentialProductionForTick = (
+  state: SimulationState
+): number => {
+  const networks = getRoadNetworks(state)
+  const residenceNetworkIds = new Set<string>()
+  for (const building of iterateBuildings(state)) {
+    if (building.type !== 'residence' || building.status !== 'operational') {
+      continue
+    }
+    const access = getBuildingRoadAccessWithNetworks(
+      state,
+      building.id,
+      networks
+    )
+    for (const networkId of access.networkIds) {
+      residenceNetworkIds.add(networkId)
+    }
+  }
+  let total = 0
+  for (const building of iterateBuildings(state)) {
+    if (!isOperationalWell(building)) {
+      continue
+    }
+    const access = getBuildingRoadAccessWithNetworks(
+      state,
+      building.id,
+      networks
+    )
+    if (!access.hasRoadAccess) {
+      continue
+    }
+    const staffable = access.networkIds.some((networkId) =>
+      residenceNetworkIds.has(networkId)
+    )
+    if (!staffable) {
+      continue
+    }
+    total += WATER_PER_WELL_PER_TICK
+  }
+  return total
+}
+
+/**
  * Water actually produced this tick: staffed operational Wells WITH road
  * access, mirroring the 09F Workshop production contract. Vacant, roadless or
  * under-construction Wells produce exactly 0.

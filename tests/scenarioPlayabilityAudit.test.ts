@@ -298,13 +298,12 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     audit('FIRST_SETTLEMENT', { compact, extended, waterFirst })
     expect(compact.settlementTick).not.toBeNull()
     expect(compact.final.roads).toBe(1)
-    // Step 10CQ.1: worker income funds the Well at tick 10 (rejected before),
-    // so the compact policy now reaches Village at tick 12 and accrues to 400.
-    expect(compact.final.stage).toBe('village')
-    // Step 10CR: affordability now accounts for income, so Village reaches one tick earlier.
-    expect(compact.villageTick).toBe(11)
-    // Step 10CR: affordability now accounts for income, so Village reaches one tick earlier and material shifts by 1.
-    expect(compact.final.material).toBe(399)
+    // Workshop-only income: the Farm worker earns nothing, so the 100 grant
+    // cannot fund the fifth item (the 25-Material Well) after the 105-cost
+    // package — the compact policy stalls as a stable Settlement at 20.
+    expect(compact.final.stage).toBe('settlement')
+    expect(compact.villageTick).toBeNull()
+    expect(compact.final.material).toBe(20)
     expect(extended.settlementTick).not.toBeNull()
     expect(extended.final.roads).toBe(4)
     expect(waterFirst.final.stage).toBe('wilderness')
@@ -386,12 +385,21 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     // admission gate is active from tick 0 and the population is fixed at the
     // capacity (2). Every extra Well stays unstaffed because no colonist can
     // be admitted to work it, so the Workshop can never be staffed either.
-    for (const policy of [workshopNow, capacityFirst, colonistFirst]) {
-      expect(policy.final.population).toBe(WATER_PER_WELL_PER_TICK)
-      expect(policy.final.waterCapacity).toBe(WATER_PER_WELL_PER_TICK)
-      expect(policy.final.staffedWorkshops).toBe(0)
-      expect(policy.final.stage).toBe('village')
-    }
+    // Measured under Workshop-only income: workshopNow and colonistFirst stay
+    // Village at the Water capacity (population 2, no staffed Workshop),
+    // while capacityFirst starves (wipe 56) — growing the population past the
+    // Water capacity before the workers exist is fatal, and no Farm income
+    // exists to cushion it.
+    expect(workshopNow.final.population).toBe(WATER_PER_WELL_PER_TICK)
+    expect(workshopNow.final.waterCapacity).toBe(WATER_PER_WELL_PER_TICK)
+    expect(workshopNow.final.staffedWorkshops).toBe(0)
+    expect(workshopNow.final.stage).toBe('village')
+    expect(colonistFirst.final.population).toBe(WATER_PER_WELL_PER_TICK)
+    expect(colonistFirst.final.staffedWorkshops).toBe(0)
+    expect(colonistFirst.final.stage).toBe('village')
+    expect(capacityFirst.final.population).toBe(0)
+    expect(capacityFirst.final.stage).toBe('wilderness')
+    expect(capacityFirst.wipeTick).not.toBeNull()
     expect(capacityFirst.final.roads).toBeGreaterThan(workshopNow.final.roads)
   })
 
@@ -418,10 +426,11 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     )
     audit('SPATIAL_EFFICIENCY', { minimal, oneRoadTooMany })
     expect(minimal.final.stage).toBe('settlement')
-    // Step 10CQ.1: the Farm worker earns 1/tick, so the minimal run ends at
-    // 199. The one-road-too-many run still never reaches the 25 it needs
-    // (it ends at 20, wiped at tick 104): the 5-Material margin still decides.
-    expect(minimal.final.material).toBe(199)
+    // Workshop-only income: the Farm worker earns nothing, so the minimal run
+    // rests at exactly 0. The one-road-too-many run still never reaches the 25
+    // it needs (it ends at 20, wiped at tick 104): the 5-Material margin still
+    // decides.
+    expect(minimal.final.material).toBe(0)
     expect(minimal.final.roads).toBe(1)
     expect(oneRoadTooMany.final.stage).toBe('wilderness')
     expect(oneRoadTooMany.wipeTick).not.toBeNull()
@@ -479,14 +488,14 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     audit('RECOVERY', { repair, replace, inaction })
     expect(repair.final.stage).toBe('settlement')
     expect(repair.final.roads).toBe(4)
-    // Step 10CQ.1: the staffed Farm earns 1/tick, so both repairs accrue
-    // Material (215 and 204) instead of hovering near the old 15/5.
-    expect(repair.final.material).toBe(215)
+    // Workshop-only income: the staffed Farm earns no Material, so both
+    // repairs hover at their spend remainders (15 and 5).
+    expect(repair.final.material).toBe(15)
     expect(repair.final.staffedFarms).toBe(1)
     expect(replace.final.stage).toBe('settlement')
     expect(replace.final.roads).toBe(1)
     expect(replace.final.buildings).toBe(3)
-    expect(replace.final.material).toBe(204)
+    expect(replace.final.material).toBe(5)
     expect(inaction.final.stage).toBe('wilderness')
     expect(inaction.wipeTick).not.toBeNull()
   })
@@ -501,7 +510,7 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
         primaryConstraint: 'Material 100',
         secondaryConstraint: 'Food sustainability',
         settlementPath: 'Residence + road + Farm (55 of 100)',
-        villagePath: 'none from the 100 grant (2 Residences + Well + Farm + road = 105 > 100); Step 10CQ income now funds it (compact reaches Village at tick 12)',
+        villagePath: 'none from the 100 grant (2 Residences + Well + Farm + road = 105 > 100); a staffed Workshop is the only other Material source',
         failureMode: 'Water/industry before Food starves the only worker',
         recovery: 'n/a (a wiped colony is terminal)',
         distinctive: 'the construction order alone decides Settlement vs starvation',
@@ -587,7 +596,7 @@ const audit = (label: string, value: unknown): void => {
 // ---------------------------------------------------------------------------
 
 describe('5. Carried-forward findings', { timeout: 30000 }, () => {
-  it('A — measures the opening budget: order matters, income closes the Village gap (Step 10CQ.1)', () => {
+  it('A — measures the opening budget: order decides Settlement vs starvation', () => {
     const farmFirst = playScenario(
       'first-settlement',
       'Farm before Well',
@@ -618,15 +627,14 @@ describe('5. Carried-forward findings', { timeout: 30000 }, () => {
       farmFirst: { stage: farmFirst.final.stage, materials: farmFirst.final.material, roads: farmFirst.final.roads, population: farmFirst.final.population },
       wellFirst: { stage: wellFirst.final.stage, wipeTick: wellFirst.wipeTick },
       conclusion:
-        'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell); the construction order alone decides Settlement vs starvation, and Step 10CQ income now funds what the grant alone could not (farm-first accrues to 201)',
+        'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell); the construction order alone decides Settlement vs starvation, and with Workshop-only income the grant alone cannot fund the Village package (farm-first stalls at 20)',
     })
     expect(INITIAL_CONSTRUCTION_MATERIAL).toBe(100)
     expect(minimumVillageCost).toBe(105)
     expect(farmFirst.final.stage).toBe('settlement')
-    // Step 10CQ.1: Farm + Well workers earn 2/tick, so the run that stalled
-    // below 25 now accrues to 201 — the Village funding gap is gone.
-    // Step 10CR: affordability query now accounts for income, so the Village's final material shifts by 1 tick.
-    expect(farmFirst.final.material).toBe(200)
+    // Workshop-only income: the Farm and Well workers earn no Material, so the
+    // farm-first run stalls at the 20 left after the 105-cost package.
+    expect(farmFirst.final.material).toBe(20)
     expect(wellFirst.final.stage).toBe('wilderness')
     expect(wellFirst.wipeTick).not.toBeNull()
   })

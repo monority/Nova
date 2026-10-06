@@ -248,10 +248,10 @@ describe('§3 — baseline bootstrap trajectory', () => {
     expect(history[9]!.food).toBe(107)
     expect(history[9]!.population).toBe(1)
     // Material: bootstrap 100 - residence 25 - 2 roads 10 - farm 25 = 40.
-    // Step 10CQ.1: Farm worker earns +1 Material/tick, so tick 4 has 41, and
-    // after 10 ticks (history[9]) stock reaches 50.
-    expect(history[0]!.material).toBe(41)
-    expect(history[9]!.material).toBe(50)
+    // Workshop-only income: the Farm worker earns no Material, so the stock
+    // rests at exactly the build remainder on every tick.
+    expect(history[0]!.material).toBe(40)
+    expect(history[9]!.material).toBe(40)
   })
 
   it('stable food-positive state is reachable: 1 staffed residence + farm never famines', () => {

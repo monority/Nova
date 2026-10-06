@@ -974,11 +974,11 @@ describe('6. Workforce opportunity cost', () => {
     }
     audit('WORKFORCE_FLOWS', {
       rows,
-      // Step 10CV re-baseline (frozen Phase 7, Step 10CQ): every employed
-      // colonist earns Material income, so a Well colonist's stock is no
-      // longer 0. `material` and `materialProd` are recorded separately so the
-      // rows still separate income from Workshop production.
-      note: 'one colonist holds exactly one job; under Step 10CQ every employed colonist earns +1..+2 Material/tick regardless of workplace, so Material no longer requires a staffed Workshop — the clean separation is `materialProd` (Workshop production) vs `material` (stock, income included)',
+      // Product-model correction (Workshop-only income): only a Workshop
+      // worker earns Material, so Well/Farm employment accrues nothing.
+      // `material` and `materialProd` are recorded separately so the rows
+      // still separate income from Workshop production.
+      note: 'one colonist holds exactly one job; only Workshop employment earns Material income, so a colony with no staffed Workshop accumulates nothing — `materialProd` (Workshop production) vs `material` (stock, Workshop income included) stay the clean separation',
     })
     const alone = rows.filter((row) => (row as { mode: string }).mode === 'alone') as {
       job: string
@@ -986,14 +986,12 @@ describe('6. Workforce opportunity cost', () => {
     }[]
     const well = alone.find((row) => row.job === 'well')
     const workshop = alone.find((row) => row.job === 'workshop')
-    // Step 10CV: the original `material === 0` encoded pre-Phase-7 behaviour
-    // (a Well worker produced no Material). The opportunity-cost fact the
-    // assertion protects is unchanged: no Workshop is staffed (materialProd
-    // 0), so the stock is pure workforce income. Measured: the Well raises
-    // Water, population grows to 2 (Well + Farm workers), +1 Material/tick
-    // each -> 119 by h=60.
+    // Workshop-only income: the Well raises Water and population grows to 2
+    // (Well + Farm workers), but no Workshop is staffed (materialProd 0) and
+    // neither employment earns Material, so the stock stays exactly 0 —
+    // Material now requires a staffed Workshop.
     expect(well?.horizons[2]?.materialProd).toBe(0)
-    expect(well?.horizons[2]?.material).toBe(119)
+    expect(well?.horizons[2]?.material).toBe(0)
     expect(workshop?.horizons[2]?.water).toBeGreaterThanOrEqual(0)
   })
 
@@ -1203,14 +1201,12 @@ describe('7. Construction crew interaction', () => {
     expect(withCrew.ticksToCompletion).toBe(1)
     expect(without.ticksToFirstProduction).toBe(2)
     expect(withCrew.ticksToFirstProduction).toBe(2)
-    // Step 10CV re-baseline (frozen Phase 7, Step 10CQ): the original
-    // `withCrew === without` encoded pre-Phase-7 behaviour where Material came
-    // only from Workshop production. Under the income contract, a colonist
-    // assigned as construction crew is skipped by `creditMaterialIncome`, so
-    // the crewed path forgoes one tick of income. Construction is still one
-    // tick earlier and production still starts on the same tick; the measured
-    // Phase 7 cost of the crew is exactly one Material.
-    expect(withCrew.materialAtHorizon).toBe(without.materialAtHorizon - 1)
+    // Workshop-only income (product-model correction): a crewed colonist
+    // earns no income, but only Workshop employment earns any — in this
+    // fixture the crewed colonist is not the Workshop worker, so the crew
+    // costs no Material. Construction is still one tick earlier and
+    // production still starts on the same tick.
+    expect(withCrew.materialAtHorizon).toBe(without.materialAtHorizon)
   })
 })
 

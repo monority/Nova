@@ -490,11 +490,13 @@ describe('1. variant C: the three connector roles', () => {
     expect(rows.connectorAsRoad.waterServedResidences).toBe(2)
     expect(rows.connectorAsRoad.servedColonists).toBe(2)
     expect(rows.connectorAsRoad.waterCapacity).toBe(2)
-    expect(rows.connectorAsRoad.material).toBe(31)
+    // Workshop-only income: the Farm/Well workers earn nothing, so the road's
+    // material rests at the 30 − 5 spend remainder.
+    expect(rows.connectorAsRoad.material).toBe(25)
     // B — connector = building: two networks, the WEST Residence unserved.
     expect(rows.connectorAsBuilding.networks).toBe(2)
     expect(rows.connectorAsBuilding.waterServedResidences).toBe(1)
-    expect(rows.connectorAsBuilding.material).toBe(11)
+    expect(rows.connectorAsBuilding.material).toBe(5)
     // C — connector blocked: identical severance, no command can ever fix it.
     expect(rows.connectorBlocked.networks).toBe(2)
     expect(rows.connectorBlocked.waterServedResidences).toBe(1)
@@ -1072,8 +1074,10 @@ describe('7. constrained Water recovery', () => {
     // the Well itself stays UNSTAFFED (jobs 2/4): the west Residence is served
     // on paper because an operational Well grants coverage whether or not
     // anyone works it. That is existing 10P semantics, reached through terrain.
-    expect(rows.solutionConnectorRoad.material).toBe(67)
-    expect(rows.solutionWellOnConnector.material).toBe(47)
+    // Workshop-only income: no accrual, so the stocks are the spend remainders
+    // (30 − 5 = 25 for the road, 30 − 25 = 5 for the Well).
+    expect(rows.solutionConnectorRoad.material).toBe(25)
+    expect(rows.solutionWellOnConnector.material).toBe(5)
     expect(rows.solutionWellOnConnector.waterCapacity).toBe(
       rows.solutionConnectorRoad.waterCapacity
     )

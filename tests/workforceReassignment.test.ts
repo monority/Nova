@@ -384,9 +384,9 @@ describe('5 — economic verification and recovery', () => {
   it('canonical recovery: Material 5 -> 25+ from one manual move', () => {
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2, material: 5, food: 2000 })
     const before = advance(state, 10)
-    // Step 10CQ.1: both colonists on Farms earn 2/tick with no Workshop upkeep:
-    // 5 + 10 * 2 = 25.
-    expect(before.resources.construction).toBe(25)
+    // Workshop-only income: both colonists start on Farms and earn nothing,
+    // so the stock rests at 5 until the manual move creates a producer.
+    expect(before.resources.construction).toBe(5)
     const manual = reassign(state, 'colonist-2', 'building-5')
     const after = advance(manual, 60)
     expect(countStaffedOperationalWorkshops(after)).toBe(1)
@@ -519,9 +519,10 @@ describe('9 — Farm upkeep remains absent', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 0 })
     const after = advance(state, 10)
     // 4 colonists -> 2 Farms + 2 Workshops staffed.
-    // Step 10CQ.1: +8/tick below cap 50 (4 stored + 6 income - 2 upkeep) up to
-    // tick 6 (48), clamp tick 7 reaches 54, then +4/tick (income - upkeep) to 66 at tick 10.
+    // Workshop-only income: +6/tick below cap 50 (4 stored + 4 Workshop
+    // income - 2 upkeep); the clamp binds from tick 9, then +2/tick
+    // (income - upkeep) to 54 at tick 10.
     expect(countStaffedOperationalWorkshops(state)).toBe(2)
-    expect(after.resources.construction).toBe(66)
+    expect(after.resources.construction).toBe(54)
   })
 })

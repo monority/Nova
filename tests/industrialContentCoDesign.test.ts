@@ -283,7 +283,7 @@ describe('2. The existing industrial loop', { timeout: 60000 }, () => {
       rows,
       maxWaterReserve: MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP * 2,
       reading:
-        'a 50-Water reserve buys 25 ticks of industry and one building of Material (25, the per-Workshop storage): that is the MAXIMUM useful reserve, because the clamp discards everything beyond it. The reserve does not refill at the balanced colony, so the burst is one-way until the player creates a Water surplus',
+        'a 50-Water reserve buys 25 ticks of industry and 42 Material (the 25-per-Workshop storage cap plus +1/tick of Workshop income above it). The clamp discards stored production beyond the cap; the reserve does not refill at the balanced colony, so the burst is one-way until the player creates a Water surplus',
     })
     for (const row of rows) {
       expect(row.industrialTicks).toBe(25)
@@ -294,11 +294,12 @@ describe('2. The existing industrial loop', { timeout: 60000 }, () => {
       expect(row.cyclesBeforeRefill).toBe(1)
     }
     // The conversion is population-independent: one displaced Well worker
-    // drains exactly 2 Water per tick and the Workshop nets exactly 1 Material
-    // per tick (2 produced - 1 upkeep), so the ratio is 2 Water : 1 Material.
+    // drains exactly 2 Water per tick while the Workshop nets +3/tick below
+    // the cap (2 stored + 2 income − 1 upkeep) and +1/tick above it, so a
+    // 25-tick burst from stock 0 yields 42 Material.
     for (const row of rows) {
       expect(row.waterDrained / row.industrialTicks).toBe(WATER_PER_WELL_PER_TICK)
-      expect(row.materialGained).toBeGreaterThanOrEqual(63)
+      expect(row.materialGained).toBe(42)
     }
   })
 
@@ -379,11 +380,12 @@ describe('2. The existing industrial loop', { timeout: 60000 }, () => {
       reading:
         'the Workshop stops contributing at the 25-per-Workshop storage cap (08F), so a reserve larger than 50 buys more industrial TICKS but the same single building of Material',
     })
-    // Step 10CQ.1: the storage cap still clamps production to 0 once stock >= 25,
-    // but employment income accumulates past the cap at +2/tick:
-    // smallEnd (25 ticks of reserve) = 63, largeEnd (100 ticks of reserve) = 213.
-    expect(smallEnd.material).toBe(63)
-    expect(largeEnd.material).toBe(213)
+    // Workshop-only income: the storage cap still clamps production to 0
+    // once stock >= 25, but Workshop income accumulates past the cap at
+    // +1/tick (2 income − 1 upkeep): smallEnd (25 ticks) = 42,
+    // largeEnd (100 ticks) = 117.
+    expect(smallEnd.material).toBe(42)
+    expect(largeEnd.material).toBe(117)
     expect(largeEnd.material).toBeGreaterThan(smallEnd.material)
     expect(largeBurst.ticks).toBeGreaterThan(smallBurst.ticks)
   })
@@ -497,7 +499,7 @@ describe('3-5. Decision and construction consequence', { timeout: 60000 }, () =>
         materialBefore: beforeBurst.material,
         materialAfter: afterBurst.material,
         materialDelta: afterBurst.material - beforeBurst.material,
-        verdict: 'the burst LOSES Material: the starting stock (100) is above the 25-per-Workshop cap, so output is discarded and each tick only pays the 1-Material upkeep',
+        verdict: 'with the stock above the storage cap the stored output is discarded, but the Workshop worker still nets +1/tick (2 income − 1 upkeep), so the burst creeps rather than pays',
       },
       B_industrialBurst: {
         residencePlacementTick: expansion.tick,
@@ -515,13 +517,11 @@ describe('3-5. Decision and construction consequence', { timeout: 60000 }, () =>
       },
     })
     expect(workshop.tick).not.toBeNull()
-    // A/B: with the stock above the storage cap the Workshop output is discarded
-    // (the burst only pays upkeep), while the scenario's 100-Material grant
-    // still funds whatever the player builds: the burst funds nothing.
-    // Step 10CQ.1: above the storage cap stored production is 0, but 1 Farm worker (1)
-    // + 1 Workshop worker (2) earn 3 income against 1 upkeep, netting +2 Material per tick:
-    // 84 + 5 * 2 = 94.
-    expect(afterBurst.material).toBe(94)
+    // A/B: with the stock above the storage cap the stored production is
+    // discarded, but the Workshop worker still earns 2 against 1 upkeep.
+    // Workshop-only income: 75 + 4 ticks × (+1) = 79; the scenario's
+    // 100-Material grant still funds whatever the player builds.
+    expect(afterBurst.material).toBe(79)
     expect(burst.ticks).toBeLessThanOrEqual(6)
     expect(expansion.tick).not.toBeNull()
     // C: the construction objective cannot be completed.
@@ -669,8 +669,9 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
     })
     expect(atStart.state).toBe('in_progress')
     expect(atStart.blockers).toEqual(['Workshop built', 'Well built'])
-    // Step 10CQ.1: 25 - 25 + 4 ticks * 2 income (Farm + Well) = 8.
-    expect(afterWorkshop.material).toBe(8)
+    // Workshop-only income: 25 − 25 = 0; the Farm and Well workers earn
+    // nothing while the Workshop waits for a worker.
+    expect(afterWorkshop.material).toBe(0)
     expect(afterWorkshop.water).toBe(50)
     expect(burst.ticks).toBe(25)
     expect(afterBurst.water).toBe(0)
@@ -680,8 +681,9 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
     // so the Village requirement is unmet exactly while industry runs.
     expect(afterBurst.stage).toBe('settlement')
     expect(duringBurst.blockers).toContain('Reach Village')
-    // After building second Well (cost 25), income during construction leaves stock 50:
-    expect(afterWell.material).toBe(50)
+    // After the burst (42) minus the Well (25) leaves 17, and the still-staffed
+    // Workshop adds +3/tick below the cap for the 3 construction ticks: 26.
+    expect(afterWell.material).toBe(26)
     expect(afterWell.stage).toBe('settlement')
     // Only the recovery completes the objective: industry is a burst.
     expect(beforeRecovery.state).toBe('in_progress')
@@ -710,11 +712,11 @@ describe('7-9. Water reserve industry contract', { timeout: 60000 }, () => {
       reading:
         'the Workshop is the only Material source: spending the 25 on the Well first is terminal for the objective — the same class of hard budget decision the First settlement / Spatial efficiency scenarios already use',
     })
-    // Step 10CQ.1: 25 - 25 + 4 ticks * 2 income = 8.
-    expect(afterWrongOrder.material).toBe(8)
-    // Step 10CQ.1: spending the budget on Well first is no longer terminal because
-    // Farm and Well workers earn 2 Material/tick; after 300 ticks the Workshop is affordable.
-    expect(workshopPlacement).not.toBeNull()
+    // Workshop-only income: 25 − 25 = 0; no income accrues from Farm or Well
+    // employment, so spending the budget before the converter is terminal —
+    // the original 10AQ hard-budget decision, restored by the model fix.
+    expect(afterWrongOrder.material).toBe(0)
+    expect(workshopPlacement).toBeNull()
     expect(status.state).toBe('in_progress')
     expect(status.blockers).toEqual(['Workshop built'])
   })

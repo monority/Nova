@@ -527,7 +527,9 @@ describe('3-4. The decision blocked topology changes', { timeout: 120000 }, () =
     audit('OPEN_MAP', { log: result.log, final: read(result.state) })
     expect(read(result.state).roads).toBe(5)
     expect(read(result.state).roadNetworks).toBe(1)
-    expect(read(result.state).material).toBe(37)
+    // Workshop-only income: the one road cell costs 5 and the Farm/Well
+    // workers earn nothing, so the stock rests at 30 − 5 = 25.
+    expect(read(result.state).material).toBe(25)
   })
 
   it('obstructed map: the detour costs more cells and one more command', () => {
@@ -552,8 +554,10 @@ describe('3-4. The decision blocked topology changes', { timeout: 120000 }, () =
         'the emulated wall forces a detour: more cells (Material) and one more command (a tick), and the harness could only reach the far side by leaving the blocked row',
     })
     expect(final.roadNetworks).toBe(1)
-    // Step 10CQ.1: income drives accumulation above old 25 cap.
-    expect(final.material).toBeGreaterThan(25)
+    // The detour costs two extra cells (10 Material) and one extra command:
+    // 30 − 2 × 5 = 20, versus the open map's 25. Workshop-only income means
+    // no accrual hides the difference.
+    expect(final.material).toBe(20)
   })
 
   it('chokepoint: a building on the only connector severs the network', () => {

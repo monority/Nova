@@ -18,6 +18,7 @@ import {
 } from '../../domain/simulation/phases.js'
 import { getWorkplaceMaterialIncomeRate } from '../../domain/population/colonist.js'
 import { areBuildingsMobilityConnected } from '../../domain/mobility/mobility.js'
+import { getBuildingRoadAccess } from '../../domain/road/road.js'
 import type { SimulationState } from '../../domain/simulation/state.js'
 
 export interface InspectionSummary {
@@ -192,6 +193,66 @@ export const getBuildingInspection = (
         if (colonist.workplaceId === null) return sum
         return sum + getWorkplaceMaterialIncomeRate(building.type)
       }, 0),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Road connectivity feedback (player-facing projection of the 09E access
+// contract — the road graph itself is unchanged)
+// ---------------------------------------------------------------------------
+
+/** Derived road-access verdict for one building. Never stored or persisted. */
+export type RoadFeedbackStatus = 'connected' | 'missing' | 'pending'
+
+export interface BuildingRoadFeedback {
+  /** `connected` — operational and touching an operational road network. */
+  readonly status: RoadFeedbackStatus
+  /** Convenience: `status === 'connected'`. */
+  readonly connected: boolean
+  /** The immediate consequence of the current status, or null when none. */
+  readonly consequence: string | null
+}
+
+/**
+ * The immediate consequence of a MISSING road connection, per building type.
+ * One sentence per type so the inspector can name the exact effect (workers,
+ * production, or Water service) instead of a generic warning.
+ */
+const ROAD_CONSEQUENCE_BY_TYPE: Readonly<Record<BuildingType, string>> = {
+  farm: 'Workers cannot reach this Farm, so it cannot be staffed and produces no Food.',
+  workshop:
+    'Workers cannot reach this Workshop, so it cannot be staffed and produces no Material.',
+  well: 'Workers cannot reach this Well, so it cannot be staffed, produces no Water and serves no network.',
+  residence:
+    'Residents cannot reach any workplace, and Water cannot reach this Residence.',
+}
+
+/**
+ * Road connectivity verdict for one building, derived from the unchanged
+ * 09E access contract: access is a property of OPERATIONAL buildings over
+ * OPERATIONAL roads. An under-construction building therefore reads `pending`
+ * — no verdict is invented before the building can have one. Pure: same
+ * state, same result; nothing is stored, persisted or hashed.
+ */
+export const getBuildingRoadFeedback = (
+  state: SimulationState,
+  buildingId: string
+): BuildingRoadFeedback | null => {
+  const building = state.buildings[buildingId]
+  if (building === undefined) {
+    return null
+  }
+  if (building.status !== 'operational') {
+    return { status: 'pending', connected: false, consequence: null }
+  }
+  const connected = getBuildingRoadAccess(state, buildingId).hasRoadAccess
+  if (connected) {
+    return { status: 'connected', connected: true, consequence: null }
+  }
+  return {
+    status: 'missing',
+    connected: false,
+    consequence: ROAD_CONSEQUENCE_BY_TYPE[building.type],
   }
 }
 

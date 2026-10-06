@@ -403,7 +403,7 @@ describe('5 — canonical problematic scenario', () => {
     expect(countStaffedOperationalWorkshops(state)).toBe(0)
   })
 
-  it('runs 60 ticks: the farm-first state now accumulates Material (Step 10CQ.1)', () => {
+  it('runs 60 ticks: the farm-first state stays Material-flat without a Workshop', () => {
     const trace = runHook(problemState(), 60, identityHook)
     const last = trace.snapshots[59]!
     audit('PROBLEM_60_TICKS', {
@@ -412,12 +412,12 @@ describe('5 — canonical problematic scenario', () => {
       staffedWorkshopsEnd: last.staffedWorkshops,
       staffedFarmsEnd: last.staffedFarms,
       foodEnd: last.food,
-      note: 'Step 10CQ.1: two Farm workers earn 2/tick with no upkeep, so the stock grows from 5 to 125 even while no Workshop is staffed',
+      note: 'Workshop-only income: the two Farm workers earn nothing, so the stock stays at 5 until a Workshop is staffed — the farm-first state is BOTH staffingly inefficient and Material-starved',
     })
-    // Step 10CQ.1: 5 + 60 × 2 (two Farm workers) = 125; the Workshops stay
-    // unstaffed, so the state is still staffingly inefficient — just not
-    // Material-starved anymore.
-    expect(last.material).toBe(125)
+    // Workshop-only income: 5 + 0 (two Farm workers, no Workshop) = 5; the
+    // Workshops stay unstaffed, so the state remains the canonical problem
+    // the manual reassignment is supposed to fix.
+    expect(last.material).toBe(5)
     expect(last.staffedWorkshops).toBe(0)
   })
 })
@@ -453,9 +453,10 @@ describe('6 — manual reassignment counterfactual', () => {
     expect(delta.staffedFarms).toBe(-1)
     expect(delta.staffedWorkshops).toBe(1)
     expect(delta.food).toBe(-2)
-    // Step 10CQ.1: current = +2 (two Farm incomes); changed = +2 stored
-    // + 3 income (1 Farm + 2 Workshop) − 1 upkeep = +4 → delta +2.
-    expect(delta.material).toBe(2)
+    // Workshop-only income: the baseline is flat (two Farm workers earn
+    // nothing); the manual move creates +3 (2 stored + 2 income − 1 upkeep)
+    // → delta +3.
+    expect(delta.material).toBe(3)
   })
 })
 
@@ -524,8 +525,8 @@ describe('8 — reverse reassignment (Workshop -> Farm)', () => {
     // saving 1 upkeep.
     expect(changed.staffedFarms - current.staffedFarms).toBe(1)
     expect(changed.food - current.food).toBe(2)
-    // Step 10CQ.1: stored −2, income −1, upkeep +1 → delta −2.
-    expect(changed.material - current.material).toBe(-2)
+    // Workshop-only income: stored −2, income −2, upkeep +1 → delta −3.
+    expect(changed.material - current.material).toBe(-3)
   })
 })
 

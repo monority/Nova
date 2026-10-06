@@ -82,11 +82,16 @@ const operational = (
   }
 }
 
-/** One staffed operational Farm on a connected road: +1 Material/tick, no upkeep. */
-const farmWorkerFixture = (): SimulationState => {
+/**
+ * One staffed operational Workshop on a connected road (product-model
+ * correction: only Workshop employment earns Material income): +2 income,
+ * −1 upkeep, and stored production is clamped by the 08F cap against the
+ * main stock. The income source that still exists.
+ */
+const workshopWorkerFixture = (): SimulationState => {
   let state = createInitialState(config)
   state = operational(state, 'residence', 0, 0)
-  state = operational(state, 'farm', 0, 2)
+  state = operational(state, 'workshop', 0, 2)
   const roadCreated = createRoads(state, [{ x: 0, y: 1 }])
   const roads = { ...roadCreated.state.roads }
   for (const roadId of roadCreated.roadIds) {
@@ -181,15 +186,16 @@ describe('10CT — reserve-aware building affordability', () => {
   })
 
   it('B6 — same-tick inflow alone still covers: the reserve is not attributed', () => {
-    const state = withStorage(withMain(farmWorkerFixture(), 24), 40)
+    // Main 24 + 1 stored (cap headroom) + 2 income = 27 ≥ 25.
+    const state = withStorage(withMain(workshopWorkerFixture(), 24), 40)
     const affordability = getPlacementAffordability(state, FREE, 'residence')
     expect(affordability.coveredBySameTickInflow).toBe(true)
     expect(affordability.coveredByProtectedReserve).toBe(false)
     expect(affordability.affordable).toBe(true)
   })
 
-  it('B7 — reserve plus this tick income build exactly once (storage 40, main 0, +1 income)', () => {
-    const state = withStorage(withMain(farmWorkerFixture(), 0), 40)
+  it('B7 — reserve plus this tick income build exactly once (storage 40, main 0, Workshop inflow)', () => {
+    const state = withStorage(withMain(workshopWorkerFixture(), 0), 40)
     const affordability = getPlacementAffordability(state, FREE, 'residence')
     expect(affordability.coveredBySameTickInflow).toBe(false)
     expect(affordability.coveredByProtectedReserve).toBe(true)
@@ -197,15 +203,19 @@ describe('10CT — reserve-aware building affordability', () => {
     const beforeCount = buildingCount(state)
     const after = stepSimulation(state, residence(FREE.x, FREE.y))
     expect(buildingCount(after)).toBe(beforeCount + 1)
-    expect(after.storage.material).toBe(PROTECTED_MATERIAL_RESERVE)
-    // 25 released + 1 income - 25 cost = 1 left in the main stock.
+    // Release empties the releasable part (40 -> 15 floor); the same tick's
+    // Workshop overflow (2) refills the hub above the floor.
+    expect(after.storage.material).toBe(PROTECTED_MATERIAL_RESERVE + 2)
+    // 25 released + 2 income - 25 cost - 1 upkeep = 1 left in the main stock
+    // (stored production is 0: the release already lifted the stock to the cap).
     expect(after.resources.construction).toBe(1)
   })
 
-  it('B8 — the reserve funds a shortfall the stock and income alone cannot (storage 39, +1 income)', () => {
-    const state = withStorage(withMain(farmWorkerFixture(), 0), 39)
+  it('B8 — the reserve funds a shortfall the stock and income alone cannot (storage 39, Workshop inflow)', () => {
+    const state = withStorage(withMain(workshopWorkerFixture(), 0), 39)
     const affordability = getPlacementAffordability(state, FREE, 'residence')
-    // Income alone gives 1, stored production 0: only the reserve closes the gap.
+    // Same-tick inflow (2 stored + 2 income = 4) alone is far short: only the
+    // 24-unit releasable reserve closes the gap.
     expect(affordability.coveredBySameTickInflow).toBe(false)
     expect(affordability.coveredByProtectedReserve).toBe(true)
     expect(affordability.affordable).toBe(true)

@@ -1008,8 +1008,9 @@ export interface WaterAdmissionGate {
   readonly shortage: boolean
   readonly servedResidenceIds: ReadonlySet<string>
   /**
-   * Water production capacity this tick: staffed operational road-accessible
-   * Wells x WATER_PER_WELL_PER_TICK. Derived, never persisted.
+   * POTENTIAL Water production capacity for the admission decision: staffed
+   * Wells plus vacant-but-staffable Wells x WATER_PER_WELL_PER_TICK
+   * (`waterPotentialProductionForTick`, deadlock fix). Derived, never persisted.
    */
   readonly productionCapacity?: number
   /** Water need of the currently served population this tick. */
@@ -1032,6 +1033,10 @@ export interface WaterAdmissionGate {
  *   productionCapacity >= servedNeed + admissionsThisTick + 1
  *
  * so the served population cannot settle above the colony's Water production.
+ * Callers supply POTENTIAL capacity (staffed + staffable-vacant Wells), so
+ * the bound is against built infrastructure; the stock-shortage guard above
+ * (excused in `step.ts` only while potential covers current need) still
+ * blocks whenever potential cannot cover it.
  * `admissionsThisTick` is a transient local counter, never persisted. A colony
  * with zero colonists is explicitly exempt (the first colonist is needed to
  * staff the very Well that would produce the capacity).

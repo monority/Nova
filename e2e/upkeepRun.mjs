@@ -197,19 +197,19 @@ async function scenarioVacantWorkshop(page, shot) {
   s = await stepUntil(page, (v) => v.waterProduction === '2', 'Well staffed', 10);
   ok(`A bootstrap: colonist ${s.colonists}, water production ${s.waterProduction}, material ${s.construction}`);
 
-  // J. Under construction: no capacity/production/upkeep. Step 10CZ: the
-  // bootstrap Well is staffed, so Phase 7 income (+1/tick) adds 3 Material
-  // before the Workshop placement (15 + 3 = 18).
+  // J. Under construction: no capacity/production/upkeep. Workshop-only
+  // income: the staffed Well earns no Material, so the stock stays at 40
+  // through the water buffer and the placement leaves exactly 15.
   s = await stepUntil(page, (v) => Number(v.water) >= 1, 'water buffer', 10);
   await selectPalette(page, 'build-workshop', 'Workshop selected');
   await placeAt(page, { x: 4, y: 3 });
   s = await stats(page);
-  if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '18') {
+  if (s.storageCapacity !== '0' || s.materialProduction !== '0' || s.materialUpkeep !== '0' || s.construction !== '15') {
     fail(`J under-construction bad: ${JSON.stringify(s)}`);
-  } else ok('J under construction: capacity 0, production 0, upkeep 0, material 18 (15 + Phase 7 Well income)');
+  } else ok('J under construction: capacity 0, production 0, upkeep 0, material 15 (40 − 25, no income accrues)');
   await step(page); // Step 10Y: 1 construction tick left
   s = await step(page); // operational, vacant
-  if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '20' || s.storageCapacity !== '25') {
+  if (s.materialUpkeep !== '0' || s.netMaterial !== '0' || s.construction !== '15' || s.storageCapacity !== '25') {
     fail(`B vacant bad: ${JSON.stringify(s)}`);
   } else ok(`B vacant workshop: upkeep 0, net 0, material ${s.construction}, capacity ${s.storageCapacity} (no leak)`);
   await selectAt(page, { x: 4, y: 3 });
@@ -220,17 +220,17 @@ async function scenarioVacantWorkshop(page, shot) {
   await shot('02-vacant.png');
 
   // B-sustain: vacant capacity is real, but with nobody producing there is no
-  // upkeep leak. Step 10CZ: the staffed Well still earns Phase 7 income
-  // (+1/tick), so the stock climbs by exactly the workforce income.
+  // upkeep leak. Workshop-only income: the staffed Well earns no Material,
+  // so the stock stays exactly flat while the Workshop stands vacant.
   let prev = Number(s.construction);
   for (let i = 0; i < 5; i++) {
     s = await step(page);
-    if (Number(s.construction) !== prev + 1 || s.materialUpkeep !== '0' || s.materialProduction !== '0') {
+    if (Number(s.construction) !== prev || s.materialUpkeep !== '0' || s.materialProduction !== '0') {
       fail(`B vacant sustain tick ${i + 1}: ${JSON.stringify(s)}`);
     }
     prev = Number(s.construction);
   }
-  ok(`B vacant Workshop gained only workforce income (+1/tick) across 5 ticks to material ${prev} (capacity 25, upkeep 0)`);
+  ok(`B vacant Workshop gains nothing across 5 ticks (Workshop-only income: the Well worker earns no Material), material held at ${prev} (capacity 25, upkeep 0)`);
 }
 
 /**
@@ -272,20 +272,22 @@ async function scenarioStaffedWorkshop(page, shot) {
   } else ok(`C inspection: "${staffedInspection}"`);
   await shot('03-staffed.png');
 
-  // C-sustain (Step 10CZ): below capacity the tick delta is
-  // stored production (2) + workforce income (2) - upkeep (1) = stored + 1;
-  // above capacity stored production is 0 and the delta is income - upkeep = 1.
+  // C-sustain (Step 10CZ, exact invariant): each tick's delta is THIS tick's
+  // pre-tick stored production (headroom at tick start) + workforce income (2)
+  // − upkeep (1). Below the cap that is 3/tick, in the transition 2, and above
+  // the cap exactly 1 — asserted per tick from the PRE-tick stored value.
   let prev = Number(s.construction);
   for (let i = 0; i < 6; i++) {
+    const preStored = Number(s.storedProduction);
     s = await step(page);
     const delta = Number(s.construction) - prev;
-    const expected = Number(s.storedProduction) + 1;
+    const expected = preStored + 1;
     if (delta !== expected || s.materialUpkeep !== '1' || Number(s.storageCapacity) !== 25) {
-      fail(`C sustain tick ${i + 1}: delta ${delta} expected ${expected}, ${JSON.stringify(s)}`);
+      fail(`C sustain tick ${i + 1}: delta ${delta} expected ${expected} (preStored ${preStored}), ${JSON.stringify(s)}`);
     }
     prev = Number(s.construction);
   }
-  ok(`C income-aware refill (stored 2 + income 2 - upkeep 1 = +3 below the cap, +1 above), material now ${prev}`);
+  ok(`C income-aware refill (exact: preStored + income 2 - upkeep 1, 3/2/1 per phase), material now ${prev}`);
 
   // K. Above the cap there is no equilibrium any more (Step 10CQ): stored
   // production is 0, and the stock still climbs by income (2) - upkeep (1).

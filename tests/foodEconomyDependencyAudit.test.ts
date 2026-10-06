@@ -512,10 +512,11 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
     expect(baseline.resources.construction).toBeGreaterThan(withInput.resources.construction)
   })
 
-  it('tests the Farm-input deadlock: broken by Step 10CQ employment income', () => {
-    // 2 Farms, 0 Workshops, Material 0. Under Step 10CQ, Farm workers earn
-    // 1 Material/tick, which pays their own 1 Material input starting at tick 2.
-    // The deadlock is broken: the colony survives.
+  it('without generic employment income, the hypothetical Farm-input configuration deadlocks', () => {
+    // 2 Farms, 0 Workshops, Material 0, farmInput 1. Farm workers earn no
+    // Material (Workshop-only income), so the hypothetical input is never
+    // payable: the experiment deadlocks and the colony starves. Farm-input
+    // remains unjustified — no such mechanic exists in the product model.
     const start = world({ residences: 2, farms: 2, colonists: 2, material: 0, food: 3 })
     const run = runMirror(start, 30, { farmInput: 1, farmOutput: 2 })
     audit('FARM_INPUT_DEADLOCK', {
@@ -523,10 +524,9 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
       food: run.state.resources.food,
       material: run.state.resources.construction,
       starved: run.trace.some((r) => r.population === 0),
-      note: 'Step 10CQ.1: Farm-worker income pays the Farm input; the deadlock no longer causes starvation',
+      note: 'Workshop-only income: no Farm income pays the hypothetical input; the deadlock starves the colony',
     })
-    expect(getPopulationCount(run.state)).toBe(2)
-    expect(run.trace.some((r) => r.population === 0)).toBe(false)
+    expect(run.trace.some((r) => r.population === 0)).toBe(true)
   })
 })
 

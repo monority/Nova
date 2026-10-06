@@ -230,21 +230,23 @@ describe('10DA — economy feedback numbers a player reads', () => {
     expect(getMaterialStorageCapacity(workshop)).toBe(25)
 
     const farm = build({ residences: 1, farms: 1, colonists: 1 })
-    expect(getWorkforceIncome(farm)).toBe(1) // Farm worker
+    expect(getWorkforceIncome(farm)).toBe(0) // Workshop-only income
     const well = build({ residences: 1, wells: 1, colonists: 1 })
-    expect(getWorkforceIncome(well)).toBe(1) // Well worker
+    expect(getWorkforceIncome(well)).toBe(0) // Workshop-only income
 
     expect(PROTECTED_MATERIAL_RESERVE).toBe(15)
     expect(DEFAULT_STORAGE_CAPACITIES).toEqual({ food: 50, water: 30, material: 40 })
   })
 
-  it('a balanced colony reads break-even Food and Water while Material accrues from income', () => {
+  it('a balanced colony reads break-even Food and Water with no Material income (no Workshop)', () => {
     const balanced = build({ residences: 2, farms: 1, wells: 1, colonists: 2 })
     expect(getFoodProductionPerTick(balanced)).toBe(getFoodConsumptionPerTick(balanced))
     expect(getWaterProductionPerTick(balanced)).toBe(
       getServedColonistCount(balanced) * 1
     )
-    expect(getWorkforceIncome(balanced)).toBe(2)
+    // Workshop-only income: Farm and Well employment pays in Food and Water,
+    // not Material — a colony without a staffed Workshop accrues none.
+    expect(getWorkforceIncome(balanced)).toBe(0)
     expect(getMaterialUpkeepPerTick(balanced)).toBe(0)
   })
 })

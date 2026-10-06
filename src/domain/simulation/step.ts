@@ -32,7 +32,7 @@ import {
   upkeepBuildings,
 } from './phases.js'
 import { growSettlement } from './growth.js'
-import { getWaterCoverage, hasOperationalWell, waterProductionForTick } from '../water/water.js'
+import { getWaterCoverage, hasOperationalWell, waterPotentialProductionForTick } from '../water/water.js'
 import { WATER_PER_COLONIST_PER_TICK } from '../resource/resource.js'
 import type { SimulationState } from './state.js'
 
@@ -73,8 +73,16 @@ export const stepSimulation = (
       ? 0
       : coverage.servedColonistIds.length * WATER_PER_COLONIST_PER_TICK
 
+  // Deadlock fix: the admission gate reads POTENTIAL Water production
+  // (staffed Wells plus vacant Wells a worker could reach), not just
+  // staffed output — the colony that only lacks the worker the admission
+  // itself provides must be able to progress. The stock shortage is excused
+  // exactly while potential covers current need; genuinely insufficient
+  // capacity still blocks via both guards in `updatePopulation`.
   const productionCapacity =
-    coverage === null ? 0 : waterProductionForTick(consumed.state)
+    coverage === null ? 0 : waterPotentialProductionForTick(consumed.state)
+  const shortageExcused =
+    coverage !== null && productionCapacity >= servedNeed
   const waterConsumed =
     coverage === null
       ? { state: consumed.state, shortage: false }
@@ -87,7 +95,7 @@ export const stepSimulation = (
     coverage === null
       ? undefined
       : {
-          shortage: waterConsumed.shortage,
+          shortage: waterConsumed.shortage && !shortageExcused,
           servedResidenceIds: new Set(coverage.servedResidenceIds),
           productionCapacity,
           servedNeed,

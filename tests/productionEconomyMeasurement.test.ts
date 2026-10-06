@@ -312,7 +312,7 @@ describe('2. Resource flow across representative settlements (measured)', () => 
     for (const entry of table) expect(entry.rows).toHaveLength(HORIZONS.length)
   })
 
-  it('balanced workforce: Food and Water are at exact break-even, Material still accrues (income only)', () => {
+  it('balanced workforce: Food and Water are at exact break-even, Material accrues nothing (no Workshop)', () => {
     const rows = trace(build({ residences: 2, farms: 1, wells: 1, colonists: 2 }), [12])
     const row = rows[0]
     if (row === undefined) throw new Error('10cw: missing row')
@@ -320,7 +320,8 @@ describe('2. Resource flow across representative settlements (measured)', () => 
     expect(row.waterProd).toBe(row.waterServed * WATER_PER_COLONIST_PER_TICK) // 2 = 2
     expect(row.materialGross).toBe(0) // no Workshop
     expect(row.materialUpkeep).toBe(0)
-    expect(row.workforceIncome).toBe(2) // Farm +1, Well +1
+    // Workshop-only income: Farm and Well employment earns no Material.
+    expect(row.workforceIncome).toBe(0)
   })
 
   it('resource stocks have different ceiling rules: Food/Water uncapped, Material production capped', () => {
@@ -392,16 +393,16 @@ describe('4. Production vs workforce income (measured)', () => {
     expect(before.storedProduction + before.workforceIncome - before.materialUpkeep).toBe(3)
   })
 
-  it('Food/Water producers also earn Material income (income is decoupled from the produced resource)', () => {
+  it('Food/Water producers earn no Material income (income is Workshop-only)', () => {
     const farm = snapshot(build({ residences: 1, farms: 1, colonists: 1, material: 0 }))
     expect(farm.foodProd).toBe(2)
     expect(farm.materialGross).toBe(0)
-    expect(farm.workforceIncome).toBe(1) // Farm worker earns Material
+    expect(farm.workforceIncome).toBe(0) // Farm worker earns no Material
 
     const well = snapshot(build({ residences: 1, wells: 1, colonists: 1, material: 0, water: 0 }))
     expect(well.waterProd).toBe(2)
     expect(well.materialGross).toBe(0)
-    expect(well.workforceIncome).toBe(1) // Well worker earns Material
+    expect(well.workforceIncome).toBe(0) // Well worker earns no Material
   })
 
   it('production inflow is bounded by the per-Workshop cap; income bypasses it and Storage retains overflow', () => {
@@ -513,7 +514,8 @@ describe('6. Candidate Phase 8 directions — evidence only (no ranking)', () =>
     // it is a Material deduction, not a production input.
     expect(after.materialGross).toBe(2)
     expect(after.materialUpkeep).toBe(1)
-    expect(after.workforceIncome).toBe(4) // Farm 1 + Well 1 + Workshop 2
+    // Workshop-only income: the Workshop worker alone earns Material.
+    expect(after.workforceIncome).toBe(2)
     expect(after.storedProduction).toBe(2)
     expect(after.material - before.material).toBe(
       after.storedProduction + after.workforceIncome - after.materialUpkeep

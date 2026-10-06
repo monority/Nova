@@ -1063,19 +1063,17 @@ describe('12 — counterfactual expansion strategies', () => {
       }
     }
     audit('EXPANSION_STRATEGIES', out)
-    // Build order matters: A, B and D finish all four workplaces; C
-    // (Farm, Farm, Workshop, Workshop) stalls because the two Farms claim both
-    // workers, the Workshop is built but never staffed, and no Material income
-    // exists to pay for roads + the fourth building.
-    // Step 10CQ.1: every strategy now finishes its four placements — Farm
-    // workers earn income, so C is no longer blocked by affordability. C still
-    // stalls economically (no staffed Workshop), which shows in its later
-    // fourth placement and lower final stock.
-    expect(out['A']).toMatchObject({ placementTicks: [0, 1, 3, 7], materialEnd: 490 })
-    expect(out['B']).toMatchObject({ placementTicks: [0, 1, 3, 7], materialEnd: 490 })
+    // Build order matters — the original finding is restored by Workshop-only
+    // income: C (Farm, Farm, Workshop, Workshop) stalls because the two Farms
+    // claim both workers, the Workshop is built but never staffed, and with no
+    // staffed Workshop there is no Material income at all to pay for roads +
+    // the fourth building. A, B and D finish, but later and leaner than under
+    // the obsolete generic-income model.
+    expect(out['A']).toMatchObject({ placementTicks: [0, 1, 3, 9], materialEnd: 264 })
+    expect(out['B']).toMatchObject({ placementTicks: [0, 1, 3, 9], materialEnd: 264 })
     const c = out['C'] as { placementTicks: (number | null)[]; materialEnd: number; staffedWorkshops: number; staffedFarms: number }
-    expect(c.placementTicks).toEqual([0, 1, 3, 12])
-    expect(c.materialEnd).toBe(455)
+    expect(c.placementTicks).toEqual([0, 1, 3, null])
+    expect(c.materialEnd).toBe(5)
     expect(c.staffedWorkshops).toBe(0)
     expect(c.staffedFarms).toBe(2)
     // The finished strategies diverge in staffing and Material too.
@@ -1096,7 +1094,7 @@ describe('12 — counterfactual expansion strategies', () => {
 // ---------------------------------------------------------------------------
 
 describe('13 — storage and construction pressure', () => {
-  it('measures storage capacity, accumulation rate and time-to-construction vs W (Step 10CQ.1)', () => {
+  it('measures storage capacity, accumulation rate and time-to-construction vs W (Workshop-only income)', () => {
     const rows: unknown[] = []
     for (const w of [1, 2, 3]) {
       for (const f of [1, 2, 3]) {
@@ -1114,9 +1112,9 @@ describe('13 — storage and construction pressure', () => {
       }
     }
     audit('STORAGE_CONSTRUCTION', rows)
-    // Step 10CQ.1: the cap (25 × W) still bounds stored production, but the
-    // stock no longer rests at 24 × W — income keeps raising it at exactly
-    // (F + W)/tick above the cap (income F + 2W minus upkeep W).
+    // Workshop-only income: the cap (25 × W) still bounds stored production,
+    // and above it the stock drifts at exactly W/tick (2W Workshop income −
+    // W upkeep). Farm count contributes nothing to Material.
     for (const row of rows as {
       farms: number
       workshops: number
@@ -1126,20 +1124,22 @@ describe('13 — storage and construction pressure', () => {
     }[]) {
       expect(row.storage).toBe(25 * row.workshops)
       expect(row.equilibrium).toBeGreaterThan(24 * row.workshops)
-      expect(row.growthPerTick).toBe(row.farms + row.workshops)
+      expect(row.growthPerTick).toBe(row.workshops)
     }
   })
 
-  it('shows Workshop expansion raises the storage ceiling and the accumulation rate (Step 10CQ.1)', () => {
+  it('shows Workshop expansion raises the storage ceiling and the post-cap drift (Workshop-only income)', () => {
     const rows = [1, 2, 3, 4].map((w) => {
       const start = rowWorld({ residences: 2 + w, farms: 2, workshops: w, material: 0, food: 4000 })
       return { workshops: w, storage: materialStorageCapacityForTick(start), equilibrium: advance(start, 200).resources.construction }
     })
     audit('WORKSHOP_CEILING', rows)
-    // Step 10CQ.1: each additional Workshop adds 25 to the cap and +1/tick to
-    // the post-cap rate (F + W); the measured 200-tick stocks reflect both.
+    // Each additional Workshop adds 25 to the cap and +1/tick to the post-cap
+    // drift (income 2 − upkeep 1). From zero the stock climbs +3/tick below
+    // the cap (reaching 25 at ~tick 8), then drifts +W/tick: after 200 ticks
+    // that is 25 + 192 = 217 per Workshop.
     expect(rows.map((r) => r.storage)).toEqual([25, 50, 75, 100])
-    expect(rows.map((r) => r.equilibrium)).toEqual([610, 826, 1042, 1258])
+    expect(rows.map((r) => r.equilibrium)).toEqual([217, 434, 651, 868])
   })
 })
 

@@ -477,7 +477,7 @@ describe('§5 — Food-side pressure', () => {
 // ---------------------------------------------------------------------------
 
 describe('§6 — Material-side pressure', () => {
-  it('Material now has two sources: Workshop production and employment income (Step 10CQ.1)', () => {
+  it('Material has exactly one source: Workshop employment (production + income)', () => {
     const shop = advance(rowWorld({ residences: 1, farms: 0, workshops: 1, material: 10, food: 100 }), 15)
     const farm = advance(rowWorld({ residences: 1, farms: 1, workshops: 0, material: 10, food: 100 }), 15)
     const rs = read(shop)
@@ -501,12 +501,13 @@ describe('§6 — Material-side pressure', () => {
     // One staffed Workshop: +2 gross, -1 upkeep, capacity 25.
     expect(rs.upkeep).toBe(1)
     expect(rs.storage).toBe(25)
-    // Step 10CQ.1: 10 + 3/tick (2 stored + 2 income − 1 upkeep) to 25 at t5,
-    // then +1/tick (income − upkeep): 35 after 15 ticks.
+    // 10 + 3/tick (2 stored + 2 income − 1 upkeep) to 25 at t5, then +1/tick
+    // (income − upkeep): 35 after 15 ticks.
     expect(rs.material).toBe(35)
-    // Farm branch: no Material production, but the Farm worker earns +1/tick:
-    // 10 + 15 = 25 (Farm staffing still costs no upkeep).
-    expect(rf.material).toBe(25)
+    // Farm branch: no Material production and no income (Workshop-only), so
+    // the stock rests at 10 while the Farm pays in Food (farm staffing costs
+    // no upkeep).
+    expect(rf.material).toBe(10)
     expect(rf.upkeep).toBe(0)
     expect(rf.food).toBe(100 + 15 * (2 - 1))
     // Food is the mirror image: the Workshop branch burns it.
@@ -968,11 +969,12 @@ describe('§10 — greedy assignment audit', () => {
 // ---------------------------------------------------------------------------
 
 describe('§11 — construction feedback loops', () => {
-  it('Loop A now closes from bootstrap: Farm income buys the 2nd Residence (Step 10CQ.1)', () => {
+  it('Loop A stays closed from a farm-first bootstrap: only Workshop staffing buys the 2nd Residence', () => {
     // Real command chain, bootstrap budget 100. Farm-first order:
-    // R1 25 + road 5 + Farm 25 + Workshop 25 = 80, leaving 20. Step 10CQ.1:
-    // the Farm worker then earns 1/tick, so 20 + 6 = 26 at the check and the
-    // second Residence is affordable — the loop closes.
+    // R1 25 + road 5 + Farm 25 + Workshop 25 = 80, leaving 20. The colonist
+    // staffs the nearer Farm, so the Workshop stays vacant: no production and
+    // no income (Workshop-only model), the stock rests at 20 < 25 and the
+    // second Residence waits until the player staffs the Workshop.
     let state = createTestState()
     state = stepSimulation(state, { type: 'placeBuilding', x: 1, y: 0, buildingType: 'residence' })
     state = stepSimulation(state, { type: 'placeRoads', cells: [{ x: 1, y: 1 }] })
@@ -996,11 +998,14 @@ describe('§11 — construction feedback loops', () => {
       pop: after.pop,
     })
     expect(r.farmWorkers).toBe(1)
+    expect(r.workshopWorkers).toBe(0)
     expect(r.foodProd).toBe(2)
     expect(r.netFood).toBe(1)
-    expect(materialBefore).toBe(26)
-    // Accepted now: Farm income crossed the 25 cost, so the loop closes.
-    expect(Object.keys(state.buildings).length).toBe(buildingsBefore + 1)
+    // Farm employment earns no Material: the build remainder rests at 20.
+    expect(materialBefore).toBe(20)
+    // Rejected: the farm-first opening must staff its Workshop before the
+    // second Residence becomes affordable.
+    expect(Object.keys(state.buildings).length).toBe(buildingsBefore)
     expect(getPopulationCount(state)).toBe(1)
   })
 

@@ -812,7 +812,7 @@ describe('§11 — terminal states and recovery from Material 0', () => {
     }
   })
 
-  it('confirms even the Farm-only configuration recovers under Step 10CQ income (Step 10CQ.1)', () => {
+  it('confirms the Farm-only configuration has no Material source at all (Workshop-only income)', () => {
     const start = rowWorld({ residences: 1, farms: 1, workshops: 0, material: 0, food: 400 })
     const trace = runTrace(start, 60, 'coupled')
     audit('NO_WORKSHOP_NO_MATERIAL', {
@@ -820,11 +820,12 @@ describe('§11 — terminal states and recovery from Material 0', () => {
       F: trace.records[0]!.staffedFarms,
       net: trace.records[0]!.materialProduction - trace.records[0]!.totalUpkeep,
       materialEnd: trace.records[59]!.material,
-      note: 'Step 10CQ.1: the Farm worker earns 1/tick with no Workshop, so the old terminal Farm-only state recovers at +60 over 60 ticks',
+      note: 'Workshop-only income: the Farm worker earns no Material and pays no upkeep, so the colony is Material-flat — Farm employment pays in Food, not Material',
     })
-    // Step 10CQ.1: 0 + 60 × 1 (Farm income, no upkeep under the coupled rule
-    // without a Workshop) = 60 — the only non-recovering configuration is gone.
-    expect(trace.records[59]!.material).toBe(60)
+    // Workshop-only income: production 0, income 0, upkeep 0 — the stock
+    // stays exactly 0. Material requires a Workshop; Food production is the
+    // Farm-only colony's entire economic role.
+    expect(trace.records[59]!.material).toBe(0)
     expect(trace.records[0]!.staffedWorkshops).toBe(0)
   })
 })

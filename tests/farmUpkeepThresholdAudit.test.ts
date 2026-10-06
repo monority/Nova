@@ -533,7 +533,7 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
     audit('FORMULA_VERIFICATION', rows)
   })
 
-  it('every configuration accumulates under Step 10CQ income (the W >= F boundary is gone)', () => {
+  it('accumulation needs W >= F again under Workshop-only income', () => {
     const rows = MATRIX.map((scenario) => {
       const start = scenarioStart(scenario)
       const trace = runTrace(start, MATRIX_TICKS, 'candidate')
@@ -556,12 +556,13 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
       }
     })
     audit('ACCUMULATION_BOUNDARY', rows)
-    // Step 10CQ.1: income (F×1 + W×2) exceeds the candidate upkeep
-    // (W + max(0, F-1)), so every configuration now GROWS — the old
-    // W >= F accumulation boundary is no longer the deciding rule.
+    // Workshop-only income: income is W×2 and the candidate upkeep is
+    // W + max(0, F−1), so above-cap drift is W − max(0, F−1) — the original
+    // W >= F accumulation boundary is back. Every configuration with at
+    // least one Workshop still climbs to the 25 crest below the cap.
     for (const row of rows) {
-      expect(row.netWithIncome).toBe(row.W + (row.F > 0 ? 1 : 0))
-      expect(row.classification).toBe('GROWING')
+      expect(row.netWithIncome).toBe(row.W - Math.max(0, row.F - 1))
+      expect(row.classification).toBe(row.W > 0 ? 'GROWING' : 'MARGINALLY_STABLE')
     }
   })
 
@@ -643,13 +644,14 @@ describe('§6 — bootstrap experiment (real command chain)', () => {
       fullMaterialEnd: full.state.resources.construction,
       candidateMaterialEnd: cand.state.resources.construction,
     })
-    // Step 10CQ.1: the threshold rule still matches the baseline exactly for
-    // one Farm, and income now masks the `full` upkeep difference in this
-    // short sequence — all three models end at the same bootstrap stock (15).
+    // Workshop-only income: the candidate threshold rule still matches the
+    // baseline exactly for one Farm (first Farm free). The `full` rule now
+    // drains to 0 — the Farm worker earns nothing, so full farm upkeep has
+    // no counterweight in this short sequence.
     expect(cand.state.resources.construction).toBe(base.state.resources.construction)
     expect(base.state.resources.construction).toBe(15)
     expect(cand.state.resources.construction).toBe(15)
-    expect(full.state.resources.construction).toBe(15)
+    expect(full.state.resources.construction).toBe(0)
     expect(getPopulationCount(cand.state)).toBe(1)
   })
 
@@ -1133,9 +1135,11 @@ describe('§16 — 24/25 crest behaviour', () => {
       expect(entry.crest).toBeGreaterThanOrEqual(25)
       expect(entry.buildAccepted).toBe(true)
     }
-    expect((out['2F+2W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(31)
-    expect((out['3F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(34)
-    expect((out['2F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(34)
+    // Workshop-only income from 24: stored production (2W clamped by cap
+    // headroom) + income (2W) − candidate upkeep (W + max(0, F−1)).
+    expect((out['2F+2W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(29)
+    expect((out['3F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(31)
+    expect((out['2F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(32)
   })
 })
 
@@ -1144,7 +1148,7 @@ describe('§16 — 24/25 crest behaviour', () => {
 // ---------------------------------------------------------------------------
 
 describe('§17 — recovery from Material 0', () => {
-  it('identifies that every configuration recovers under Step 10CQ income (Step 10CQ.1)', () => {
+  it('identifies that every configuration with a Workshop recovers (Workshop-only income)', () => {
     const configs = [
       { name: '1F+1W', residences: 2, farms: 1, workshops: 1 },
       { name: '2F+2W', residences: 4, farms: 2, workshops: 2 },
@@ -1212,7 +1216,7 @@ describe('§18 — terminal states', () => {
     }
   })
 
-  it('the crest from Material 0 now funds a build for every W = F - 1 colony (Step 10CQ.1)', () => {
+  it('the crest from Material 0 funds a build for every W = F - 1 colony', () => {
     const rows = [10, 12, 13, 14].map((workshops) => {
       const farms = workshops + 1
       const start = rowWorld({
@@ -1232,9 +1236,10 @@ describe('§18 — terminal states', () => {
       }
     })
     audit('TERMINAL_LARGE_CREST', rows)
-    // Step 10CQ.1: from 0 the crest is stored production (2W) plus income
-    // (F×1 + W×2) = 2W + (W + 1) + 2W = 5W + 1 — every row is affordable.
-    expect(rows.map((r) => r.crestFromZero)).toEqual([51, 61, 66, 71])
+    // Workshop-only income: from 0 the crest is stored production (2W,
+    // cap 25W is no bound from zero) plus Workshop income (2W) = 4W — every
+    // row clears the 25 build cost with room to spare.
+    expect(rows.map((r) => r.crestFromZero)).toEqual([40, 48, 52, 56])
     expect(rows.every((r) => r.buildAffordable)).toBe(true)
   })
 

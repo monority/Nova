@@ -81,7 +81,10 @@ const loadFixture = (page, material) =>
       }
     }
     state = operational(state, 'residence', 0, 0)
-    state = operational(state, 'farm', 0, 2)
+    // Workshop-only income: the fixture's income term must come from the
+    // one employment that earns Material (the Workshop worker), mirroring the
+    // unit fixture in tests/roadAffordabilityParity.test.ts.
+    state = operational(state, 'workshop', 0, 2)
     const roadCreated = nova.createRoads(state, [{ x: 0, y: 1 }])
     const roads = { ...roadCreated.state.roads }
     for (const id of roadCreated.roadIds) {
@@ -154,7 +157,7 @@ try {
   await loadFixture(page, 4)
   await wait(200)
   const positive = await hover(page, FREE)
-  if (positive.status.includes('ready · material 5 (incl. 0 stored + 1 income)')) {
+  if (positive.status.includes('ready · material 5 (incl. 2 stored + 2 income)')) {
     ok(`income-covered road reads ready: "${positive.status}"`)
   } else {
     fail(`income-covered road feedback bad: ${JSON.stringify(positive.status)}`)
@@ -169,18 +172,20 @@ try {
   } else {
     fail(`income-covered road not accepted: ${JSON.stringify(positiveAfter.roads)}`)
   }
-  if (positiveAfter.construction === '0') {
-    ok('exactly 5 Material spent (4 stock + 1 income)')
+  if (positiveAfter.construction === '2') {
+    ok('exactly 5 Material spent (4 stock + 2 stored + 2 income − 5 road − 1 upkeep)')
   } else {
-    fail(`expected 0 Material after spending, got ${positiveAfter.construction}`)
+    fail(`expected 2 Material after spending, got ${positiveAfter.construction}`)
   }
   await page.screenshot({ path: resolve(ART, '02-income-covered-placed.png') })
 
-  // 2. Control: without the income term the same stock is refused, spends nothing.
-  await loadFixture(page, 3)
+  // 2. Control: without this tick's same-tick inflow the stock is refused,
+  //    spends nothing. Workshop-only income: at stock 0 the inflow (2 stored
+  //    + 2 income = 4) is still short of the 5 cost, so the road is refused.
+  await loadFixture(page, 0)
   await wait(200)
   const control = await hover(page, FREE)
-  if (control.status.includes('insufficient material (3/5)')) {
+  if (control.status.includes('insufficient material (0/5)')) {
     ok(`stock-only shortfall reads insufficient: "${control.status}"`)
   } else {
     fail(`shortfall feedback bad: ${JSON.stringify(control.status)}`)
@@ -188,7 +193,7 @@ try {
   const controlAfter = await clickCell(page, FREE)
   if (controlAfter.roads === control.roads) ok('refused road added nothing')
   else fail(`refused road changed roads: ${control.roads} -> ${controlAfter.roads}`)
-  if (controlAfter.construction === '3') ok('refused road spent no Material')
+  if (controlAfter.construction === '0') ok('refused road spent no Material')
   else fail(`refused road changed material: ${controlAfter.construction}`)
   await page.screenshot({ path: resolve(ART, '03-shortfall-refused.png') })
 

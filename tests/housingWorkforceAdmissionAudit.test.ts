@@ -495,7 +495,7 @@ describe('8 — F,F,W,W recovery', () => {
     expect(r.vacantHousing).toBe(0)
   })
 
-  it('B — waiting recovers Material through income but not Workshop staffing (Step 10CQ.1)', () => {
+  it('B — waiting changes nothing: no income, no Workshop staffing (Workshop-only income)', () => {
     const start = stuckState()
     const trace: Snapshot[] = []
     let state = start
@@ -509,9 +509,11 @@ describe('8 — F,F,W,W recovery', () => {
       staffedWorkshops: trace[239]!.staffedWorkshops,
       changed: trace[239]!.material !== 5,
     })
-    // Step 10CQ.1: two employed Farm workers earn 2/tick with no upkeep, so
-    // waiting accrues 5 + 240 x 2 = 485. Staffing still does not recover.
-    expect(trace[239]!.material).toBe(485)
+    // Workshop-only income: the two Farm workers earn nothing and the
+    // Workshops stay vacant, so waiting leaves the trap exactly as it was —
+    // Material 5, no staffing. Recovery needs a new Residence (a worker),
+    // which needs the Material the trap denies.
+    expect(trace[239]!.material).toBe(5)
     expect(trace[239]!.staffedWorkshops).toBe(0)
   })
 
@@ -639,17 +641,23 @@ describe('10 — construction order', () => {
       }
     }
     audit('CONSTRUCTION_ORDER_100', out)
-    // Step 10CQ.1: employment income lets every sequence finish all six
-    // placements from the bootstrap budget; Farm-first sequences still place
-    // later and end staffed differently (C: no Workshop; D: no Food/population).
-    expect((out['A'] as { complete: boolean }).complete).toBe(true)
+    // Workshop-only income: the bootstrap budget (100) cannot fund all six
+    // placements (6 × 25 = 150) without a producing Workshop. The
+    // Workshop-first sequences (B, D) finish every placement; the farm-first
+    // sequences (A, C) stall at 3 — the lone colonist staffs the Farm, earns
+    // no Material, and nothing ever accumulates toward the 4th placement.
+    // D still completes its placements but starves (no Farm): the order
+    // decision is about WHICH loop closes, not just affordability.
+    expect((out['A'] as { complete: boolean }).complete).toBe(false)
     expect((out['B'] as { complete: boolean }).complete).toBe(true)
-    expect((out['C'] as { complete: boolean }).complete).toBe(true)
+    expect((out['C'] as { complete: boolean }).complete).toBe(false)
     expect((out['D'] as { complete: boolean }).complete).toBe(true)
-    expect((out['A'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 28, 63, 88])
+    expect((out['A'] as { placementTicks: (number | null)[] }).placementTicks).toEqual([1, 2, 4, null, null, null])
     expect((out['B'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 12, 23, 31])
-    expect((out['C'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 28, 63, 88])
+    expect((out['C'] as { placementTicks: (number | null)[] }).placementTicks).toEqual([1, 2, 4, null, null, null])
     expect((out['D'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 12, 23, 31])
+    expect((out['A'] as { final: { material: number; staffedFarms: number } }).final.material).toBe(0)
+    expect((out['A'] as { final: { material: number; staffedFarms: number } }).final.staffedFarms).toBe(1)
     expect((out['C'] as { final: { staffedWorkshops: number } }).final.staffedWorkshops).toBe(0)
     expect((out['D'] as { final: { population: number } }).final.population).toBe(0)
   })

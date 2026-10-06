@@ -194,9 +194,11 @@ describe('1 — production-headroom invariant', () => {
 // ---------------------------------------------------------------------------
 
 describe('2 — multiple admissions in one tick', () => {
-  it('allows several admissions in one tick when capacity supports them', () => {
-    // 2 Wells, 1 colonist: tick 1 staffs the second Well; tick 2 has production
-    // 4 and admits two colonists in the same pass.
+  it('admits several colonists in one tick when potential capacity supports them', () => {
+    // 2 Wells, 1 colonist: potential 4 (one staffed, one vacant-but-
+    // staffable) admits three colonists on tick 1; tick 2 has production 4
+    // == need 4 and admits none. The bound is built infrastructure, and the
+    // multi-admission still happens in a single tick when it supports it.
     const start = waterWorld({ residences: 8, wells: 2, colonists: 1 })
     const t1 = advance(start, 1)
     const t2 = advance(start, 2)
@@ -204,8 +206,9 @@ describe('2 — multiple admissions in one tick', () => {
       t1: { population: pop(t1), production: production(t1) },
       t2: { population: pop(t2), production: production(t2), admissionsInTick2: pop(t2) - pop(t1) },
     })
-    expect(pop(t2) - pop(t1)).toBe(2)
+    expect(pop(t1)).toBe(4)
     expect(pop(t2)).toBe(4)
+    expect(pop(t2) - pop(t1)).toBe(0)
   })
 })
 
@@ -219,13 +222,16 @@ describe('3 — edge cases', () => {
     expect(pop(after)).toBe(1)
   })
 
-  it('B — population 1, vacant Well: no growth', () => {
-    // Farm is nearer, so the Well stays vacant (production 0).
+  it('B — population 1, vacant staffable Well: growth proceeds and staffs it', () => {
+    // Farm is nearer, so the Well starts vacant — but a vacant Well on a
+    // residence network is staffable potential (deadlock fix): the second
+    // colonist is admitted and staffs it, settling at production == need.
     const start = waterWorld({ residences: 6, farms: 1, wells: 1, colonists: 1 })
     const settled = advance(start, 40)
     audit('EDGE_B', { settled: pop(settled), staffedWells: countStaffedOperationalWells(settled) })
     expect(countStaffedOperationalWells(start)).toBe(0)
-    expect(pop(settled)).toBe(1)
+    expect(pop(settled)).toBe(2)
+    expect(countStaffedOperationalWells(settled)).toBe(1)
   })
 
   it('C — population 1, one staffed Well: reaches 2', () => {
@@ -255,13 +261,16 @@ describe('3 — edge cases', () => {
     expect(pop(settled)).toBe(2)
   })
 
-  it('H — high stock with insufficient production capacity: no growth', () => {
+  it('H — high stock with insufficient actual production: potential admits its worker', () => {
+    // Same shape as B with a reserve: the reserve does not fund growth, the
+    // staffable vacant Well does — exactly one admission, then production 2
+    // == need 2 and the reserve rests untouched.
     const start = waterWorld({ residences: 6, farms: 1, wells: 1, colonists: 1, water: 100 })
     const settled = advance(start, 40)
     audit('EDGE_H', { settled: pop(settled), water: settled.resources.water })
-    expect(pop(settled)).toBe(1)
-    // The single served colonist consumes 1/tick; no growth, no production.
-    expect(settled.resources.water).toBe(60)
+    expect(pop(settled)).toBe(2)
+    // One tick of single service (100 -> 99), then balanced flow forever.
+    expect(settled.resources.water).toBe(99)
   })
 
   it('I — high stock with sufficient capacity: funded growth without a per-tick throttle', () => {
@@ -277,10 +286,27 @@ describe('3 — edge cases', () => {
 // ---------------------------------------------------------------------------
 
 describe('4 — vacant and disconnected Wells', () => {
-  it('a vacant Well blocks growth regardless of stock', () => {
-    const start = waterWorld({ residences: 6, farms: 1, wells: 1, colonists: 1, water: 500 })
-    const settled = advance(start, 40)
+  it('a disconnected vacant Well blocks growth regardless of stock', () => {
+    // A vacant Well on an isolated stub shares no network with any Residence,
+    // so it is not staffable potential and contributes nothing: stock alone
+    // (500) cannot fund growth. Connected vacant Wells admit their worker (B).
+    let state = withStocks(createState(), { food: 10000, material: 1000, water: 500 })
+    state = op(state, 'residence', 1, 0)
+    state = op(state, 'farm', 1, 2)
+    state = opRoad(state, 1, 1)
+    state = op(state, 'well', 10, 2)
+    state = opRoad(state, 10, 1)
+    state = createColonist(state, 'building-1').state
+    state = assignJobs(state)
+    const settled = advance(state, 40)
+    audit('DISCONNECTED_VACANT_WELL', {
+      settled: pop(settled),
+      water: settled.resources.water,
+      staffedWells: countStaffedOperationalWells(settled),
+    })
+    expect(countStaffedOperationalWells(settled)).toBe(0)
     expect(pop(settled)).toBe(1)
+    expect(settled.resources.water).toBe(500)
   })
 
   it('a disconnected Well serves nothing, so even the bootstrap waits for a connection', () => {
@@ -313,26 +339,21 @@ describe('4 — vacant and disconnected Wells', () => {
 // ---------------------------------------------------------------------------
 
 describe('5 — workforce interaction', () => {
-  it('manually assigning a colonist to the Well raises production headroom', () => {
-    // Farm + Well, 1 colonist: Farm is nearer, Well vacant -> no growth.
+  it('growth proceeds without manual assignment when the vacant Well is staffable', () => {
+    // Farm + Well, 1 colonist: Farm is nearer so the Well starts vacant —
+    // but the admission itself supplies the missing worker (deadlock fix),
+    // so growth no longer waits for a manual move. Manual reassignment
+    // itself stays covered by the Step 10M suites.
     const state = waterWorld({ residences: 6, farms: 1, wells: 1, colonists: 1 })
-    const before = advance(state, 10)
-    const well = Object.values(state.buildings).find((b) => b.type === 'well')!
-    const manually = stepSimulation(state, {
-      type: 'reassignColonist',
-      colonistId: 'colonist-1',
-      workplaceId: well.id,
+    const grown = advance(state, 10)
+    audit('WORKFORCE_AUTO', {
+      grownPopulation: pop(grown),
+      grownProduction: production(grown),
+      staffedWells: countStaffedOperationalWells(grown),
     })
-    const after = advance(manually, 20)
-    audit('WORKFORCE_MANUAL', {
-      beforePopulation: pop(before),
-      beforeProduction: production(before),
-      afterPopulation: pop(after),
-      afterProduction: production(after),
-    })
-    expect(pop(before)).toBe(1)
-    expect(production(manually)).toBe(2)
-    expect(pop(after)).toBe(2)
+    expect(pop(grown)).toBe(2)
+    expect(countStaffedOperationalWells(grown)).toBe(1)
+    expect(production(grown)).toBe(2)
   })
 })
 

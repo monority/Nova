@@ -210,10 +210,13 @@ async function main() {
     await placeRoad(page, { x: 4, y: 2 }); // adjacent to the Well and to (3,2)
     s = await step(page);
     assert(s.roads !== '0', `connection road expected, got ${s.roads}`);
-    // The colonist staffs the Well; Water then flows.
+    // The colonist staffs the Well; Water then flows. With the admission
+    // deadlock fixed, the second colonist is admitted as soon as service
+    // exists — so production (2) exactly meets need (2) and the stock rests
+    // at 0: the flow works, nothing is stored. That is `noReserve` below.
     for (let i = 0; i < 6; i += 1) s = await step(page);
     assert(s.hasOperationalWell === 'true', `Well operational expected, got ${s.hasOperationalWell}`);
-    assert(Number(s.water) > 0, `Water production expected, got ${s.water}`);
+    assert(s.waterProduction === '2', `Water production expected, got ${s.waterProduction}`);
     assert(s.colonists === '2', `admission should resume after service, got ${s.colonists}`);
     // Step 10AR: service is restored and the flow is balanced (production 2 ==
     // need 2), but nothing is STORED yet: that is `noReserve`, NOT `shortage`.
@@ -248,9 +251,10 @@ async function main() {
     ok(`Well inspection: "${wellInspection}"`);
     await shot('03-well-inspection.png');
 
-    // HUD shows the Water stock.
-    assert(Number(await waterText(page)) > 0, `HUD Water must be positive, got ${await waterText(page)}`);
-    ok(`HUD Water stock: ${await waterText(page)}`);
+    // HUD shows the balanced Water stock: production == need, so the reserve
+    // rests at 0 and the supply line (asserted above) names it `reserve 0`.
+    assert((await waterText(page)) === '0', `HUD Water must read the balanced 0 stock, got "${await waterText(page)}"`);
+    ok(`HUD Water stock: ${await waterText(page)} (balanced flow, reserve 0)`);
 
     const realErrors = errors.filter((e) => !e.includes('favicon'));
     if (realErrors.length > 0) fail(`browser errors: ${realErrors.join(' | ')}`);

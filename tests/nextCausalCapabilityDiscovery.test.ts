@@ -885,15 +885,16 @@ describe('7. candidate E: production timing', () => {
     // The Workshop can only run by displacing a survival worker: the burst buys
     // Material for a bounded number of ticks and cannot be sustained (10AQ).
     expect(withWorkshop.resources.water).toBe(50)
-    // Step 10CQ.1: income is credited before the command: 25 + 2 − 25 = 2.
-    expect(withWorkshop.resources.construction).toBe(2)
+    // Workshop-only income: the Well and Farm workers earn no Material, so the
+    // placement is 25 − 25 = 0 with nothing credited on top.
+    expect(withWorkshop.resources.construction).toBe(0)
     expect(after40.population).toBeGreaterThan(0)
     // Food or Water (or both) end in deficit at 40 ticks: industry is funded by
     // a reserve, never by a surplus.
     expect(after40.foodNet <= 0 || after40.waterCapacity < after40.population).toBe(true)
   })
 
-  it('measures the storage clamp as a bound: Farm income bypasses it (Step 10CQ.1)', () => {
+  it('measures the storage clamp as a bound: income is Workshop-only, so a vacant Workshop accrues nothing', () => {
     const state = scene({
       residences: [[0, 0]],
       buildings: [
@@ -915,9 +916,11 @@ describe('7. candidate E: production timing', () => {
       return { ticks, material: settled.material, materialPerTick: settled.materialPerTick }
     })
     audit('STORAGE_CLAMP', rows)
-    // Step 10CQ.1: a lone staffed Farm has no storage capacity (0 cap) yet
-    // earns 1 Material/tick — the clamp only bounds Workshop production.
-    expect(rows.map((row) => row.material)).toEqual([1, 10, 60])
+    // Workshop-only income: the lone colonist staffs the nearer Farm, so the
+    // Workshop stays vacant — no production, no income, nothing accrues at
+    // any horizon. The clamp bounds Workshop production; without a staffed
+    // Workshop there is no Material inflow at all.
+    expect(rows.map((row) => row.material)).toEqual([0, 0, 0])
     expect(rows.every((row) => row.materialPerTick === 0)).toBe(true)
   })
 })

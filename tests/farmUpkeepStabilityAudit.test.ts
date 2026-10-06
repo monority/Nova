@@ -630,7 +630,7 @@ describe('§5 — classification comparison (baseline vs candidate)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§6 — critical 24/25 equilibrium experiment', () => {
-  it('candidate 1F+1W: gross 2, upkeep 2, income 3 — accumulates from any stock (Step 10CQ.1)', () => {
+  it('candidate 1F+1W: gross 2, upkeep 2, income 2 — climbs to the cap and rests there', () => {
     const start = rowWorld({ residences: 2, farms: 1, workshops: 1, material: 0, food: 200 })
     const trace = runTrace(start, 40, true)
     const r = trace.records[0]!
@@ -645,28 +645,29 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
     })
     expect(r.materialProduction).toBe(2)
     expect(r.totalUpkeep).toBe(2)
-    // Step 10CQ.1: income (1 Farm + 2 Workshop) exceeds the candidate upkeep
-    // (1 + 1), so the old net-0 plateau is gone: below the cap each tick adds
-    // 2 stored + 3 income − 2 upkeep = +3, then +1/tick above the cap.
+    // Workshop-only income: the Workshop worker earns 2, the Farm worker 0,
+    // so above the cap income (2) exactly equals the candidate upkeep (2) and
+    // the stock rests AT the cap. Below it, each tick adds 2 stored + 2
+    // income − 2 upkeep = +2.
     expect(
       MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK +
         MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK
-    ).toBe(3)
-    expect(trace.records.slice(0, 5).map((x) => x.material)).toEqual([3, 6, 9, 12, 15])
-    expect(trace.state.resources.construction).toBe(57)
+    ).toBe(2)
+    expect(trace.records.slice(0, 5).map((x) => x.material)).toEqual([2, 4, 6, 8, 10])
+    expect(trace.state.resources.construction).toBe(25)
   })
 
-  it('candidate 1F+1W from a 24 stock accumulates; the crest still allows a timed build (Step 10CQ.1)', () => {
+  it('candidate 1F+1W from a 24 stock rests exactly at the cap; the crest still allows a timed build', () => {
     const start = rowWorld({ residences: 2, farms: 1, workshops: 1, material: 24, food: 200 })
     const trace = runTrace(start, 40, true)
     audit('CRITICAL_1F1W_AT_24', {
       materialAfter40: trace.state.resources.construction,
-      restEquilibrium: null,
-      note: 'Step 10CQ.1: income (3) exceeds candidate upkeep (2), so there is no rest equilibrium — the stock grows +1/tick above the cap (24 -> 26 -> 65 after 40) and the crest is at least the build cost every tick',
+      restEquilibrium: 25,
+      note: 'Workshop-only income: t1 stores 1 and credits 2, pays 2 -> 25, and income (2) then equals upkeep (2) exactly, so the stock rests at the cap and the crest is at the build cost every tick',
     })
-    // Step 10CQ.1: t1 stores 1 and credits 3, pays 2 -> 26; then +1/tick
-    // (income 3 − upkeep 2, production clamped): 26 + 39 = 65 after 40.
-    expect(trace.state.resources.construction).toBe(65)
+    // Workshop-only income: t1 stores 1 and credits 2, pays 2 -> 25; the
+    // stock then rests at the cap (income 2 == upkeep 2).
+    expect(trace.state.resources.construction).toBe(25)
     expect(trace.records.every((r) => r.materialCrest >= 25)).toBe(true)
     // On the crest tick, produceMaterial fills to 25 and applyCommand can
     // spend it in the SAME tick (08G phase 8a precedes 8b).
@@ -716,16 +717,16 @@ describe('§6 — critical 24/25 equilibrium experiment', () => {
       })
     }
     audit('MIN_ACCUMULATION', rows)
-    // Step 10CQ.1: income (F×1 + W×2) − candidate upkeep (F + W) = +W/tick
-    // for every configuration — the old "W must exceed F" boundary is gone:
-    // every staffed Workshop now guarantees accumulation.
+    // Workshop-only income: above-cap drift is (W×2 − F×1 − W×1) = W − F, so
+    // the original "W must exceed F" boundary is back — but below the cap
+    // every configuration still climbs to the 25 crest within 60 ticks.
     for (const row of rows as unknown as {
       farms: number
       workshops: number
       classification: string
       netWithIncomePerTick: number
     }[]) {
-      expect(row.netWithIncomePerTick).toBe(row.workshops)
+      expect(row.netWithIncomePerTick).toBe(row.workshops - row.farms)
       expect(row.classification).toBe('GROWING')
     }
   })
@@ -898,10 +899,11 @@ describe('§8 — bootstrap experiment', () => {
       candidateMaterialEnd: candidate.state.resources.construction,
       baselineMaterialEnd: baseline.state.resources.construction,
     })
-    // Step 10CQ.1: the candidate no longer drains to 0 — Farm + Workshop
-    // income outruns the candidate upkeep and it retains 15 — but BOTH runs
-    // still end below the 25 build cost: the bootstrap gap survives.
-    expect(candidate.state.resources.construction).toBe(15)
+    // Workshop-only income: the colonist staffs the nearer Farm, the Workshop
+    // stays vacant, and Farm employment earns nothing — so the candidate's
+    // farm upkeep drains the stock to 0. The farm-first bootstrap gap is now
+    // absolute under the candidate rule; only Workshop staffing closes it.
+    expect(candidate.state.resources.construction).toBe(0)
     expect(candidate.state.resources.construction).toBeLessThan(25)
     expect(baseline.state.resources.construction).toBeLessThan(25)
     expect(getPopulationCount(candidate.state)).toBe(1)
@@ -1273,39 +1275,38 @@ describe('§13 — expansion threshold: minimum Workshops per Farm', () => {
       return { farms, minimumWorkshopsForAccumulation: minimum }
     })
     audit('EXPANSION_THRESHOLD_TABLE', table)
-    // Step 10CQ.1: with income-drived accumulation the threshold collapses:
-    // one Workshop per Farm suffices, and even F1W0 fails only because the
-    // crest never reaches 25 (income equals the candidate upkeep).
+    // Workshop-only income: accumulation requires (W×2 − F×1 − W×1) ≥ 0,
+    // i.e. W ≥ F — the original Step 10G threshold is restored by the
+    // product-model correction (Farm workers earn nothing).
     expect(table).toEqual([
       { farms: 0, minimumWorkshopsForAccumulation: 1 },
       { farms: 1, minimumWorkshopsForAccumulation: 1 },
-      { farms: 2, minimumWorkshopsForAccumulation: 1 },
-      { farms: 3, minimumWorkshopsForAccumulation: 2 },
+      { farms: 2, minimumWorkshopsForAccumulation: 2 },
+      { farms: 3, minimumWorkshopsForAccumulation: 3 },
     ])
   })
 
   it('converts the threshold into worker requirements (one worker per workplace)', () => {
-    // Step 10CQ.1: the minimum thresholds from the table above, expressed as
-    // worker requirements (one worker per workplace). Production-less-upkeep
-    // can be negative while income-less-upkeep is +W/tick — income is what
-    // actually accumulates.
+    // Workshop-only income: the minimum thresholds from the table above
+    // (W = F), expressed as worker requirements. Above-cap drift is
+    // W − F — exactly 0 at the threshold, positive only beyond it.
     const rows = [0, 1, 2, 3].map((farms) => {
-      const workshops = [1, 1, 1, 2][farms]!
+      const workshops = [1, 1, 2, 3][farms]!
       const workers = farms + workshops
       return {
         farms,
         workshops,
         requiredWorkers: workers,
         productionLessUpkeep: workshops - farms,
-        incomeLessUpkeep: workshops,
+        incomeLessUpkeep: workshops - farms,
       }
     })
     audit('EXPANSION_WORKER_REQUIREMENTS', rows)
     expect(rows).toEqual([
       { farms: 0, workshops: 1, requiredWorkers: 1, productionLessUpkeep: 1, incomeLessUpkeep: 1 },
-      { farms: 1, workshops: 1, requiredWorkers: 2, productionLessUpkeep: 0, incomeLessUpkeep: 1 },
-      { farms: 2, workshops: 1, requiredWorkers: 3, productionLessUpkeep: -1, incomeLessUpkeep: 1 },
-      { farms: 3, workshops: 2, requiredWorkers: 5, productionLessUpkeep: -1, incomeLessUpkeep: 2 },
+      { farms: 1, workshops: 1, requiredWorkers: 2, productionLessUpkeep: 0, incomeLessUpkeep: 0 },
+      { farms: 2, workshops: 2, requiredWorkers: 4, productionLessUpkeep: 0, incomeLessUpkeep: 0 },
+      { farms: 3, workshops: 3, requiredWorkers: 6, productionLessUpkeep: 0, incomeLessUpkeep: 0 },
     ])
   })
 })

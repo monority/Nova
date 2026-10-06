@@ -242,9 +242,10 @@ describe('§4 — bootstrap scenarios', () => {
     expect(getPopulationCount(after)).toBe(1)
   })
 
-  it('B — operational road-accessible Well, vacant (Farm claims the worker)', () => {
+  it('B — operational road-accessible Well, vacant at first: the admission staffs it', () => {
     // R + Farm + Well on one network; the colonist is nearest to the Farm,
-    // so the Well stays vacant.
+    // so the Well starts vacant — but it is staffable potential, so the
+    // second colonist is admitted and staffs it (deadlock fix).
     const state = waterWorld({ residences: 2, farms: 1, wells: 1, colonists: 1, food: 1000, water: 0 })
     const afterFirst = advance(state, 1)
     const afterMany = advance(state, 20)
@@ -255,7 +256,9 @@ describe('§4 — bootstrap scenarios', () => {
     })
     expect(countStaffedOperationalWells(state)).toBe(0)
     expect(getWaterCoverage(state).servedResidenceIds.length).toBeGreaterThan(0)
-    expect(getPopulationCount(afterMany)).toBe(1)
+    expect(getPopulationCount(afterFirst)).toBe(2)
+    expect(getPopulationCount(afterMany)).toBe(2)
+    expect(countStaffedOperationalWells(afterMany)).toBe(1)
   })
 
   it('C — operational Well staffed: exact one-tick production lag', () => {
@@ -397,13 +400,15 @@ describe('§6 — coverage vs stock matrix', () => {
     for (const row of rows.filter((r) => !r.coverage)) {
       expect(row.admitted).toBe(1)
     }
-    // Covered + vacant + stock 0: no production -> shortage -> blocked.
-    expect(rows.find((r) => r.coverage && r.stock === 0 && !r.requested)!.admitted).toBe(1)
+    // Covered + vacant + stock 0: the staffable Well is potential capacity,
+    // so the admission that supplies its worker proceeds (deadlock fix).
+    expect(rows.find((r) => r.coverage && r.stock === 0 && !r.requested)!.admitted).toBe(2)
     // Covered + staffed: production 2 vs served need 1 -> one admission.
     expect(rows.find((r) => r.coverage && r.stock === 0 && r.requested)!.admitted).toBe(2)
-    // Step 10S: headroom uses production capacity, not stock, so a vacant Well
-    // cannot fund growth even with a reserve.
-    expect(rows.find((r) => r.coverage && r.stock === 5 && !r.requested)!.admitted).toBe(1)
+    // Headroom uses potential capacity, not stock: a staffable vacant Well
+    // admits exactly its worker even with a reserve — and the reserve still
+    // cannot push past potential (the staffed rows below stay at 2).
+    expect(rows.find((r) => r.coverage && r.stock === 5 && !r.requested)!.admitted).toBe(2)
     expect(rows.find((r) => r.coverage && r.stock === 5 && r.requested)!.admitted).toBe(2)
   })
 })
@@ -629,9 +634,11 @@ describe('§12 — spatial coverage', () => {
 // §13 — Critical: does a vacant Well sustain growth?
 // ---------------------------------------------------------------------------
 
-describe('§13 — vacant Well cannot sustain growth', () => {
-  it('a vacant Well provides coverage but blocks growth through shortage', () => {
+describe('§13 — vacant staffable Well admits its worker, then headroom binds', () => {
+  it('a vacant Well provides coverage and admits its worker through potential', () => {
     // R1..R4 served, 1 Farm (nearer) + 1 vacant Well, 1 initial colonist.
+    // Potential 2 admits exactly the worker; then production 2 == need 2
+    // and the headroom rule binds — no treadmill.
     const state = waterWorld({ residences: 4, farms: 1, wells: 1, colonists: 1, food: 5000, water: 0 })
     const after = advance(state, 120)
     audit('VACANT_WELL_120', {
@@ -641,7 +648,8 @@ describe('§13 — vacant Well cannot sustain growth', () => {
       status: getWaterStatus(after),
     })
     expect(countStaffedOperationalWells(state)).toBe(0)
-    expect(getPopulationCount(after)).toBe(1)
+    expect(getPopulationCount(after)).toBe(2)
+    expect(countStaffedOperationalWells(after)).toBe(1)
   })
 
   it('a large Water reserve cannot fund growth without production capacity', () => {
@@ -652,9 +660,9 @@ describe('§13 — vacant Well cannot sustain growth', () => {
       water: after.resources.water,
       staffedWells: countStaffedOperationalWells(after),
     })
-    // Step 10S: headroom uses production capacity, so a vacant Well (production
-    // 0) cannot admit beyond the bootstrap colonist whatever the stock.
-    expect(getPopulationCount(after)).toBe(1)
+    // Potential capacity (not the reserve) admits exactly the worker: the
+    // reserve cannot push the colony past potential 2, whatever the stock.
+    expect(getPopulationCount(after)).toBe(2)
   })
 })
 

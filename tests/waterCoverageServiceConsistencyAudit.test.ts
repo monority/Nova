@@ -696,10 +696,12 @@ describe('4. intent: the documented bootstrap rule', () => {
     expect(snapshotBefore.staffedWells).toBe(0)
     expect(snapshotBefore.capacity).toBe(0)
     // The implemented rule covers the Well's network from the OPERATIONAL Well,
-    // so the first colonist IS admitted (bootstrap exemption) and is employed by
-    // the same phase sequence on the same tick.
+    // so the first colonist IS admitted (bootstrap exemption) — and the vacant
+    // Well is staffable potential, so the second colonist the Well sustains is
+    // admitted on the same tick. Still bounded (headroom binds at production
+    // == need) and still no deadlock.
     expect(snapshotBefore.coveredNetworks).toBe(1)
-    expect(snapshotAfter.population).toBe(1)
+    expect(snapshotAfter.population).toBe(2)
     expect(snapshotAfter.staffedWells).toBe(1)
     expect(snapshotAfter.capacity).toBe(2)
   })
@@ -767,7 +769,7 @@ describe('4. intent: the documented bootstrap rule', () => {
 // ---------------------------------------------------------------------------
 
 describe('5. economic consequence', () => {
-  it('case 1: a Residence cannot be ADMITTED on a vacant Well alone', () => {
+  it('case 1: a Residence IS admitted on a staffable vacant Well', () => {
     const state = scene({
       residences: [
         [0, 0],
@@ -795,9 +797,10 @@ describe('5. economic consequence', () => {
     expect(before.staffedWells).toBe(0)
     expect(before.capacity).toBe(0)
     expect(before.servedResidences).toBe(2)
-    // No growth: capacity 0 can never satisfy the headroom rule.
-    expect(after.population).toBe(1)
-    expect(after.supply).toBe('shortage')
+    // No growth beyond the admitted worker: potential 2 covers need 2, and
+    // the headroom rule binds there — the reserve stays empty ('noReserve').
+    expect(after.population).toBe(2)
+    expect(after.supply).toBe('noReserve')
   })
 
   it('case 2: a colony cannot reach Village on a vacant Well', () => {

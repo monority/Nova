@@ -241,7 +241,10 @@ describe('§1/§2 — current settlement model and housing equilibrium', () => {
       }
     }
     audit('HOUSING_EQUILIBRIUM', out)
-  }, 30000)
+    // Heavy deterministic audit (5 residence counts x 4 mixes x 4 horizons
+    // re-simulated from zero, ~20k ticks). ~17s in isolation; the wider bound
+    // keeps it green under full-suite parallel load without dropping coverage.
+  }, 60000)
 
   it('shows the three different meanings of housing', () => {
     // Capacity: with abundant Water production, housing caps population.

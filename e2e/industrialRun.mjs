@@ -203,7 +203,9 @@ async function main() {
     // --- 2. Workshop construction costs 25 Material + 1 Water ------------
     await selectPalette(page, 'build-workshop', 'Workshop selected');
     s = await placeAt(page, { x: 4, y: 2 });
-    assert(s.construction === '2', `Workshop must spend the whole Material: ${s.construction}`);
+    // Workshop-only income: the Farm/Well workers earn nothing before the
+    // command, so the 25-cost placement leaves exactly 0.
+    assert(s.construction === '0', `Workshop must spend the whole Material: ${s.construction}`);
     assert(s.water === '50', `Workshop must spend 1 Water: ${s.water}`);
     s = await step(page);
     s = await step(page);

@@ -107,8 +107,8 @@ describe('10DE — persistence contract', () => {
 
 describe('10DE — economy contracts', () => {
   it('pins the income, upkeep, capacity and storage constants', () => {
-    expect(MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK).toBe(1)
-    expect(MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK).toBe(1)
+    expect(MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK).toBe(0)
+    expect(MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK).toBe(0)
     expect(MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK).toBe(2)
     expect(MATERIAL_UPKEEP_PER_STAFFED_WORKSHOP_PER_TICK).toBe(1)
     expect(MATERIAL_STORAGE_PER_OPERATIONAL_WORKSHOP).toBe(25)

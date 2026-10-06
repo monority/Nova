@@ -63,6 +63,7 @@ import {
   getVacantOperationalFarmCount,
   getNetMaterialPerTick,
   getBuildingRoadAccess,
+  getBuildingRoadFeedback,
   getColonistWorkMobility,
   getServedColonistCount,
   getWaterProductionPerTick,
@@ -155,6 +156,7 @@ const ui = {
   insType: document.querySelector<HTMLElement>('#ins-type'),
   insStatus: document.querySelector<HTMLElement>('#ins-status'),
   insConstruction: document.querySelector<HTMLElement>('#ins-construction'),
+  insRoad: document.querySelector<HTMLElement>('#ins-road'),
   insHousing: document.querySelector<HTMLElement>('#ins-housing'),
   insWorker: document.querySelector<HTMLElement>('#ins-worker'),
   insCrew: document.querySelector<HTMLElement>('#ins-crew'),
@@ -232,6 +234,19 @@ const refreshInspection = (): void => {
       building !== null && building.status === 'underConstruction'
         ? `Construction — ${building.constructionRemaining} / ${building.constructionDuration} ticks remaining`
         : ''
+  }
+  // Road connectivity feedback: the 09E access contract, projected for the
+  // player. Connected names the fact; Missing names the immediate
+  // consequence; an under-construction building gets no verdict yet.
+  if (ui.insRoad !== null) {
+    const roadFeedback =
+      building === null ? null : getBuildingRoadFeedback(controller.getState(), building.id)
+    ui.insRoad.textContent =
+      roadFeedback === null || roadFeedback.status === 'pending'
+        ? ''
+        : roadFeedback.status === 'connected'
+          ? 'Road access: Connected'
+          : `Road access: Missing — ${roadFeedback.consequence}`
   }
   if (ui.insHousing !== null) {
     if (building === null) {

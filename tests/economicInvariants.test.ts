@@ -331,9 +331,9 @@ describe('economic invariants (Step 08D)', () => {
     )
     const populationBefore = Object.keys(state.colonists).length
     state = stepSimulation(state)
-    // Step 10CQ.1: 0 + 2 stored (1 Workshop) + 4 income (1 Workshop worker
-    // + 2 Farm workers) − 1 upkeep = 5.
-    expect(getResourceStock(state).construction).toBe(5)
+    // Workshop-only income: 0 + 2 stored (1 Workshop) + 2 income (1 Workshop
+    // worker; Farm workers earn nothing) − 1 upkeep = 3.
+    expect(getResourceStock(state).construction).toBe(3)
     expect(Object.keys(state.colonists).length).toBe(populationBefore)
   })
 
@@ -370,13 +370,13 @@ describe('economic invariants (Step 08D)', () => {
   })
 
   it('phase order — produceMaterial -> upkeepBuildings -> advanceTime', () => {
-    // From an empty stock, production (+2) and Step 10CQ income (+4) must
-    // land BEFORE upkeep (−1) in the same tick: result 5 proves the order
-    // (upkeep-first would pay 0, then leave 2 + 4 = 6).
+    // From an empty stock, production (+2) and Workshop-only income (+2)
+    // must land BEFORE upkeep (−1) in the same tick: result 3 proves the
+    // order (upkeep-first would pay 0, then leave 2 + 2 = 4).
     const empty = withConstruction(colony(1), 0)
     const tickBefore = empty.time.tick
     const after = stepSimulation(empty)
-    expect(getResourceStock(after).construction).toBe(5)
+    expect(getResourceStock(after).construction).toBe(3)
     expect(after.time.tick).toBe(tickBefore + 1)
     // A newcomer admitted this tick is assigned and nets production minus
     // upkeep in the same tick: assignJobs -> produceMaterial -> upkeep.
@@ -452,10 +452,10 @@ describe('economic invariants (Step 08D)', () => {
     expect(foodBefore).toBeGreaterThan(0)
     const populationBefore = Object.keys(state.colonists).length
     state = stepSimulation(state)
-    // Workers kept producing through the empty stock: Step 10CQ.1 recovery
-    // = 0 + 4 stored (2 Workshops) + 6 income (2 Workshop + 2 Farm workers)
-    // − 2 upkeep = 8.
-    expect(getResourceStock(state).construction).toBe(8)
+    // Workers kept producing through the empty stock: Workshop-only recovery
+    // = 0 + 4 stored (2 Workshops) + 4 income (2 Workshop workers; Farm
+    // workers earn nothing) − 2 upkeep = 6.
+    expect(getResourceStock(state).construction).toBe(6)
     expect(Object.keys(state.colonists).length).toBe(populationBefore)
     // Step 10E: 2 Workshop workers + 2 Farm workers = 4 colonists; two
     // staffed farms produce 4 while 4 colonists consume 4 -> net 0.

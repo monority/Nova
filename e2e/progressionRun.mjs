@@ -181,12 +181,12 @@ async function main() {
     ok(`default start: Wilderness -> Settlement, blockers ${JSON.stringify(status.blockers)}`);
     await shot('01-free-play-wilderness.png');
 
-    // --- Step 10AS: the 100 -> 105 opening boundary (Phase 7 aware) --------
+    // --- Step 10AS: the 100 -> 105 opening boundary ------------------------
     // Four purchases spend 80 of the 100; the three steps then staff the
-    // operational Farm, and Step 10CQ credits +1 Material/tick income, so the
-    // stock is 23 (not 20) and the Well is 2 Material short. The hover must say
-    // so, and the Material row must NOT claim a storage cap while no Workshop
-    // exists.
+    // operational Farm, and Workshop-only income means no Material accrues,
+    // so the stock is exactly 20 and the Well is 5 Material short. The hover
+    // must say so, and the Material row must NOT claim a storage cap while no
+    // Workshop exists.
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 1, y: 0 });
     await selectPalette(page, 'build-road', 'Road selected');
@@ -197,11 +197,11 @@ async function main() {
     await placeAt(page, { x: 1, y: 2 });
     for (let i = 0; i < 3; i += 1) await step(page);
     const opening = await stats(page);
-    assert(opening.construction === '23', `opening stock expected 23 after four purchases plus Phase 7 income, got ${opening.construction}`);
+    assert(opening.construction === '20', `opening stock expected 20 after four purchases (Workshop-only income), got ${opening.construction}`);
     await moveTo(page, { x: 2, y: 1 });
     await waitFor(
-      async () => (await stats(page)).status.includes('insufficient material (23/25)'),
-      'the Well must be reported 2 Material short'
+      async () => (await stats(page)).status.includes('insufficient material (20/25)'),
+      'the Well must be reported 5 Material short'
     );
     const shortStatus = (await stats(page)).status;
     assert(

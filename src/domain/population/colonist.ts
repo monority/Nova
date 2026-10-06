@@ -58,13 +58,17 @@ export interface ColonistState {
 /**
  * Step 10CQ: construction Material earned per tick by an employed colonist.
  * Reuses the existing Material resource as the initial currency: no new
- * resource is introduced. Rates differ by workplace type so income reflects
- * the economic role — a Workshop worker earns more because Workshops are
- * the only producers of Material — but the mechanism is intentionally
- * simple: fixed rate × employment state, no prices, no markets, no spending.
+ * resource is introduced.
+ *
+ * Product-model correction: the Workshop is the SOLE Material producer
+ * (Farm → Food, Well → Water, Workshop → Material). Farm and Well
+ * employment generates no Material — their economic role is fully captured
+ * by their own resource output. Only Workshop employment earns income, at a
+ * higher rate because Workshops are the only producers of Material.
+ * Fixed rate × employment state, no prices, no markets, no spending.
  */
-export const MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK = 1
-export const MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK = 1
+export const MATERIAL_INCOME_PER_FARM_WORKER_PER_TICK = 0
+export const MATERIAL_INCOME_PER_WELL_WORKER_PER_TICK = 0
 export const MATERIAL_INCOME_PER_WORKSHOP_WORKER_PER_TICK = 2
 
 /**
