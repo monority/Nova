@@ -4,4 +4,3 @@ dist-web/
 artifacts/
 e2e/screenshots/
 *.log
-docs/
