@@ -1,5 +1,24 @@
 # AGENTS.md
 
+## Authority and applicability
+
+- The authoritative Nova engineering contract is
+  `docs/game/AGENTS.md`. On any conflict, it wins over this file.
+- This file holds **generic, UI-framework-agnostic engineering
+  guidance**. Its React-component sections (§§1–8: `Gallery`,
+  `Masonry`, `SearchField`, …) apply **only if a React component UI
+  is introduced**. As of 2026-10-07 the repository has no React
+  (single runtime dependency `three`, no `.tsx`, no `src/ui`);
+  presentation is Three.js + application queries. Do not invent
+  React components to satisfy this file.
+- Product, process, testing, validation and git rules below remain
+  valid, but `docs/VALIDATION.md` (gates G0–G10),
+  `docs/DECISION-PROTOCOL.md` (classes A/B/C), `docs/CONTRIBUTING.md`
+  and `docs/game/12-AGENT-WORKFLOW.md` are the precise references —
+  follow them on detail conflicts.
+
+---
+
 ## 0. Core Principle
 
 Build the smallest coherent system that solves the current problem.

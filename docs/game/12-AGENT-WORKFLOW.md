@@ -184,14 +184,18 @@ Recommended optional files:
 
 ```text
 docs/
-├── steps/
-│   ├── Step001.md
-│   ├── Step001-report.md
+├── roadmap/
+│   ├── README.md
+│   ├── Step000-baseline-audit.md
+│   ├── Step001-<short-name>.md
 │   └── ...
-└── decisions/
-    ├── ADR-001.md
+└── adr/
+    ├── README.md
+    ├── ADR-001-<short-name>.md
     └── ...
 ```
+
+Steps follow the naming and report format defined in `../roadmap/README.md`; ADRs follow `../adr/README.md`.
 
 ## 14. Step reports
 

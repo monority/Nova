@@ -33,46 +33,49 @@ It answers:
 
 ## Repository State
 
-> Fill from actual repository inspection.
+> Observed 2026-10-07. HEAD `87f862e` (Step001 money migration).
 
-- Branch: `UNKNOWN — inspect git`
-- HEAD: `UNKNOWN — inspect git`
-- Worktree: `UNKNOWN — inspect git`
+- Branch: `master`
+- HEAD: `87f862e` — test(nova): migrate audit suites to Step001 money model
+- Worktree: DIRTY — 9 modified test files, uncommitted (pre-date this docs pass; see Step001)
 - Package manager: `pnpm`
-- Runtime/toolchain: `UNKNOWN — inspect repository`
-- Build status: `UNKNOWN`
-- Test status: `UNKNOWN`
-- E2E status: `UNKNOWN`
+- Runtime/toolchain: Node + Vite + Vitest + Playwright + ESLint + `tsc --noEmit`; strict TypeScript; single runtime dependency `three`
+- Build status: NOT RERUN in this pass (HEAD commit message claims `vite build` succeeds)
+- Test status: MIXED — `tsc` clean, `eslint` clean, `vitest run` 339 failed / 1538 passed (1877) — expected mid-Step001 pattern, see Step001
+- E2E status: NOT RUN in this pass (27 Playwright scripts in `e2e/`, real-browser via `vite preview`)
 
 ## Implementation State
 
-Use only observed values.
+Observed values only (HEAD `87f862e`, 2026-10-07).
 
 | Area | Status | Evidence |
 |---|---|---|
-| Repository foundation | NOT VERIFIED | Inspect repository |
-| Deterministic world | NOT VERIFIED | Inspect repository |
-| Camera / navigation | NOT VERIFIED | Inspect repository |
-| Construction | NOT VERIFIED | Inspect repository |
-| Population | NOT VERIFIED | Inspect repository |
-| Needs | NOT VERIFIED | Inspect repository |
-| Production | NOT VERIFIED | Inspect repository |
-| Storage | NOT VERIFIED | Inspect repository |
-| Logistics | NOT VERIFIED | Inspect repository |
-| Analysis | NOT VERIFIED | Inspect repository |
-| Economy | NOT VERIFIED | Inspect repository |
-| Environment | NOT VERIFIED | Inspect repository |
-| Technology | NOT VERIFIED | Inspect repository |
-| Age 1 | NOT VERIFIED | Inspect repository |
-| Age 2 beginning | NOT VERIFIED | Inspect repository |
-| Persistence | NOT VERIFIED | Inspect repository |
-| Performance | NOT VERIFIED | Inspect repository |
+| Repository foundation | Implemented | pnpm, strict TS, Vite, Vitest, Playwright, ESLint; scripts in `package.json` |
+| Deterministic world | Implemented (mechanism) | fixed tick (`domain/simulation/step.ts`), seeded world (`domain/world/grid.ts`), `determinism.test.ts`; full-suite signal red for unrelated Step001 reasons |
+| Camera / navigation | Implemented | `src/renderer/three/` (scene, camera, reconcile); real-browser E2E in `e2e/` |
+| Construction | Implemented | `domain/building/building.ts`, `domain/road/road.ts`, placement queries; costs in Money (Step001) |
+| Population | Partial | individual `ColonistState` + manual reassignment (`domain/population/colonist.ts`, `domain/jobs/jobs.ts`); aggregate-first pending (Step000 D3) |
+| Needs | Partial | binary `fed` / `shortage` signals (`domain/simulation/phases.ts`); no progressive satisfaction/QoL bands |
+| Production | Partial | 3 direct producers, no input chains, no maintenance-as-input (`domain/simulation/phases.ts`) |
+| Storage | Implemented | `domain/storage/storage.ts`; Food/Water capacity; Money uncapped and accounted, not stored |
+| Logistics | Partial | road network + building access contract (`domain/network/network.ts`, `domain/road/road.ts`); aggregate flow effects unverified (Step000 gap #8) |
+| Analysis | Implemented | inspection/diagnosis queries (`application/queries/inspection.ts`) |
+| Economy | In progress | Money treasury (tax + commerce), maintenance on operational buildings (`domain/resource/resource.ts`); baseline constants validated by user 2026-10-07; suite red mid-migration (Step001) |
+| Environment | Missing | no pollution/environment system in `src/domain` |
+| Technology | Missing | no technology system in `src/domain` |
+| Age 1 | Partial | Settlement → Village → Town capability stages; Town intentionally undefined (Step000) |
+| Age 2 beginning | Missing | deferred, no code |
+| Persistence | Implemented | `SAVE_VERSION = 9`, migrations 4–8 (`application/persistence/save.ts`); version assertions part of red Step001 suite |
+| Performance | Partial | hotspot fixes landed (road BFS/adjacency); no recorded benchmark baseline in docs |
 
 ## Known Issues
 
-Only record reproducible issues with evidence.
+Only reproducible issues with evidence.
 
-- None recorded until repository inspection.
+- Step001 money migration incomplete: `vitest run` 339 failed / 1538 passed (1877), uniform old-model-expectation pattern (Material costs, SAVE_VERSION 6/7 assertions). Details in `roadmap/Step001-money-migration.md`.
+- Worktree dirty: 9 modified test files, uncommitted (pre-date the 2026-10-07 docs pass).
+- Day-0 colony size decided 2026-10-07 (D2, Option A): 10-inhabitant canonical start; ~100 = MVP scale target via growth. Code migration of the start (currently empty world + 1-colonist bootstrap) is pending implementation.
+- Manual colonist reassignment deprecated as soon as the aggregate model (D3) is frozen (D4, 2026-10-07).
 
 ## Deferred Scope
 
@@ -93,7 +96,8 @@ Unless explicitly promoted by a product decision, these remain post-MVP:
 
 ## Current Approved Step
 
-`UNKNOWN — must be established from repository state and roadmap.`
+`Step001 — Money Migration` (`docs/roadmap/Step001-money-migration.md`, in progress).
+Close-out boundary: finish the 9-file test migration, commit, full green suite, build + E2E, product review of the D1 remainder. Step000 D2–D4 remain open and out of scope.
 
 ## Update Protocol
 

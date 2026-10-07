@@ -28,6 +28,13 @@ If this sequence is not enjoyable and understandable, adding more content is the
 
 The player begins with a small functioning colony, not an empty plot and not a large developed city.
 
+> **Decided (D2, 2026-10-07, Option A):** day-0 = a **10-inhabitant**
+> canonical colony (user decision 2026-10-06, confirmed); ~100 inhabitants
+> in §4 is the **MVP population scale target**, reached through growth —
+> not the starting state. The current code still starts from an empty
+> world with a 1-colonist bootstrap gate; migrating the start to the
+> 10-inhabitant colony is implementation work, not part of this decision.
+
 The starting situation should contain a solvable problem rather than a crisis. Examples:
 
 - food near its limit;
@@ -51,12 +58,16 @@ The player discovers the bottleneck through observation.
 
 ### Population
 
-- approximately 100 starting inhabitants;
+- approximately 100 inhabitants as the MVP scale target (day-0 = 10, see §3);
 - housing capacity;
 - population growth;
 - workforce;
 - unemployment/flexible labour;
 - basic qualification/education representation.
+
+> **Decided (D4, 2026-10-07):** manual colonist reassignment is deprecated
+> as soon as the aggregate population model (Step000 D3) is frozen and
+> covers the need. Until then it stays as-is — no UX regression in between.
 
 ### Needs
 

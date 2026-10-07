@@ -12,10 +12,10 @@ Read:
 
 1. `AGENTS.md`
 2. `README.md`
-3. `docs/01-PRODUCT-VISION.md`
-4. `docs/02-MVP.md`
-5. `docs/03-DESIGN-RULES.md`
-6. `docs/04-ARCHITECTURE.md`
+3. `docs/game/01-PRODUCT-VISION.md`
+4. `docs/game/02-MVP.md`
+5. `docs/game/03-DESIGN-RULES.md`
+6. `docs/game/04-ARCHITECTURE.md`
 7. relevant domain documentation
 8. `docs/STATE.md`
 9. relevant ADRs

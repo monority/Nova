@@ -22,4 +22,4 @@
 ## Process
 
 - `DEVELOPMENT.md` — implementation and delivery workflow.
-- `../12-AGENT-WORKFLOW.md` — project-level agent workflow.
+- `../game/12-AGENT-WORKFLOW.md` — project-level agent workflow.
