@@ -211,11 +211,11 @@ describe('§4 — conservation: nothing appears or disappears without a rule', (
 // ---------------------------------------------------------------------------
 
 describe('§5 — workers/jobs: contract as implemented', () => {
-  it('a building can produce Material only with a worker (no free production)', () => {
+  it('a vacant connected Workshop still yields commerce (vacant counts); staffing adds the tax base', () => {
     const { state } = staffedColony(1, 1)
-    // Unassigned state: nobody works the workshop.
+    // Unassigned state: nobody works the workshop, but vacancy counts for commerce.
     expect(countEmployedWorkers(state)).toBe(0)
-    expect(commerceRevenueForTick(state)).toBe(0)
+    expect(commerceRevenueForTick(state)).toBe(2)
     const assigned = assignJobs(state)
     expect(countEmployedWorkers(assigned)).toBe(1)
     expect(commerceRevenueForTick(assigned)).toBe(2)

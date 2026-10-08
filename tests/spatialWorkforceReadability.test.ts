@@ -541,7 +541,8 @@ describe('3. placement spatial preview', () => {
     }
     audit('GAMEPLAY_INVARIANT', rows)
     expect(rows.identical).toBe(true)
-    expect(rows.saveVersion).toBe(8)
+    // Step001 money migration bumps SAVE_VERSION from 8 to 9.
+    expect(rows.saveVersion).toBe(9)
     // 7 when this step ran; Step 10BE added one content scenario and Step
     // 10CI added three Town-goal scenarios; identical replay still holds.
     expect(rows.scenarioCatalogue).toBe(11)

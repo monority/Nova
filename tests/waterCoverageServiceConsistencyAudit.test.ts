@@ -1295,7 +1295,7 @@ describe('8. terrain regression', () => {
 // ---------------------------------------------------------------------------
 
 describe('9. persistence and closure', () => {
-  it('keeps Water derived-only: no new state, no new save field, SAVE_VERSION 7', () => {
+  it('keeps Water derived-only: no new state, no new save field, SAVE_VERSION 9', () => {
     const state = tick(
       scene({
         residences: [
@@ -1336,7 +1336,7 @@ describe('9. persistence and closure', () => {
     }
     audit('PERSISTENCE', rows)
     expect(rows.saveVersion).toBe(SAVE_VERSION)
-    expect(rows.saveVersion).toBe(8)
+    expect(rows.saveVersion).toBe(9)
     expect(rows.topLevelKeys).toEqual([
       'buildings',
       'colonists',
@@ -1348,7 +1348,7 @@ describe('9. persistence and closure', () => {
       'time',
     ])
     expect(rows.waterKeys).toEqual([])
-    expect(rows.canonicalWaterKeys).toEqual(['construction', 'food', 'water'])
+    expect(rows.canonicalWaterKeys).toEqual(['food', 'money', 'water'])
     expect(rows.reloadEquivalent).toBe(true)
   })
 

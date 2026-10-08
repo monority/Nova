@@ -30,8 +30,9 @@ describe('building inspection (Step 3)', () => {
       // Step 10Y: derived crew state (no crew on a freshly placed building).
       constructionCrewId: null,
       constructionProgressPerTick: 1,
-      // Step 10CQ: derived income (zero for residence with no workers).
-      materialIncome: 0,
+      // Step001: per-building revenue contribution (0 for a residence with
+      // no workers); the old materialIncome field was renamed.
+      revenueContribution: 0,
     })
   })
 

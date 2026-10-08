@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   commerceRevenueForTick,
-  getCommerceRevenuePerTick,
 
   BUILDING_CATALOG,
   countStaffedOperationalWorkshops,
@@ -92,6 +91,14 @@ const colony = (n: number): SimulationState => {
   state = stepSimulation(state) // 1 construction tick left
   state = stepSimulation(state)
   state = withStaffedFarms(state) // Step 10E: second farmer
+  // Step001: a balanced colony earns net ~0 and cannot fund its own
+  // expansion (poverty trap — covered by the trap/recovery tests, not
+  // here). The loop below is grant-funded ONCE so the STRUCTURAL colony
+  // still gets built; earnings are abstracted, mechanics below stay real.
+  // Grant covers the loop's spend: (n-1) residences + (n-2) workshops.
+  if (n >= 2) {
+    state = withConstruction(state, 25 * (2 * n - 2))
+  }
   for (let i = 1; i < n; i++) {
     state = untilAffordable(state)
     state = stepSimulation(state, place('residence', i, 0))
@@ -202,29 +209,34 @@ describe('economic invariants (Step 08D)', () => {
     }
   })
 
-  it('INV-02 — upkeep never exceeds production (staffed <= workers)', () => {
+  it('INV-02 — staffing bound holds; upkeep may exceed commerce (Step001 deficit documented)', () => {
+    // Net per colony under money (revenue plekken taxes+commerce minus
+    // maintenance over all operational buildings): colony(0) +1, the
+    // balanced colonies 0, colony(4) +2 (4 workshops vs 2 farms).
+    const expectedNet: Record<number, number> = { 0: 1, 1: 0, 2: 0, 4: 2 }
     for (const n of [0, 1, 2, 4]) {
       const state = colony(n)
       const summary = getEmploymentSummary(state)
       expect(countStaffedOperationalWorkshops(state)).toBeLessThanOrEqual(
         summary.employed
       )
-      expect(maintenanceDueForTick(state)).toBeLessThanOrEqual(
-        commerceRevenueForTick(state)
-      )
-      expect(getNetMoneyPerTick(state)).toBeGreaterThanOrEqual(0)
+      // Treasury never negative even in deficit (clamp, no debt).
+      expect(getResourceStock(state).money).toBeGreaterThanOrEqual(0)
+      expect(getNetMoneyPerTick(state)).toBe(expectedNet[n])
     }
   })
 
-  it('INV-03 — vacant operational Workshop pays 0', () => {
+  it('INV-03 — vacant operational Workshop still pays 1 maintenance (earns commerce when connected)', () => {
     let state = createTestState()
     state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 1)) // t1
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state) // operational, nobody housed
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(getEmploymentSummary(state).employed).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
-    expect(getMaintenanceDuePerTick(state)).toBe(0)
+    // Step001: vacancy removes staffing, not infrastructure — the building
+    // owes maintenance (unconnected here, so no commerce either).
+    expect(maintenanceDueForTick(state)).toBe(1)
+    expect(getMaintenanceDuePerTick(state)).toBe(1)
   })
 
   it('INV-04 — under-construction Workshop pays 0', () => {
@@ -237,7 +249,7 @@ describe('economic invariants (Step 08D)', () => {
     expect(getMaintenanceDuePerTick(constructing)).toBe(0)
   })
 
-  it('INV-05 — Residence and Farm never contribute to upkeep', () => {
+  it('INV-05 — Residence and Farm DO pay maintenance (Step001)', () => {
     let state = createTestState()
     state = stepSimulation(state, place('residence', 0, 0)) // t1
     state = stepSimulation(state) // t2: colonist, residence operational
@@ -249,8 +261,9 @@ describe('economic invariants (Step 08D)', () => {
       Object.values(state.buildings).some((b) => b.type === 'workshop')
     ).toBe(false)
     expect(countStaffedOperationalWorkshops(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
-    expect(getMaintenanceDuePerTick(state)).toBe(0)
+    // Step001: residence + farm = 2 maintenance units (no workshop needed).
+    expect(maintenanceDueForTick(state)).toBe(2)
+    expect(getMaintenanceDuePerTick(state)).toBe(2)
     // Food still flows: a staffed Farm produces without any upkeep.
     expect(getFoodProductionPerTick(state)).toBe(2)
   })
@@ -276,64 +289,75 @@ describe('economic invariants (Step 08D)', () => {
     }
   })
 
-  it('INV-07 — production scales linearly (1=>2, 2=>4, 4=>8)', () => {
+  it('INV-07 — commerce scales with connected workshops (Step001: staffing-independent)', () => {
     expect(COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(2)
-    expect(commerceRevenueForTick(colony(1))).toBe(2)
-    expect(commerceRevenueForTick(colony(2))).toBe(4)
-    expect(commerceRevenueForTick(colony(4))).toBe(8)
+    // Step001: commerce counts connected workshops, vacant included — so
+    // synthetic single-purpose fixtures measure the linearity (2/4/8),
+    // while colony(1) already shows 4 (both its workshops connected).
+    expect(commerceRevenueForTick(matrixFixture(0, 1))).toBe(2)
+    expect(commerceRevenueForTick(matrixFixture(0, 2))).toBe(4)
+    expect(commerceRevenueForTick(matrixFixture(0, 4))).toBe(8)
+    expect(commerceRevenueForTick(colony(1))).toBe(4)
   })
 
-  it('INV-08 — upkeep scales linearly (1=>1, 2=>2, 4=>4)', () => {
+  it('INV-08 — upkeep scales with operational buildings (7/8/12 here)', () => {
     expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
-    expect(maintenanceDueForTick(colony(1))).toBe(1)
-    expect(maintenanceDueForTick(colony(2))).toBe(2)
-    expect(maintenanceDueForTick(colony(4))).toBe(4)
+    // Step001: every operational building pays — colony(1) has 7
+    // (residence + 2 workshops + 2 farms + 2 farmer residences),
+    // colony(2) adds a residence (8), colony(4) adds 3 residences +
+    // 2 workshops (12).
+    expect(maintenanceDueForTick(colony(1))).toBe(7)
+    expect(maintenanceDueForTick(colony(2))).toBe(8)
+    expect(maintenanceDueForTick(colony(4))).toBe(12)
   })
 
-  it('INV-09 — tick delta = stored production + income − upkeep (Step 10CQ.1)', () => {
+  it('INV-09 — tick delta = revenue − upkeep actually paid (Step001)', () => {
+    // Net per colony under money: colony(1) 0, colony(2) 0, colony(4) +2.
+    const expectedNet: Record<number, number> = { 1: 0, 2: 0, 4: 2 }
     for (const n of [1, 2, 4]) {
-      // Production − upkeep still scales linearly with the Workshop count…
-      expect(getNetMoneyPerTick(colony(n))).toBe(n)
+      expect(getNetMoneyPerTick(colony(n))).toBe(expectedNet[n])
       const state = colony(n)
       const before = getResourceStock(state).money
-      // …and the real tick delta adds the stored (clamped) production plus
-      // Step 10CQ employment income, minus the upkeep actually paid.
-      const stored = getCommerceRevenuePerTick(state)
       const income = getRevenuePerTick(state)
       const upkeepDue = maintenanceDueForTick(state)
-      const upkeepPaid = Math.min(before + stored + income, upkeepDue)
+      const upkeepPaid = Math.min(before + income, upkeepDue)
       const after = stepSimulation(state)
       expect(getResourceStock(after).money).toBe(
-        before + stored + income - upkeepPaid
+        before + income - upkeepPaid
       )
       expect(income).toBeGreaterThan(0)
     }
   })
 
-  it('INV-10 — zero workers: production 0, upkeep 0, stock frozen', () => {
+  it('INV-10 — zero workers: no revenue, upkeep still due, treasury drains by maintenance', () => {
     let state = createTestState()
     state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 1)) // t1
-    state = stepSimulation(state) // t2: operational, vacant
+    state = stepSimulation(state) // t2: still under construction -> no upkeep yet
     expect(getRevenuePerTick(state)).toBe(0)
     expect(getMaintenanceDuePerTick(state)).toBe(0)
     expect(getNetMoneyPerTick(state)).toBe(0)
+    state = stepSimulation(state) // t3: operational, vacant
+    expect(getMaintenanceDuePerTick(state)).toBe(1)
     const before = getResourceStock(state).money
     for (let i = 0; i < 5; i++) {
       state = stepSimulation(state)
     }
-    expect(getResourceStock(state).money).toBe(before)
+    // Step001: a vacant connected workshop earns nothing here (unconnected)
+    // and still owes 1/tick: 75 − 5 = 70.
+    expect(getResourceStock(state).money).toBe(before - 5)
   })
 
-  it('INV-11 — recovery: empty stock with workers turns positive', () => {
+  it('INV-11 — empty stock holds at zero (Step001 poverty trap), population stable', () => {
     let state = withConstruction(colony(1), 0)
     expect(getFoodProductionPerTick(state)).toBeGreaterThanOrEqual(
       getFoodConsumptionPerTick(state)
     )
     const populationBefore = Object.keys(state.colonists).length
     state = stepSimulation(state)
-    // Workshop-only income: 0 + 2 stored (1 Workshop) + 2 income (1 Workshop
-    // worker; Farm workers earn nothing) − 1 upkeep = 3.
-    expect(getResourceStock(state).money).toBe(3)
+    // Step001: colony(1) nets exactly 0 (revenue 7 vs maintenance 7), so an
+    // empty treasury stays empty — maintenance is clamped, never debt, and
+    // nobody starves (food sustained), so the population holds.
+    expect(getResourceStock(state).money).toBe(0)
     expect(Object.keys(state.colonists).length).toBe(populationBefore)
   })
 
@@ -369,14 +393,14 @@ describe('economic invariants (Step 08D)', () => {
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
   })
 
-  it('phase order — produceMaterial -> payMaintenance -> advanceTime', () => {
-    // From an empty stock, production (+2) and Workshop-only income (+2)
-    // must land BEFORE upkeep (−1) in the same tick: result 3 proves the
-    // order (upkeep-first would pay 0, then leave 2 + 2 = 4).
+  it('phase order — revenue lands before maintenance (Step001)', () => {
+    // From an empty stock: revenue (+7) lands first, then upkeep (−7) is
+    // clamped to it: result 0 proves the order (upkeep-first would pay 0
+    // from the empty stock, then leave the full 7).
     const empty = withConstruction(colony(1), 0)
     const tickBefore = empty.time.tick
     const after = stepSimulation(empty)
-    expect(getResourceStock(after).money).toBe(3)
+    expect(getResourceStock(after).money).toBe(0)
     expect(after.time.tick).toBe(tickBefore + 1)
     // A newcomer admitted this tick is assigned and nets production minus
     // upkeep in the same tick: assignJobs -> produceMaterial -> upkeep.
@@ -387,11 +411,13 @@ describe('economic invariants (Step 08D)', () => {
     state = stepSimulation(withWorkshopWater(state), place('workshop', 4, 4)) // t3
     state = withRoadsForWorkshops(state) // 09K: mobility connection
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
-    state = stepSimulation(state) // operational + staffed; stored 0, income +2, upkeep −1
+    state = stepSimulation(state) // operational + staffed; the newcomer's
+    // tax was already flowing, so the workshop coming online nets commerce
+    // +2 minus its own maintenance +1: +1 on the tick.
     expect(getResourceStock(state).money).toBe(stockBefore - 25 + 1)
   })
 
-  it('balance matrix (§5) — production / upkeep / net per fixture row', () => {
+  it('balance matrix (§5) — production / upkeep / net per fixture row (Step001: net includes per-capita taxes)', () => {
     const rows: Array<{
       workers: number
       staffed: number
@@ -400,14 +426,14 @@ describe('economic invariants (Step 08D)', () => {
       net: number
     }> = [
       { workers: 0, staffed: 0, production: 0, upkeep: 0, net: 0 },
-      { workers: 1, staffed: 0, production: 0, upkeep: 0, net: 0 },
-      { workers: 1, staffed: 1, production: 2, upkeep: 1, net: 1 },
-      { workers: 2, staffed: 0, production: 0, upkeep: 0, net: 0 },
-      { workers: 2, staffed: 1, production: 4, upkeep: 1, net: 3 },
-      { workers: 2, staffed: 2, production: 4, upkeep: 2, net: 2 },
-      { workers: 4, staffed: 0, production: 0, upkeep: 0, net: 0 },
-      { workers: 4, staffed: 2, production: 8, upkeep: 2, net: 6 },
-      { workers: 4, staffed: 4, production: 8, upkeep: 4, net: 4 },
+      { workers: 1, staffed: 0, production: 0, upkeep: 0, net: 1 },
+      { workers: 1, staffed: 1, production: 2, upkeep: 1, net: 2 },
+      { workers: 2, staffed: 0, production: 0, upkeep: 0, net: 2 },
+      { workers: 2, staffed: 1, production: 2, upkeep: 1, net: 3 },
+      { workers: 2, staffed: 2, production: 4, upkeep: 2, net: 4 },
+      { workers: 4, staffed: 0, production: 0, upkeep: 0, net: 4 },
+      { workers: 4, staffed: 2, production: 4, upkeep: 2, net: 6 },
+      { workers: 4, staffed: 4, production: 8, upkeep: 4, net: 8 },
     ]
     for (const row of rows) {
       const state = matrixFixture(row.workers, row.staffed)
@@ -435,27 +461,28 @@ describe('economic invariants (Step 08D)', () => {
     }
   })
 
-  it('isolation B — starvation: food rules only, no material penalty', () => {
+  it('isolation B — starvation: food rules only, treasury nets zero', () => {
     const state = withFood(workshopOnlyState(), 0)
     const materialBefore = getResourceStock(state).money
     const after = stepSimulation(state)
     expect(Object.keys(after.colonists)).toHaveLength(0)
-    expect(commerceRevenueForTick(after)).toBe(0)
-    expect(maintenanceDueForTick(after)).toBe(0)
-    // Death tick: no production, no upkeep — stock untouched.
+    // Step001: the vacant but connected Workshop still earns 2 commerce
+    // against 2 maintenance (residence + workshop) — death tick nets zero,
+    // so the stock is untouched by the starvation itself.
+    expect(commerceRevenueForTick(after)).toBe(2)
+    expect(maintenanceDueForTick(after)).toBe(2)
     expect(getResourceStock(after).money).toBe(materialBefore)
   })
 
-  it('isolation C — empty material with healthy food: recovery, no pop penalty', () => {
+  it('isolation C — empty treasury with healthy food: holds at zero, no pop penalty', () => {
     let state = withConstruction(colony(2), 0)
     const foodBefore = getResourceStock(state).food
     expect(foodBefore).toBeGreaterThan(0)
     const populationBefore = Object.keys(state.colonists).length
     state = stepSimulation(state)
-    // Workers kept producing through the empty stock: Workshop-only recovery
-    // = 0 + 4 stored (2 Workshops) + 4 income (2 Workshop workers; Farm
-    // workers earn nothing) − 2 upkeep = 6.
-    expect(getResourceStock(state).money).toBe(6)
+    // Step001: colony(2) nets exactly 0, so the empty treasury holds at 0
+    // (no recovery — poverty trap) while the fed population holds steady.
+    expect(getResourceStock(state).money).toBe(0)
     expect(Object.keys(state.colonists).length).toBe(populationBefore)
     // Step 10E: 2 Workshop workers + 2 Farm workers = 4 colonists; two
     // staffed farms produce 4 while 4 colonists consume 4 -> net 0.
@@ -476,8 +503,11 @@ describe('economic invariants (Step 08D)', () => {
       expect(getMaintenanceDuePerTick(state)).toBe(
         maintenanceDueForTick(state)
       )
+      // Step001: net money is revenue (taxes + commerce) minus upkeep —
+      // per-capita taxes are part of the net, unlike the old production-
+      // minus-upkeep identity.
       expect(getNetMoneyPerTick(state)).toBe(
-        commerceRevenueForTick(state) - maintenanceDueForTick(state)
+        getRevenuePerTick(state) - maintenanceDueForTick(state)
       )
       // Pure: input hash untouched by querying or applying upkeep phases.
       const before = hashCanonicalState(state)
@@ -487,7 +517,7 @@ describe('economic invariants (Step 08D)', () => {
     }
   })
 
-  it('save/hash (§8) — SAVE_VERSION 4, round-trip stable, no upkeep fields', () => {
+  it('save/hash (§8) — SAVE_VERSION 9, round-trip stable, no upkeep fields', () => {
     expect(SAVE_VERSION).toBe(9)
     const state = stepSimulation(colony(2))
     const raw = serializeSave(state)

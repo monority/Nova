@@ -252,20 +252,19 @@ async function main() {
     assert(inspections.farm.includes('producing +2/tick'), `Farm inspection must name its production: "${inspections.farm}"`);
     assert(inspections.well.includes('producing +2/tick'), `Well inspection must name its production: "${inspections.well}"`);
     assert(inspections.residence.includes('Water: served'), `Residence inspection must name Water service: "${inspections.residence}"`);
-    // Step 10AT: the Workshop must speak the same language as the Farm and the
-    // Well (production) and name BOTH industrial constraints: upkeep and the
-    // 25-per-Workshop storage.
+    // Step001: the Workshop speaks the commerce language — connection-based
+    // revenue and per-building maintenance. There is no storage cap.
     assert(
-      inspections.workshopVacant.startsWith('Material production —'),
-      `Workshop inspection must lead with production: "${inspections.workshopVacant}"`
+      inspections.workshopVacant.startsWith('Commerce —'),
+      `Workshop inspection must lead with commerce: "${inspections.workshopVacant}"`
     );
     assert(
-      inspections.workshopVacant.includes('upkeep 0 (vacant)'),
-      `Workshop inspection must name its upkeep: "${inspections.workshopVacant}"`
+      inspections.workshopVacant.includes('+2/tick'),
+      `Workshop inspection must name its commerce: "${inspections.workshopVacant}"`
     );
     assert(
-      inspections.workshopVacant.includes('storage 25'),
-      `Workshop inspection must name the storage cap: "${inspections.workshopVacant}"`
+      inspections.workshopVacant.includes('maintenance 1/tick'),
+      `Workshop inspection must name its maintenance: "${inspections.workshopVacant}"`
     );
     ok(`Workshop inspection: "${inspections.workshopVacant}"`);
     await shot('04-inspections.png');

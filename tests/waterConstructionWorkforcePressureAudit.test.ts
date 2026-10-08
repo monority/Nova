@@ -26,6 +26,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   assignJobs,
+  commerceRevenueForTick,
   countStaffedOperationalFarms,
   countStaffedOperationalWorkshops,
   countWorkersAt,
@@ -400,7 +401,9 @@ describe('1. Reference state (measured from the runtime)', () => {
     expect(measured.waterNeed).toBe(2)
     expect(measured.foodProduction).toBe(2)
     expect(measured.foodConsumption).toBe(2)
-    expect(measured.storageCapacity).toBe(25)
+    // Step001: no material storage exists — the treasury is uncapped and
+    // the per-workshop storage concept is gone.
+    expect(measured.storageCapacity).toBe(0)
   })
 
   it('separates persisted state from derived state in the canonical save', () => {
@@ -648,16 +651,22 @@ describe('3. Workforce x Water x Material configurations', () => {
     }
     audit('WORKFORCE_WATER_MATERIAL', { horizons: HORIZONS, rows })
 
-    // Measured invariant: material gross output is 2 per staffed Workshop and
-    // the storage capacity is 25 per operational Workshop, at every horizon.
+    // Step001: materialGross here is REVENUE (taxes + connected commerce),
+    // so it need not be even; upkeep bills every operational building
+    // (6 residences + Farm + Well + Workshop here) — the old
+    // staffed-workshop identity is gone.
     for (const row of rows as {
       horizons: { materialGross: number; storage: number; materialUpkeep: number }[]
     }[]) {
       for (const horizon of row.horizons) {
-        expect(horizon.materialGross % COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK).toBe(0)
-        expect(horizon.materialUpkeep).toBe(horizon.materialGross / 2)
+        expect(horizon.materialGross).toBeGreaterThanOrEqual(0)
+        expect(horizon.materialUpkeep).toBeGreaterThan(0)
       }
     }
+    // Spot-check one configuration: 1F+1W+1Ws carries 9 buildings
+    // (6 residences + farm + well + workshop) = 9 upkeep.
+    const first = (rows[0] as { horizons: { materialUpkeep: number }[] }).horizons[0]!
+    expect(first.materialUpkeep).toBe(9)
   }, 30000)
 })
 
@@ -797,22 +806,20 @@ describe('4. Industrial expansion W0 -> W4', () => {
       forcedPopulation: forced,
       note: 'seeded Water 5 + material 100 => four Workshops are placed with no waiting: the one-off cost is a capacity tax, not a timing signal. Whether a Workshop is then STAFFED depends on the workforce, not on Water. Population 3 is audit-forced (one Well advertises capacity 2).',
     })
-    // Measured: at the runtime-admissible population (2) every Workplace is
-    // already taken by the Farm and the Well, so no added Workshop is staffed
-    // and the Material flow stays at 0; the seeded Water still pays for all
-    // four Workshops.
-    expect(admissible.filter((row) => row.placed)).toHaveLength(4)
-    for (const row of admissible) expect(row.waited).toBe(0)
+    // Measured: the seeded buffer covers exactly ONE workshop (W1, no
+    // waiting); the treasury then floors (net -4 admissible, -3 forced) and
+    // W2+ never become affordable. Expansion halts on money, not on Water.
+    expect(admissible.filter((row) => row.placed)).toHaveLength(1)
+    expect(admissible[1]?.placed).toBe(false)
+    expect(admissible[1]?.settledNetMaterial).toBe(-4)
     const admissibleLast = admissible[admissible.length - 1]
     expect(admissibleLast?.settledStaffedWorkshops).toBe(0)
-    expect(admissibleLast?.settledNetMaterial).toBe(0)
-    // Measured: an audit-forced third colonist immediately pushes the colony
-    // ABOVE the Water production cap (3 served vs 2 produced), so the stock
-    // drains to 0 and the SECOND Workshop is never affordable. This is the
-    // real industrial-expansion constraint: the Water balance, not the rank
-    // of the Workshop.
+    expect(admissibleLast?.settledNetMaterial).toBe(-4)
+    // Measured: an audit-forced third colonist pushes the colony
+    // ABOVE the Water production cap, so W1 still places from the buffer
+    // but W2 never does — money and water both bind.
     expect(forced.filter((row) => row.placed)).toHaveLength(1)
-    expect(forced[0]?.settledWaterNet).toBe(-1)
+    expect(forced[1]?.settledWaterNet).toBe(-1)
     expect(forced[1]?.placed).toBe(false)
   })
 })
@@ -979,11 +986,10 @@ describe('6. Workforce opportunity cost', () => {
     }[]
     const well = alone.find((row) => row.job === 'well')
     const workshop = alone.find((row) => row.job === 'workshop')
-    // Workshop-only income: the Well raises Water and population grows to 2
-    // (Well + Farm workers), but no Workshop is staffed (materialProd 0) and
-    // neither employment earns Material, so the stock stays exactly 0 —
-    // Material now requires a staffed Workshop.
-    expect(well?.horizons[2]?.materialProd).toBe(0)
+    // Step001: the admitted pair pays 2 taxes and the vacant connected
+    // workshop earns 2 commerce (revenue 4), but upkeep over 5 buildings
+    // outruns it — production without accumulation. Treasury stays floored.
+    expect(well?.horizons[2]?.materialProd).toBe(4)
     expect(well?.horizons[2]?.material).toBe(0)
     expect(workshop?.horizons[2]?.water).toBeGreaterThanOrEqual(0)
   })
@@ -1161,14 +1167,17 @@ describe('7. Construction crew interaction', () => {
       // initial state is inspected before stepping.
       let completionTick: number | null =
         state.buildings[siteId]?.status === 'operational' ? state.time.tick : null
+      // Step001: revenue flows from taxes from the start; track COMMERCE
+      // start instead (workshop operational + connected) — the crew moves
+      // that a tick earlier by completing the site sooner.
       let firstProductionTick: number | null =
-        getRevenuePerTick(state) > 0 ? state.time.tick : null
+        commerceRevenueForTick(state) > 0 ? state.time.tick : null
       while (state.time.tick < horizon) {
         state = stepSimulation(state)
         if (completionTick === null && state.buildings[siteId]?.status === 'operational') {
           completionTick = state.time.tick
         }
-        if (firstProductionTick === null && getRevenuePerTick(state) > 0) {
+        if (firstProductionTick === null && commerceRevenueForTick(state) > 0) {
           firstProductionTick = state.time.tick
         }
       }
@@ -1192,8 +1201,12 @@ describe('7. Construction crew interaction', () => {
     const withCrew = rows[1] as { ticksToCompletion: number; ticksToFirstProduction: number; materialAtHorizon: number }
     expect(without.ticksToCompletion).toBe(2)
     expect(withCrew.ticksToCompletion).toBe(1)
+    // Step001: commerce starts at completion (connected from the start),
+    // so the crew's earlier completion moves first commerce a tick earlier
+    // too — a crewed colonist is skipped by assignJobs on the completion
+    // tick, but commerce never needed staffing.
     expect(without.ticksToFirstProduction).toBe(2)
-    expect(withCrew.ticksToFirstProduction).toBe(2)
+    expect(withCrew.ticksToFirstProduction).toBe(1)
     // Workshop-only income (product-model correction): a crewed colonist
     // earns no income, but only Workshop employment earns any — in this
     // fixture the crewed colonist is not the Workshop worker, so the crew

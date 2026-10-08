@@ -217,7 +217,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     objective: {
       label: 'Reach Village and build a Workshop.',
       description:
-        'Industry costs 25 Money, 1 Water and a worker. A connected Workshop earns commerce every tick, so the 100 this colony already holds keeps growing once trade flows — but staffing the Workshop needs a fourth pair of hands the colony does not have.',
+        'Industry costs 25 Money, 1 Water and a worker. A connected Workshop earns commerce every tick, so the 100 this colony already holds keeps growing once commerce flows — but staffing the Workshop needs a fourth pair of hands the colony does not have.',
       constraint:
         'Two limits: the Water admission gate caps the population at its current capacity, and commerce requires a road-connected Workshop.',
       requirements: [

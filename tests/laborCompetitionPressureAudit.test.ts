@@ -22,16 +22,20 @@
  *
  * Every "AUDIT ..." console line is raw evidence quoted in the report.
  *
- * Rules verified in src (Step 10E):
+ * Rules verified in src (Step001 money model):
  *   Farm staffed -> +2 Food/tick             (FOOD_PER_FARM_PER_TICK)
- *   Workshop staffed -> +2 Material/tick     (COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK)
+ *   Connected Workshop -> +2 commerce/tick   (COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
+ *     vacant counts, roadless does not)
+ *   Resident -> +1 tax/tick                  (TAX_PER_INHABITANT_PER_TICK)
  *   Food need = population x 1               (FOOD_PER_COLONIST_PER_TICK)
- *   Upkeep = 1 per staffed operational Workshop per tick
- *   Storage = 25 per operational Workshop
- *   Cost 25 per building, 5 per road cell; placed tick T -> operational T+1
+ *   Upkeep = 1 per operational building      (MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
+ *     vacant and under-staffed count; under-construction does not)
+ *   Treasury uncapped: revenue lands in full at any balance
+ *   Cost 25 per building, 5 per road cell; placed tick T -> operational T+2
+ *     via commands (placeCatchUp shortens audit fixtures by one tick)
  *   Admission needs a free operational residence + food left after consumption
- *   produceFood runs BEFORE assignJobs -> farm output lags one tick; Material
- *   is produced in the same tick it is assigned.
+ *   produceFood runs BEFORE assignJobs -> farm output lags one tick; commerce
+ *   is counted from connected workshops regardless of staffing.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -350,7 +354,7 @@ describe('§4 — Farm vs Workshop opportunity cost (one decision apart)', () =>
     return assignJobs(state)
   }
 
-  it('the two branches are mutually exclusive and equal in magnitude (2 XOR 2)', () => {
+  it('the two branches staff exactly one worker; commerce follows connectedness, not staffing', () => {
     const farmSide = read(pairedWorld('farm'))
     const workshopSide = read(pairedWorld('workshop'))
     audit('OPPORTUNITY_COST', {
@@ -377,11 +381,13 @@ describe('§4 — Farm vs Workshop opportunity cost (one decision apart)', () =>
       expect(r.farmWorkers + r.workshopWorkers).toBe(1)
     }
     expect(farmSide.foodProd).toBe(2)
-    expect(farmSide.matProd).toBe(0)
-    expect(farmSide.upkeep).toBe(0)
+    // Step001: the vacant workshop is connected, so it still earns 2
+    // commerce; upkeep bills all 3 operational buildings either way.
+    expect(farmSide.matProd).toBe(2)
+    expect(farmSide.upkeep).toBe(3)
     expect(workshopSide.foodProd).toBe(0)
     expect(workshopSide.matProd).toBe(2)
-    expect(workshopSide.upkeep).toBe(1)
+    expect(workshopSide.upkeep).toBe(3)
   })
 
   it('the fork is forced while colonists < workplaces and vanishes above it', () => {
@@ -397,15 +403,17 @@ describe('§4 — Farm vs Workshop opportunity cost (one decision apart)', () =>
     expect(both.matProd).toBe(2)
   })
 
-  it('the fork is asymmetric in cost: only the Workshop branch pays upkeep', () => {
+  it('the fork is symmetric in upkeep under money (both branches pay all buildings)', () => {
     const farm = read(pairedWorld('farm'))
     const shop = read(pairedWorld('workshop'))
-    expect(farm.upkeep).toBe(0)
-    expect(shop.upkeep).toBe(1)
+    // Step001: upkeep is per operational building (3 either way) — the fork
+    // persists in the Food/commerce mix, not in the bill.
+    expect(farm.upkeep).toBe(3)
+    expect(shop.upkeep).toBe(3)
     audit('FORK_ASYMMETRY', {
       farmBranchUpkeep: farm.upkeep,
       workshopBranchUpkeep: shop.upkeep,
-      note: 'Material is the only resource that pays maintenance; Food is free to hold',
+      note: 'Step001: upkeep bills every operational building; Food is still free to hold, commerce still needs connection',
     })
   })
 })
@@ -750,7 +758,9 @@ describe('§8 — spatial preference (09M) drives the production mix', () => {
       },
     })
     expect(residenceAtFarm.farmWorkers).toBe(1)
-    expect(residenceAtFarm.matProd).toBe(0)
+    // Step001: the vacant workshop is connected, so commerce flows (2)
+    // though nobody works there — distance decides staffing, not revenue.
+    expect(residenceAtFarm.matProd).toBe(2)
     expect(residenceAtShop.workshopWorkers).toBe(1)
     expect(residenceAtShop.foodProd).toBe(0)
   })
@@ -797,10 +807,11 @@ describe('§9 — multi-colonist competition', () => {
     })
     // With two colonists and two of each type placed symmetrically, both
     // colonists share the two NEAREST columns, which the type created first
-    // occupies: the id tie-break alone decides whether the colony produces
-    // 4 Food / 0 Material or 0 Food / 4 Material from the same buildings.
+    // occupies: the id tie-break alone decides the staffing/food mix.
+    // Step001: commerce follows connectedness (both workshops connected →
+    // 4), so the mix moves Food only (4 vs 0), not commerce.
     expect(farmFirst.farmWorkers).toBe(2)
-    expect(farmFirst.matProd).toBe(0)
+    expect(farmFirst.matProd).toBe(4)
     expect(shopFirst.workshopWorkers).toBe(2)
     expect(shopFirst.foodProd).toBe(0)
   })
@@ -839,7 +850,9 @@ describe('§9 — multi-colonist competition', () => {
       },
     })
     expect(farmFirst.farmWorkers).toBe(1)
-    expect(farmFirst.matProd).toBe(0)
+    // Step001: the vacant workshop is connected, so matProd is 2 despite
+    // the farm-first staffing — the tie moves Food, not commerce.
+    expect(farmFirst.matProd).toBe(2)
     expect(shopFirst.workshopWorkers).toBe(1)
     expect(shopFirst.foodProd).toBe(0)
   })
@@ -907,7 +920,10 @@ describe('§10 — greedy assignment audit', () => {
     expect(r.workshopWorkers).toBe(0)
     expect(r.employed).toBe(1)
     expect(r.unemployed).toBe(1)
-    expect(r.matProd).toBe(0)
+    // Step001: the vacant workshop is connected, so commerce flows (2)
+    // while the colonist idles — the greedy finding (one idle colonist)
+    // is about staffing, and it stands.
+    expect(r.matProd).toBe(2)
     audit('GREEDY_ALTERNATIVE', {
       greedyMatProd: r.matProd,
       greedyUpkeep: r.upkeep,
@@ -1000,8 +1016,10 @@ describe('§11 — construction feedback loops', () => {
     expect(r.workshopWorkers).toBe(0)
     expect(r.foodProd).toBe(2)
     expect(r.netFood).toBe(1)
-    // Farm employment earns no Material: the build remainder rests at 20.
-    expect(materialBefore).toBe(20)
+    // Farm employment earns no treasury: the build remainder rests at 19,
+    // not 20 — the workshop's two construction ticks run at -1 net (1 tax
+    // vs residence + farm maintenance) before it connects and pays.
+    expect(materialBefore).toBe(19)
     // Rejected: the farm-first opening must staff its Workshop before the
     // second Residence becomes affordable.
     expect(Object.keys(state.buildings).length).toBe(buildingsBefore)
@@ -1029,7 +1047,9 @@ describe('§11 — construction feedback loops', () => {
       netMaterial: built.netMaterial,
     })
     expect(built.workshopWorkers).toBe(1)
-    expect(built.maintenance).toBe(50)
+    // Step001: upkeep bills residence + 2 workshops (3); the old storage-
+    // capacity reading (50) belonged to the capped 08F model.
+    expect(built.maintenance).toBe(3)
     let ticks = 0
     while (state.resources.money < 25 && ticks < 200) {
       state = stepSimulation(state)
@@ -1257,9 +1277,8 @@ describe('§15 — Farm vs Workshop production timing', () => {
     }
     audit('TIMING_MATERIAL_STOCK', shopSeries)
     audit('TIMING_FOOD_STOCK', farmSeries)
-    // Material: +2 stored + 2 income − 1 upkeep = +3 on the first staffed tick
-    // (Step 10CQ.1), so the four ticks are [3, 6, 9, 12].
-    expect(shopSeries.map((s) => s.material)).toEqual([3, 6, 9, 12])
+    // Step001 money: +1/tick (revenue 3 vs upkeep 2), no cap — [1, 2, 3, 4].
+    expect(shopSeries.map((s) => s.material)).toEqual([1, 2, 3, 4])
     // Food: the first staffed tick shows NO increase (delta -1: eaten, nothing produced).
     expect(farmSeries[0]!.stockDelta).toBe(-1)
     expect(farmSeries[1]!.stockDelta).toBe(1)
@@ -1271,8 +1290,8 @@ describe('§15 — Farm vs Workshop production timing', () => {
 // ---------------------------------------------------------------------------
 
 describe('§16 — persistence and determinism', () => {
-  it('SAVE_VERSION is 4 and employment survives save/load', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('SAVE_VERSION is 9 and employment survives save/load', () => {
+    expect(SAVE_VERSION).toBe(9)
     const state = rowWorld({ residences: 3, farms: 2, workshops: 2 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

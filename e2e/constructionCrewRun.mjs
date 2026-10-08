@@ -122,38 +122,6 @@ async function assignCrew(page, colonistId) {
   return stats(page);
 }
 
-/**
- * Step 10AD: the UI's hover preview uses the strict rest-stock affordability
- * check, while the authoritative dispatch gate also accepts a placement that
- * this tick's stored Workshop inflow completes (24 + 1 = 25). A lone staffed
- * Workshop equilibrates at 24, so `placeAtThroughGate` clicks, lets the domain
- * decide, and waits on the real building count.
- */
-async function stepUntilPlaceable(page, cost = 25, maxTicks = 60) {
-  for (let i = 0; i < maxTicks; i += 1) {
-    const s = await stats(page);
-    if (Number(s.money) + Number(s.storedProduction) >= cost) return s;
-    await step(page);
-  }
-  throw new Error(`stock + stored never reached ${cost}: ${JSON.stringify(await stats(page))}`);
-}
-
-async function placeAtThroughGate(page, cell) {
-  const pt = await moveTo(page, cell);
-  const before = Number((await stats(page)).buildings);
-  await page.mouse.click(pt.x, pt.y);
-  await waitFor(async () => Number((await stats(page)).buildings) === before + 1, `placed at ${cell.x},${cell.y} through the gate`);
-}
-
-/** Step until the construction stock covers a 25-cost build. */
-async function stepUntilAffordable(page, cost = 25, maxTicks = 60) {
-  for (let i = 0; i < maxTicks; i += 1) {
-    if (Number((await stats(page)).money) >= cost) return stats(page);
-    await step(page);
-  }
-  throw new Error(`material never reached ${cost}: ${JSON.stringify(await stats(page))}`);
-}
-
 async function fresh(page) {
   await page.goto(URL, { waitUntil: 'load' });
   await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
@@ -208,101 +176,80 @@ async function main() {
     const shot = (name) => page.screenshot({ path: `${ART}/${name}` });
 
     // ---------------------------------------------------------------------
-    // Setup — a staffed Workshop, so a crew has a measurable cost
-    // ---------------------------------------------------------------------
+    // Setup — a staffed Well, so the crew colonist has a workplace to leave
+    // (Step001: crewing costs no revenue — commerce is connection-based — so
+    // the measurable tradeoff is the well's Water output pausing for a tick).
     let s = await fresh(page);
     assert(s.tick === '0' && s.money === '100', `fresh state bad: ${JSON.stringify(s)}`);
     s = await bootstrapResidence(page);
     ok(`bootstrap: residence operational at tick ${s.tick} with ${s.colonists} colonist`);
 
-    // Two Workshops (only one can be staffed by a single colonist): the second
-    // raises the storage cap to 50, so the stock climbs past the 25 build cost
-    // (a lone staffed Workshop equilibrates at 24, below it).
+    // The Well needs road access to be staffable (09F). The colonist staffs it
+    // automatically — it is the only workplace.
     await selectPalette(page, 'build-road', 'Road selected');
     await placeRoad(page, { x: 3, y: 2 });
     await step(page); // road operational
     await selectPalette(page, 'build-road', 'Road selected');
-    await placeRoad(page, { x: 4, y: 2 });
-    await step(page); // second road cell
-    // Step 10AD: a Workshop now costs 25 Material + 1 Water, so the colony must
-    // own a staffed Well before the first Workshop. The Well is the only
-    // workplace at this point, so the colonist staffs it automatically.
+    await placeRoad(page, { x: 4, y: 2 }); // contact cell for the Well at (5,2)
+    await step(page); // second road cell operational
     await selectPalette(page, 'build-well', 'Well selected');
     await placeAt(page, { x: 5, y: 2 });
     await step(page); // 1 construction tick left
-    await step(page); // operational + staffed
-    // Accumulate a Water buffer: once the colonist moves to the Workshop the
-    // Well is vacant, so the stock only drains (one unit per served colonist).
-    for (let i = 0; i < 16 && Number((await stats(page)).water) < 8; i += 1) {
-      s = await step(page);
-    }
-    assert(Number(s.water) >= 8, `a Water buffer must accumulate, got ${s.water}`);
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await placeAt(page, { x: 3, y: 3 });
-    await step(page); // 1 construction tick left
-    await step(page); // operational + staffed
-    await selectPalette(page, 'build-workshop', 'Workshop selected');
-    await stepUntilPlaceable(page);
-    await placeAtThroughGate(page, { x: 4, y: 3 });
-    await step(page); // 1 construction tick left
-    s = await step(page); // second Workshop operational (vacant)
-    await stepUntilAffordable(page);
-    s = await stats(page);
-    assert(s.staffedWorkshopIds !== '', `Workshop should be staffed, got ${JSON.stringify(s)}`);
-    assert(s.materialProduction === '2', `Workshop should produce 2, got ${s.materialProduction}`);
-    const materialBefore = Number(s.money);
-    ok(`setup: Workshop staffed, material ${s.money}, production ${s.materialProduction}`);
+    s = await step(page); // operational + staffed
+    assert(s.waterProduction === '2', `Well should produce 2, got ${s.waterProduction}`);
+    const moneyBefore = Number(s.money);
+    ok(`setup: Well staffed, money ${s.money}, water ${s.waterProduction}/tick`);
 
     // ---------------------------------------------------------------------
-    // Scenario A — basic money: uncrewed 2-tick building
+    // Scenario A/B — one site, uncrewed tick then crewed completion
     // ---------------------------------------------------------------------
-    // The Well is placed away from the network, so it can never steal the
-    // Workshop worker and the comparison stays isolated.
-    await selectPalette(page, 'build-well', 'Well selected');
-    await placeAt(page, { x: 7, y: 7 });
-    s = await step(page); // 1 construction tick left
-    assert(s.operational === '4', `Well must still be under construction, got ${JSON.stringify(s)}`);
-    await selectAt(page, { x: 7, y: 7 });
-    let crew = await crewText(page);
-    assert(crew === 'Crew — None · Speed normal', `uncrewed crew line bad: "${crew}"`);
-    ok(`A: uncrewed Well at tick ${s.tick}, inspection "${crew}"`);
-    await shot('01-uncrewed.png');
-    s = await step(page);
-    assert(s.operational === '5', `uncrewed Well must complete on the second tick, got ${JSON.stringify(s)}`);
-    ok(`A: uncrewed 2-tick Well complete at tick ${s.tick}`);
+    // A single 25-cost site fits the post-bootstrap treasury under the
+    // Step001 baseline, so the uncrewed and crewed contracts are proven on
+    // ONE Farm: it sits one tick under construction (uncrewed pace), then
+    // the crew completes it on the assignment tick.
 
     // ---------------------------------------------------------------------
-    // Scenario B/C/D — crewed construction, worker tradeoff, release
+    // Scenario A/B — one site: uncrewed pace, then crewed completion
     // ---------------------------------------------------------------------
-    await stepUntilAffordable(page);
+    // A single 25-cost site fits the post-bootstrap treasury under the
+    // Step001 baseline, so the uncrewed and crewed contracts share one Farm:
+    // it sits one tick under construction at the uncrewed pace, then the
+    // crew completes it on the assignment tick.
     await selectPalette(page, 'build-farm', 'Farm selected');
     await placeAt(page, { x: 5, y: 5 });
-    await step(page); // 1 construction tick left
+    s = await step(page); // 1 construction tick left (uncrewed pace)
+    assert(s.operational === '2', `Farm must still be under construction, got ${s.operational}`);
     await selectAt(page, { x: 5, y: 5 });
-    crew = await crewText(page);
-    assert(crew === 'Crew — None · Speed normal', `crew line before assignment bad: "${crew}"`);
+    let crew = await crewText(page);
+    assert(crew === 'Crew — None · Speed normal', `uncrewed crew line bad: "${crew}"`);
+    ok(`A: uncrewed Farm 1 tick from completion at tick ${s.tick}, inspection "${crew}"`);
+    await shot('01-uncrewed.png');
+
+    // ---------------------------------------------------------------------
+    // Scenario B/C/D — crewed completion, worker tradeoff, release
+    // ---------------------------------------------------------------------
     const options = await crewOptions(page);
     assert(options.length === 1 && options[0].value === 'colonist-1', `one crew candidate expected, got ${JSON.stringify(options)}`);
     assert(options[0].disabled === false, `colonist-1 should be eligible, got ${JSON.stringify(options)}`);
     await shot('02-crew-options.png');
 
-    // Assign the crew: the Farm completes on THIS tick, the Workshop goes vacant.
+    // Assign the crew: the Farm completes on THIS tick; the crewed colonist
+    // leaves the Well, so its Water output pauses that tick. Step001: revenue
+    // is unaffected — commerce is connection-based, not labor-based.
     s = await assignCrew(page, 'colonist-1');
-    assert(s.operational === '6', `crewed Farm must complete on the assignment tick, got ${JSON.stringify(s)}`);
+    assert(s.operational === '3', `crewed Farm must complete on the assignment tick, got ${JSON.stringify(s.operational)}`);
     assert(s.crewWorkerIds === '', `crew must be released on completion, got "${s.crewWorkerIds}"`);
-    assert(s.staffedWorkshopIds === '', `crew member must not staff the Workshop that tick, got "${s.staffedWorkshopIds}"`);
-    assert(s.materialProduction === '0', `crew member must produce nothing that tick, got ${s.materialProduction}`);
-    assert(Number(s.money) <= materialBefore, `material must not grow on a crew tick: ${materialBefore} -> ${s.money}`);
+    assert(s.waterProduction === '0', `the crewed colonist leaves the Well: water output pauses, got ${s.waterProduction}`);
+    assert(Number(s.money) <= moneyBefore, `money must not grow on a crew tick: ${moneyBefore} -> ${s.money}`);
     assert(s.status.includes('Construction crew assigned'), `crew feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`B/C: crewed Farm completed at tick ${s.tick}, Workshop vacant, production ${s.materialProduction}, material ${s.money}`);
+    ok(`B/C: crewed Farm completed at tick ${s.tick}, Well output paused, money ${s.money}`);
     await shot('03-crewed.png');
 
     // D: the released colonist returns to normal work on the next tick.
     s = await step(page);
-    assert(s.staffedWorkshopIds !== '', `released colonist must resume the Workshop, got "${s.staffedWorkshopIds}"`);
-    assert(s.materialProduction === '2', `Workshop production must resume, got ${s.materialProduction}`);
+    assert(s.waterProduction === '2', `released colonist must resume the Well, got ${s.waterProduction}`);
     assert(s.crewWorkerIds === '', `no ghost crew allowed, got "${s.crewWorkerIds}"`);
-    ok(`D: colonist released and back at work at tick ${s.tick} (production ${s.materialProduction})`);
+    ok(`D: colonist released and back at work at tick ${s.tick} (water ${s.waterProduction}/tick)`);
     await shot('04-recovered.png');
 
     // ---------------------------------------------------------------------
@@ -310,7 +257,6 @@ async function main() {
     // ---------------------------------------------------------------------
     await fresh(page);
     await bootstrapResidence(page);
-    await stepUntilAffordable(page);
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 6, y: 6 });
     await step(page); // 1 left
@@ -319,7 +265,6 @@ async function main() {
     assert(s.colonists === '2', `two colonists expected, got ${s.colonists}`);
 
     // Site 1: colonist-1 crews it and it completes on that tick.
-    await stepUntilAffordable(page);
     await selectPalette(page, 'build-well', 'Well selected');
     await placeAt(page, { x: 4, y: 2 }); // site 1
     await step(page); // 1 construction tick left
@@ -327,8 +272,8 @@ async function main() {
     s = await assignCrew(page, 'colonist-1');
     const site1Done = s.operational;
     assert(s.crewWorkerIds === '', `first crew released, got "${s.crewWorkerIds}"`);
-    // Site 2: colonist-2 crews it independently on a later tick.
-    await stepUntilAffordable(page);
+    // Site 2: colonist-2 crews it independently on a later tick. The placement
+    // rides the domain's same-tick revenue clause (treasury 24 + revenue 2 ≥ 25).
     await selectPalette(page, 'build-well', 'Well selected');
     await placeAt(page, { x: 8, y: 8 }); // site 2
     await step(page); // 1 construction tick left
@@ -359,7 +304,7 @@ async function main() {
     // ---------------------------------------------------------------------
     const payload = await page.evaluate(() => window.__nova.serialize());
     const parsed = JSON.parse(payload);
-    assert(parsed.version === 8, `save version expected 8, got ${parsed.version}`);
+    assert(parsed.version === 9, `save version expected 9, got ${parsed.version}`);
     const colonists = Object.values(parsed.state.colonists);
     assert(colonists.length >= 1, `save should contain colonists, got ${colonists.length}`);
     assert(

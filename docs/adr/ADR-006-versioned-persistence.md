@@ -6,39 +6,24 @@ Accepted
 
 ## Context
 
-NOVA is a long-running simulation game. Saves must remain understandable as the implementation evolves.
+NOVA will evolve its simulation and data structures over time.
 
 ## Decision
 
-Save data is explicitly versioned.
+Persisted saves must carry an explicit save version.
 
-Loading code must know which save versions it supports and how migrations are handled.
-
-Rendering objects and UI state are not canonical save data.
-
-## Alternatives Considered
-
-### Serialize runtime objects
-
-Rejected because runtime objects are unstable and renderer-specific.
-
-### No version field
-
-Rejected because future changes would make compatibility ambiguous.
+Changes to the persistence schema require a migration or an explicit incompatibility decision.
 
 ## Consequences
 
 Positive:
-
+- controlled evolution;
 - explicit compatibility;
-- safer migrations;
-- deterministic state restoration.
+- safer future changes.
 
-Cost:
+Constraint:
+- persistence changes require version handling and validation.
 
-- migrations must be written when the schema changes.
+## Alternatives Considered
 
-## Related
-
-- `docs/SAVE-FORMAT.md`
-- `docs/04-ARCHITECTURE.md`
+Unversioned serialization was rejected because schema changes would become ambiguous and unsafe.

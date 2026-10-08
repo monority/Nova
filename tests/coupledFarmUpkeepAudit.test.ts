@@ -480,7 +480,7 @@ describe('§2/§5 — candidate formula verified against simulation', () => {
     audit('FORMULA_TABLES', measured)
   })
 
-  it('confirms net = max(1, W - F + 1) for every W >= 1', () => {
+  it('confirms the Step001 money net under the coupled overlay', () => {
     const rows: unknown[] = []
     for (const scenario of CORE_MATRIX) {
       const start = scenarioStart(scenario)
@@ -488,12 +488,17 @@ describe('§2/§5 — candidate formula verified against simulation', () => {
       const w = r.staffedWorkshops
       const f = r.staffedFarms
       const net = r.commerce - r.totalMaintenance
-      rows.push({ scenario: scenario.name, F: f, W: w, farmUpkeep: r.farmUpkeep, net })
-      if (w >= 1) {
-        expect(net).toBe(Math.max(1, w - f + 1))
-      } else {
-        expect(net).toBe(0)
-      }
+      // Step001: commerce 2W minus money maintenance over R+F+W buildings
+      // (R = F+W here) minus the coupled overlay min(F-1, W-1): net =
+      // -2F - min(max(0,F-1), max(0,W-1)), always <= 0 in this matrix.
+      const expectedNet =
+        -2 * scenario.farms -
+        Math.min(
+          Math.max(0, scenario.farms - 1),
+          Math.max(0, scenario.workshops - 1)
+        )
+      rows.push({ scenario: scenario.name, F: f, W: w, farmUpkeep: r.farmUpkeep, net, expectedNet })
+      expect(net).toBe(expectedNet)
     }
     audit('COUPLED_NET_IDENTITY', rows)
   })
@@ -567,7 +572,7 @@ describe('§6/§7 — positive flow and the pressure question', () => {
     }
   })
 
-  it('shows the coupled rule makes every F > W farm free at the margin', () => {
+  it('shows extra farms beyond W add only money maintenance (overlay capped, treasury not)', () => {
     const rows: unknown[] = []
     for (const [farms, workshops] of [
       [2, 1], [3, 1], [4, 1],
@@ -589,14 +594,15 @@ describe('§6/§7 — positive flow and the pressure question', () => {
     }
     audit('PRESSURE_LOSS_W_LT_F', rows)
     for (const row of rows as { config: string; farms: number; workshops: number; coupledFarmUpkeep: number; coupledNet: number }[]) {
-      // For F > W the coupled farm tax is capped at W - 1: every Farm beyond
-      // the W-th is free, and net is pinned at the +1 floor.
+      // The overlay cap still holds (capped at W - 1), but under money each
+      // extra farm also adds 2 maintenance (itself + its residence): net =
+      // 1 - 2F - W, strictly falling in F. Nothing is free at the margin.
       expect(row.coupledFarmUpkeep).toBe(Math.min(row.farms - 1, row.workshops - 1))
-      expect(row.coupledNet).toBe(1)
+      expect(row.coupledNet).toBe(1 - 2 * row.farms - row.workshops)
     }
   })
 
-  it('coupled net is constant in Farm count once F >= W (Farm expansion is free)', () => {
+  it('coupled net falls with Farm count (expansion is not free under money)', () => {
     for (const w of [1, 2, 3]) {
       const nets = [1, 2, 3, 4].map((f) => {
         const start = rowWorld({ residences: f + w, farms: f, workshops: w, material: 10, food: 4000 })
@@ -604,9 +610,11 @@ describe('§6/§7 — positive flow and the pressure question', () => {
         return r.commerce - r.totalMaintenance
       })
       audit(`NET_VS_F_AT_W${w}`, nets)
-      // for F >= W the net is pinned at 1: additional Farms add nothing negative
-      expect(nets[w - 1]).toBe(1)
-      expect(nets[3]).toBe(1)
+      // Step001: net = -2F - min(F-1, W-1) — each added farm costs 2 money
+      // maintenance while the overlay cap only freezes the farm-upkeep part.
+      ;[1, 2, 3, 4].forEach((f, i) => {
+        expect(nets[i]).toBe(-2 * f - Math.min(f - 1, w - 1))
+      })
     }
   })
 })
@@ -671,13 +679,17 @@ describe('§9 — marginal Workshop value', () => {
       out[`F${f}`] = rows
     }
     audit('MARGINAL_WORKSHOP', out)
-    // net rises with W once W >= F; every added Workshop adds +1 net.
+    // Step001: adding a workshop (plus its residence, R = F+W) adds +2
+    // commerce against +2 maintenance and possibly +1 overlay step: the net
+    // increment is -1 while the overlay cap still climbs (i < F), then 0.
+    // (Mirror image of the old +1 rule: money maintenance makes workshops
+    // cost, not pay, at the margin here.)
     for (const f of [1, 2, 3, 4]) {
       const rows = out[`F${f}`] as { net: number }[]
       for (let i = 1; i < 4; i += 1) {
-        // rows[i] has W = i + 1; the increment is +1 only once W > F.
-        if (i >= f) {
-          expect(rows[i]!.net - rows[i - 1]!.net).toBe(1)
+        // rows[i] has W = i + 1.
+        if (i < f) {
+          expect(rows[i]!.net - rows[i - 1]!.net).toBe(-1)
         } else {
           expect(rows[i]!.net - rows[i - 1]!.net).toBe(0)
         }
@@ -787,7 +799,7 @@ describe('§10 — bootstrap (three models)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§11 — terminal states and recovery from Material 0', () => {
-  it('coupled recovers every configuration with at least one staffed Workshop', () => {
+  it('coupled recovers nothing from Material 0 under money (poverty trap)', () => {
     const configs = [
       { name: '1F+1W', farms: 1, workshops: 1 },
       { name: '2F+2W', farms: 2, workshops: 2 },
@@ -812,8 +824,11 @@ describe('§11 — terminal states and recovery from Material 0', () => {
       }
     }
     audit('RECOVERY_FROM_ZERO', out)
+    // Step001: every first-tick net here is <= -2 (money maintenance over
+    // R+F+W buildings plus the overlay), so a 0 treasury stays 0 — the
+    // clamp holds, no debt, no recovery at any scale in this set.
     for (const config of configs) {
-      expect((out[config.name] as { coupledRecovered: boolean }).coupledRecovered).toBe(true)
+      expect((out[config.name] as { coupledRecovered: boolean }).coupledRecovered).toBe(false)
     }
   })
 
@@ -871,7 +886,7 @@ describe('§12 — 24/25 crest under the coupled rule', () => {
     }
   })
 
-  it('Material 0 recovers on the next tick because net >= +1 (W >= 1)', () => {
+  it('Material 0 does not recover on the next tick under money (net <= 0)', () => {
     const out: Record<string, unknown> = {}
     for (const p of [1, 2, 3, 4]) {
       const start = rowWorld({ residences: p * 2, farms: p, workshops: p, material: 0, food: 4000 })
@@ -883,8 +898,10 @@ describe('§12 — 24/25 crest under the coupled rule', () => {
       }
     }
     audit('CREST_FROM_ZERO', out)
+    // Step001: first-tick nets are -2 or worse everywhere here, so the
+    // treasury never leaves 0 and no crest ever forms.
     for (const p of [1, 2, 3, 4]) {
-      expect((out[`${p}F+${p}W`] as { recovered: boolean }).recovered).toBe(true)
+      expect((out[`${p}F+${p}W`] as { recovered: boolean }).recovered).toBe(false)
     }
   })
 })
@@ -963,16 +980,17 @@ describe('§13/§14 — spatial pressure and equal-distance tie-break', () => {
         },
       },
     })
-    // Farm-safe branch: the single free Farm means 0 upkeep and survival.
-    expect(farmPreferred.records[0]!.totalMaintenance).toBe(0)
+    // Farm-safe branch: the single farm means 0 overlay upkeep, but money
+    // maintenance over residence + farm + workshop (3) still applies.
+    expect(farmPreferred.records[0]!.totalMaintenance).toBe(3)
     expect(farmPreferred.records.some((r) => r.foodShortage)).toBe(false)
-    // Workshop branch produces Material but pays 1 and starves.
+    // Workshop branch produces commerce but pays the same 3 maintenance and starves.
     expect(shopPreferred.records[0]!.commerce).toBe(2)
-    expect(shopPreferred.records[0]!.totalMaintenance).toBe(1)
+    expect(shopPreferred.records[0]!.totalMaintenance).toBe(3)
     expect(shopPreferred.records.some((r) => r.foodShortage)).toBe(true)
-    // The id tie-break changes the mix AND the upkeep (0 vs 1).
-    expect(tieFarm.totalMaintenance).toBe(0)
-    expect(tieShop.totalMaintenance).toBe(1)
+    // The id tie-break changes the mix but no longer the upkeep (3 vs 3).
+    expect(tieFarm.totalMaintenance).toBe(3)
+    expect(tieShop.totalMaintenance).toBe(3)
   })
 })
 
@@ -1007,11 +1025,11 @@ describe('§15 — multi-colonist pressure', () => {
       }
     }
     audit('MULTI_COLONIST', out)
-    expect((out['2c 1F+1W'] as { netMaterial: number }).netMaterial).toBe(1)
-    expect((out['3c 2F+1W'] as { netMaterial: number }).netMaterial).toBe(1)
-    expect((out['3c 1F+2W'] as { netMaterial: number }).netMaterial).toBe(2)
-    expect((out['4c 2F+2W'] as { netMaterial: number }).netMaterial).toBe(1)
-    expect((out['5c 3F+2W'] as { netMaterial: number }).netMaterial).toBe(1)
+    expect((out['2c 1F+1W'] as { netMaterial: number }).netMaterial).toBe(-2)
+    expect((out['3c 2F+1W'] as { netMaterial: number }).netMaterial).toBe(-4)
+    expect((out['3c 1F+2W'] as { netMaterial: number }).netMaterial).toBe(-2)
+    expect((out['4c 2F+2W'] as { netMaterial: number }).netMaterial).toBe(-5)
+    expect((out['5c 3F+2W'] as { netMaterial: number }).netMaterial).toBe(-7)
   })
 })
 
@@ -1030,7 +1048,7 @@ describe('§16 — 240-tick expansion', () => {
     return ticks
   }
 
-  it('tracks 1F+1W..4F+4W for 240 ticks under coupled', () => {
+  it('tracks 1F+1W..4F+4W for 240 ticks under coupled: drain, except the 4F+4W tick-0 crest', () => {
     const out: Record<string, unknown> = {}
     for (const p of [1, 2, 3, 4]) {
       const start = rowWorld({ residences: p * 2, farms: p, workshops: p, material: 10, food: 8000 })
@@ -1048,9 +1066,25 @@ describe('§16 — 240-tick expansion', () => {
       }
     }
     audit('EXPANSION_240', out)
+    // Step001: nets are -2 or worse everywhere, so all four drain to 0 —
+    // except 1F+1W, whose TRUE net (revenue 4 vs upkeep 4) is exactly 0 and
+    // holds the starting 10 flat. (The audit's netPerTickAtStart field is
+    // commerce-only and excludes taxes; treasury truth is revenue-based.)
+    // Crests stay below 25 except 4F+4W, whose tick-0 pulse (10 + 16
+    // revenue = 26) trips the classifier without accumulating (same
+    // artifact as in the threshold audit).
+    const expected: Record<string, { firstCrestTick: number | null; classification: string; materialEnd: number }> = {
+      '1F+1W': { firstCrestTick: null, classification: 'MARGINALLY_STABLE', materialEnd: 10 },
+      '2F+2W': { firstCrestTick: null, classification: 'MARGINALLY_STABLE', materialEnd: 0 },
+      '3F+3W': { firstCrestTick: null, classification: 'MARGINALLY_STABLE', materialEnd: 0 },
+      '4F+4W': { firstCrestTick: 0, classification: 'GROWING', materialEnd: 0 },
+    }
     for (const p of [1, 2, 3, 4]) {
-      expect((out[`${p}F+${p}W`] as { firstCrestTick: number | null }).firstCrestTick).not.toBeNull()
-      expect((out[`${p}F+${p}W`] as { classification: string }).classification).toBe('GROWING')
+      const entry = out[`${p}F+${p}W`] as { firstCrestTick: number | null; classification: string; materialEnd: number }
+      const want = expected[`${p}F+${p}W`]!
+      expect(entry.firstCrestTick).toBe(want.firstCrestTick)
+      expect(entry.classification).toBe(want.classification)
+      expect(entry.materialEnd).toBe(want.materialEnd)
     }
   })
 
@@ -1126,13 +1160,15 @@ describe('§17 — counterfactual opportunity cost (one worker moves)', () => {
       },
       delta,
     })
-    // Moving the worker Workshop -> Farm adds Food, loses Material, and drops
-    // the Workshop upkeep; the Farm side stays free (F=2, W<=1 -> cap 0).
+    // Step001: the move changes Food only. Both worlds run the same 5
+    // buildings (same 5 maintenance); the workshop earns its 2 commerce
+    // connected whether staffed or vacant, and the coupled overlay is 0
+    // in both mixes — the treasury path is identical.
     expect(delta.deltaFoodProduction).toBe(2)
-    expect(delta.deltaMaterialProduction).toBe(-2)
-    expect(delta.deltaWorkshopUpkeep).toBe(-1)
+    expect(delta.deltaMaterialProduction).toBe(0)
+    expect(delta.deltaWorkshopUpkeep).toBe(0)
     expect(delta.deltaFarmUpkeep).toBe(0)
-    expect(delta.deltaNetMaterial).toBe(-1)
+    expect(delta.deltaNetMaterial).toBe(0)
   })
 })
 
@@ -1141,8 +1177,8 @@ describe('§17 — counterfactual opportunity cost (one worker moves)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§24 — persistence and determinism (audit-only)', () => {
-  it('SAVE_VERSION is 4 and the coupled rule adds no persisted state', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('SAVE_VERSION is 9 and the coupled rule adds no persisted state', () => {
+    expect(SAVE_VERSION).toBe(9)
     const state = rowWorld({ residences: 4, farms: 2, workshops: 3, material: 20 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
@@ -1169,7 +1205,7 @@ describe('§24 — persistence and determinism (audit-only)', () => {
     audit('PRODUCTION_UNCHANGED', { identical: true })
   })
 
-  it('the HUD ledger would under-report a coupled Farm tax', () => {
+  it('the HUD ledger reports money maintenance, above the coupled overlay', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 10 })
     const r = runTrace(state, 1, 'coupled').records[0]!
     const farm = Object.values(state.buildings).find((b) => b.type === 'farm')!
@@ -1182,7 +1218,7 @@ describe('§24 — persistence and determinism (audit-only)', () => {
       aggregateNetQuery: getNetMoneyPerTick(state),
       farmInspectionHasUpkeep: inspection !== null && 'upkeep' in inspection,
     })
-    expect(getMaintenanceDuePerTick(state)).toBe(r.staffedWorkshops)
+    expect(getMaintenanceDuePerTick(state)).toBe(r.maintenance)
     expect(getMaintenanceDuePerTick(state)).toBeLessThan(r.totalMaintenance)
   })
 })

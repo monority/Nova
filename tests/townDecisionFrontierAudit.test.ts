@@ -134,7 +134,10 @@ describe('Step 10CF — Town decision frontier audit', () => {
     if (resolved === null) return
     const after = metrics(resolved)
     expect(after.waterRate).toBeGreaterThan(before.waterRate)
-    expect(after.materialRate).toBeLessThan(before.materialRate)
+    // Step001: revenue is staffing-independent, so the move costs no
+    // revenue — only the Workshop staffing slot goes vacant.
+    expect(after.materialRate).toBe(before.materialRate)
+    expect(after.workshops).toBe(before.workshops - 1)
     expect(after.foodRate).toBe(before.foodRate)
   })
 

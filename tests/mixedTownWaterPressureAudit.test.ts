@@ -142,7 +142,11 @@ describe('Step 10CE — mixed-Town Water pressure audit', () => {
     const before = metrics(start)
     const after = metrics(resolved)
     expect(after.waterHeadroom).toBeGreaterThan(before.waterHeadroom)
-    expect(after.materialRate).toBeLessThan(before.materialRate)
+    // Step001: revenue is staffing-independent (commerce follows the road
+    // connection, not the worker), so the move costs NO revenue — the only
+    // cost is the now-vacant Workshop staffing slot.
+    expect(after.materialRate).toBe(before.materialRate)
+    expect(after.workshops).toBe(before.workshops - 1)
     expect(after.foodRate).toBe(before.foodRate)
   })
 

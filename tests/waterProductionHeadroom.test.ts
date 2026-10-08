@@ -381,8 +381,8 @@ describe('6 — Food regression', () => {
 // ---------------------------------------------------------------------------
 
 describe('7 — persistence and determinism', () => {
-  it('SAVE_VERSION stays 6 and admission is deterministic', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('SAVE_VERSION stays 9 and admission is deterministic', () => {
+    expect(SAVE_VERSION).toBe(9)
     const run = (): SimulationState =>
       advance(waterWorld({ residences: 8, wells: 2, colonists: 1, water: 3 }), 60)
     const a = run()

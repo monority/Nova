@@ -452,10 +452,11 @@ describe('6 — manual reassignment counterfactual', () => {
     expect(delta.staffedFarms).toBe(-1)
     expect(delta.staffedWorkshops).toBe(1)
     expect(delta.food).toBe(-2)
-    // Workshop-only income: the baseline is flat (two Farm workers earn
-    // nothing); the manual move creates +3 (2 stored + 2 income − 1 upkeep)
-    // → delta +3.
-    expect(delta.material).toBe(3)
+    // Step001: reassignment moves no money — commerce counts vacant
+    // connected Workshops, both worlds have identical buildings (same
+    // maintenance) and taxes depend only on population. Delta is 0; only
+    // Food moves (−2/tick).
+    expect(delta.material).toBe(0)
   })
 })
 
@@ -478,7 +479,10 @@ describe('7 — recovery experiment', () => {
       constructionAffordableAt60: trace.snapshots[59]!.material >= 25,
     })
     expect(trace.snapshots[0]!.staffedWorkshops).toBe(1)
-    expect(trace.snapshots[59]!.material).toBeGreaterThan(5)
+    // Step001: revenue 6 (2 tax + 2×2 commerce) = maintenance 6 — the
+    // treasury stays frozen at its 5 stock; viability here is Food and
+    // population only (construction stays unaffordable at 60).
+    expect(trace.snapshots[59]!.material).toBe(5)
     expect(trace.snapshots[59]!.food).toBeGreaterThan(0)
     expect(trace.snapshots[59]!.population).toBe(2)
   })
@@ -524,8 +528,9 @@ describe('8 — reverse reassignment (Workshop -> Farm)', () => {
     // saving 1 upkeep.
     expect(changed.staffedFarms - current.staffedFarms).toBe(1)
     expect(changed.food - current.food).toBe(2)
-    // Workshop-only income: stored −2, income −2, upkeep +1 → delta −3.
-    expect(changed.material - current.material).toBe(-3)
+    // Step001: same buildings, same population, same vacancy-counted
+    // commerce → the money delta is 0 (only Food recovers +2/tick).
+    expect(changed.material - current.material).toBe(0)
   })
 })
 
@@ -839,7 +844,7 @@ describe('16/17 — persistence and invalid-control audit', () => {
     expect(restored.colonists['colonist-2']!.workplaceId).toBe('building-5')
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(manual))
     audit('PERSISTENCE', { saveVersion: SAVE_VERSION, newStateFields: 0, workplaceId: restored.colonists['colonist-2']!.workplaceId })
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 
   it('one colonist can never hold two workplaces and capacity is one per workplace', () => {
@@ -899,7 +904,9 @@ describe('18/19 — agency and safety', () => {
       },
     })
     expect(fixed.snapshots[29]!.staffedWorkshops).toBe(1)
-    expect(fixed.snapshots[29]!.material).toBeGreaterThan(5)
+    // Step001: the treasury stays flat at its 5 stock (revenue 6 =
+    // maintenance 6) — the agency result is measured in Food/employment.
+    expect(fixed.snapshots[29]!.material).toBe(5)
     expect(fixedReverse.snapshots[29]!.staffedFarms).toBe(1)
     expect(fixedReverse.snapshots[29]!.food).toBeGreaterThanOrEqual(100)
   })

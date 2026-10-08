@@ -157,7 +157,7 @@ try {
   await loadFixture(page, 4)
   await wait(200)
   const positive = await hover(page, FREE)
-  if (positive.status.includes('ready · material 5 (incl. 2 stored + 2 income)')) {
+  if (positive.status.includes('ready · 5 money (incl. 3 revenue)')) {
     ok(`income-covered road reads ready: "${positive.status}"`)
   } else {
     fail(`income-covered road feedback bad: ${JSON.stringify(positive.status)}`)
@@ -172,10 +172,10 @@ try {
   } else {
     fail(`income-covered road not accepted: ${JSON.stringify(positiveAfter.roads)}`)
   }
-  if (positiveAfter.money === '2') {
-    ok('exactly 5 Material spent (4 stock + 2 stored + 2 income − 5 road − 1 upkeep)')
+  if (positiveAfter.money === '0') {
+    ok('exactly 5 Money spent (4 stock + 3 revenue − 5 road − 2 maintenance)')
   } else {
-    fail(`expected 2 Material after spending, got ${positiveAfter.money}`)
+    fail(`expected 0 Money after spending, got ${positiveAfter.money}`)
   }
   await page.screenshot({ path: resolve(ART, '02-income-covered-placed.png') })
 
@@ -185,7 +185,7 @@ try {
   await loadFixture(page, 0)
   await wait(200)
   const control = await hover(page, FREE)
-  if (control.status.includes('insufficient material (0/5)')) {
+  if (control.status.includes('insufficient funds (0/5)')) {
     ok(`stock-only shortfall reads insufficient: "${control.status}"`)
   } else {
     fail(`shortfall feedback bad: ${JSON.stringify(control.status)}`)
@@ -202,7 +202,7 @@ try {
   await wait(200)
   const sufficient = await hover(page, FREE)
   if (
-    sufficient.status.includes('ready · material 5') &&
+    sufficient.status.includes('ready · 5 money') &&
     !sufficient.status.includes('incl.')
   ) {
     ok(`stock-covered road reads ready without breakdown: "${sufficient.status}"`)

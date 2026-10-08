@@ -217,7 +217,7 @@ const settled = (state: SimulationState): Facts => facts(assignJobs(state))
 // ---------------------------------------------------------------------------
 
 describe('experiment A — one Residence / one Workshop', () => {
-  it('A1 — no road: unemployed, zero production, zero upkeep', () => {
+  it('A1 — no road: unemployed, zero production, upkeep on infrastructure', () => {
     let state = createTestState()
     const residence = operationalBuilding(state, 'residence', 1, 1)
     state = residence.state
@@ -232,7 +232,9 @@ describe('experiment A — one Residence / one Workshop', () => {
     expect(f.employed).toBe(0)
     expect(f.unemployed).toBe(1)
     expect(f.production).toBe(0)
-    expect(f.upkeep).toBe(0)
+    // Step001: unemployment removes staffing, not the maintenance bill —
+    // residence + workshop both pay.
+    expect(f.upkeep).toBe(2)
     expect(f.staffedWorkshops).toBe(0)
     expect(f.workplaceByColonist[colonist.id]).toBeNull()
     expect(f.mobilityByColonist[colonist.id]).toBe(false)
@@ -254,7 +256,7 @@ describe('experiment A — one Residence / one Workshop', () => {
     expect(f.employed).toBe(1)
     expect(f.unemployed).toBe(0)
     expect(f.production).toBe(2)
-    expect(f.upkeep).toBe(1)
+    expect(f.upkeep).toBe(2)
     expect(f.workplaceByColonist[colonist.id]).toBe(workshop.id)
     expect(f.mobilityByColonist[colonist.id]).toBe(true)
   })
@@ -343,7 +345,7 @@ describe('experiment B — two Residences / two Workshops', () => {
     expect(f.employed).toBe(2)
     expect(f.unemployed).toBe(0)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(4)
     expect(f.workplaceByColonist[fixture.colonistAId]).toBe(fixture.workshopAId)
     expect(f.workplaceByColonist[fixture.colonistBId]).toBe(fixture.workshopBId)
   })
@@ -463,7 +465,7 @@ describe('experiment C — two colonists / two Workshops / one shared network', 
     expect(f.unemployed).toBe(0)
     expect(f.jobCapacity).toBe(2)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(4)
     // Ascending colonist id x ascending workshop id: c1->W_A, c2->W_B.
     expect(f.workplaceByColonist[fixture.colonistAId]).toBe(fixture.workshopAId)
     expect(f.workplaceByColonist[fixture.colonistBId]).toBe(fixture.workshopBId)
@@ -593,10 +595,10 @@ describe('experiment D — competing Workshops, one worker', () => {
     expect(f.employed).toBe(1)
     expect(f.workplaceByColonist[fixture.colonistId]).toBe(fixture.firstId)
     expect(f.workerByWorkshop[fixture.secondId]).toBe(0)
-    // Vacant W_B still contributes storage capacity (08F, unchanged): the
-    // 100 bootstrap stock is above the 50 cap, so nothing is stored.
+    // Step001: no storage cap exists — stored == commerce always. The vacant
+    // but connected W_B earns its 2 commerce, so stored is 4, not 0.
     expect(f.jobCapacity).toBe(2)
-    expect(f.stored).toBe(0)
+    expect(f.stored).toBe(4)
   })
 
   it('D2 — creation order is irrelevant: the nearest Workshop still wins (09M)', () => {
@@ -682,7 +684,7 @@ describe('experiment E — network partition', () => {
     expect(f.employed).toBe(2)
     expect(f.unemployed).toBe(0)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(4)
     expect(f.workplaceByColonist[fixture.colonistAId]).toBe(fixture.workshopAId)
     expect(f.workplaceByColonist[fixture.colonistBId]).toBe(fixture.workshopBId)
     expect(
@@ -725,7 +727,7 @@ describe('experiment E — network partition', () => {
     expect(f.workplaceByColonist[fixture.colonistAId]).toBe(fixture.workshopAId)
     expect(f.employed).toBe(2)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(4)
   })
 
   it('E3 — merging into one network makes every pair eligible', () => {
@@ -743,7 +745,7 @@ describe('experiment E — network partition', () => {
     // Employment, production and upkeep are UNCHANGED versus the partition.
     expect(f.employed).toBe(2)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(4)
   })
 })
 
@@ -828,10 +830,12 @@ describe('experiment F — network merge', () => {
     const before = settled(state)
     expect(before.networks).toBe(2)
     // c1 staffs W_A; c2's only reachable Workshop (W_A) is taken -> stranded.
+    // Step001: the vacant but connected W_B already earns commerce, so
+    // production counts both workshops even before the merge.
     expect(before.employed).toBe(1)
     expect(before.unemployed).toBe(1)
-    expect(before.production).toBe(2)
-    expect(before.upkeep).toBe(1)
+    expect(before.production).toBe(4)
+    expect(before.upkeep).toBe(4)
     expect(before.workplaceByColonist[colonistB.id]).toBeNull()
 
     // Merge N1 and N2: bridge (2,2) -> (5,2) along row y=2.
@@ -845,7 +849,7 @@ describe('experiment F — network merge', () => {
     expect(after.employed).toBe(2)
     expect(after.unemployed).toBe(0)
     expect(after.production).toBe(4)
-    expect(after.upkeep).toBe(2)
+    expect(after.upkeep).toBe(4)
     expect(after.workplaceByColonist[colonistB.id]).toBe(workshopB.id)
   })
 })
@@ -940,7 +944,7 @@ describe('experiment G — network shape equivalence', () => {
       expect(f.networks).toBe(1)
       expect(f.employed).toBe(1)
       expect(f.production).toBe(2)
-      expect(f.upkeep).toBe(1)
+      expect(f.upkeep).toBe(2)
       expect(Object.values(f.mobilityByColonist)).toEqual([true])
     }
     const first = results[0]?.f
@@ -1082,7 +1086,7 @@ describe('experiment I — employment bottleneck under road topology', () => {
     expect(f.employed).toBe(2)
     expect(f.unemployed).toBe(1)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(5)
     expect(f.staffedWorkshops).toBe(2)
   })
 
@@ -1094,7 +1098,7 @@ describe('experiment I — employment bottleneck under road topology', () => {
     expect(f.unemployed).toBe(2)
     expect(f.jobCapacity).toBe(2)
     expect(f.production).toBe(2)
-    expect(f.upkeep).toBe(1)
+    expect(f.upkeep).toBe(5)
     expect(f.staffedWorkshops).toBe(1)
     expect(f.workplaceByColonist[fixture.colonist1Id]).toBe(fixture.workshop1Id)
     expect(f.workplaceByColonist[fixture.colonist2Id]).toBeNull()
@@ -1110,7 +1114,7 @@ describe('experiment I — employment bottleneck under road topology', () => {
     expect(f.employed).toBe(2)
     expect(f.unemployed).toBe(1)
     expect(f.production).toBe(4)
-    expect(f.upkeep).toBe(2)
+    expect(f.upkeep).toBe(5)
     // c1 -> W1 (lowest id reachable); c2 -> W1 taken and W2 is on another
     // network, so c2 stays unemployed; c3 -> W2.
     expect(f.workplaceByColonist[fixture.colonist1Id]).toBe(fixture.workshop1Id)
@@ -1148,7 +1152,9 @@ describe('experiment J — construction transition through the real tick lifecyc
     )
     expect(facts(state).employed).toBe(0)
     expect(facts(state).production).toBe(0)
-    expect(facts(state).upkeep).toBe(0)
+    // Step001: the still-under-construction workshop pays nothing, but the
+    // operational residence already owes its maintenance.
+    expect(facts(state).upkeep).toBe(1)
     const beforeTick = state.time.tick
 
     // Next tick: the road completes and employment appears in the same tick.
@@ -1160,7 +1166,7 @@ describe('experiment J — construction transition through the real tick lifecyc
     )
     expect(facts(state).employed).toBe(1)
     expect(facts(state).production).toBe(2)
-    expect(facts(state).upkeep).toBe(1)
+    expect(facts(state).upkeep).toBe(2)
   })
 })
 
@@ -1223,7 +1229,7 @@ describe('experiment K — residential-side topology', () => {
       expect(f.networks).toBe(1)
       expect(f.employed).toBe(1)
       expect(f.production).toBe(2)
-      expect(f.upkeep).toBe(1)
+      expect(f.upkeep).toBe(2)
       expect(Object.values(f.mobilityByColonist)).toEqual([true])
     }
     const byName = Object.fromEntries(results.map((r) => [r.name, r.f]))
@@ -1260,7 +1266,8 @@ describe('audit persistence and determinism', () => {
   }
 
   it('P1 — SAVE_VERSION 4 and save/load round-trip the audited state exactly', () => {
-    expect(SAVE_VERSION).toBe(8)
+    // SAVE_VERSION unchanged by the audit step.
+    expect(SAVE_VERSION).toBe(9)
     const state = scenario()
     const loaded = loadSave(serializeSave(state))
     expect(serializeCanonicalState(loaded)).toBe(serializeCanonicalState(state))

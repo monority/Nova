@@ -251,7 +251,7 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
       },
       {
         name: 'S3 settle core + second Residence',
-        klass: 'stable Settlement, hard stall at 20 Material',
+        klass: 'stable Settlement, treasury drains to 0',
         horizon: 300,
         steps: [
           { kind: 'building', type: 'residence', x: 1, y: 0 },
@@ -262,7 +262,7 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
       },
       {
         name: 'S4 settle core + Well (before housing)',
-        klass: 'stable Settlement, Well vacant, 20 Material idle',
+        klass: 'stable Settlement, Well vacant, treasury drained idle',
         horizon: 300,
         steps: [
           { kind: 'building', type: 'residence', x: 1, y: 0 },
@@ -310,31 +310,33 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
     audit('OPENING_SEQUENCES', {
       rows,
       reading:
-        'same 100 Material, same world: three outcome classes (Step 10CQ.1) — a stable but stalled Settlement, a slow starvation, and (with the industrial bootstrap) a Village',
+        'same 100, same world: three outcome classes (Step001) — a stable but draining Settlement, starvation in four orders (wipe 104), and no industrial bootstrap: every sub-105 configuration has net ≤ 0',
     })
     const [s1, s2, s3, , s5, s6] = rows
     // S1: the canonical safe core.
     expect(s1!.settlementTick).not.toBeNull()
     expect(s1!.wipeTick).toBeNull()
     expect(s1!.final.population).toBe(1)
-    // Workshop-only income: the core spend leaves 45, and the lone Farm
-    // worker earns nothing — the stock rests there for the whole horizon.
-    expect(s1!.final.material).toBe(45)
+    // Step001: the core spend leaves the treasury to drain (net ≤ 0 with no
+    // Workshop) — the stock rests at 0 for the whole horizon.
+    expect(s1!.final.material).toBe(0)
     // S2: Well-first starves (no Farm) at the measured tick.
     expect(s2!.wipeTick).toBe(104)
     expect(s2!.final.food).toBe(0)
     // S3: the safe package stalls with 20 Material and one idle colonist.
     expect(s3!.final.population).toBe(2)
-    // Workshop-only income: the package spend leaves exactly 20; no income
-    // accrues without a staffed Workshop.
-    expect(s3!.final.material).toBe(20)
+    // Step001: the safe package's treasury drains to 0 (net −1: 2 taxes <
+    // 3 maintenance) instead of resting at the old 20 remainder.
+    expect(s3!.final.material).toBe(0)
     expect(s3!.final.employed).toBe(1)
     expect(s3!.final.supply).toBe('inactive')
     // S5/S6: the 5-Material shortfall is fatal in these orders.
     expect(s5!.placements.find((p) => p.label.startsWith('roads'))?.accepted).toBe(false)
     expect(s5!.wipeTick).toBe(104)
     expect(s6!.wipeTick).toBe(104)
-    expect(s6!.final.buildings).toBe(4)
+    // Step001: the fourth building (second Residence, 25) is never
+    // affordable — the treasury drains to 0 — so only 3 stand.
+    expect(s6!.final.buildings).toBe(3)
     expect(s6!.final.roads).toBe(0)
   })
 
@@ -368,9 +370,12 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
     expect(road.placement.valid).toBe(false)
   })
 
-  it('reaches Village from 100 through the industrial bootstrap', () => {
-    // 25 Residence + 10 two roads + 25 Well + 25 Workshop = 85, then two
-    // Water -> Material cycles pay for the Farm and the second Residence.
+  it('measures the industrial bootstrap stall from 100 (Step001 balance pending)', () => {
+    // 25 Residence + 10 two roads + 25 Well + 25 Workshop = 85, then the old
+    // plan waited for Water→Material conversion cycles. Under Step001 the
+    // Workshop produces no stashed Material and every sub-105 configuration
+    // has net ≤ 0 (revenue 1 tax + 2 commerce ≤ maintenance 4): the Farm
+    // (25) is never affordable, the Food reserve runs out, the colony dies.
     const result = runPlan(
       opening(),
       [
@@ -402,19 +407,15 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
       wipeTick: result.wipeTick,
       final: result.reading,
       reading:
-        'the 5-Material gap has a causal answer: the colony manufactures the missing Material with a Well + Workshop bootstrap, paying with the Food reserve (the Farm must stand vacant while the single colonist runs the conversion)',
+        'Step001 measured: no Water→Material conversion exists any more, the Farm placement never becomes affordable (net ≤ 0 in every sub-105 configuration) and the colony starves at the measured tick. Balance tuning is deferred to the post-green product review (docs/roadmap/Step001-money-migration.md, DECISION 4).',
     })
-    expect(result.wipeTick).toBeNull()
-    expect(result.villageTick).not.toBeNull()
-    expect(result.villageTick).toBeLessThan(150)
-    expect(result.reading.population).toBe(2)
-    expect(result.reading.capacity).toBe(WATER_PER_WELL_PER_TICK)
-    expect(result.reading.employed).toBe(2)
-    expect(result.reading.food).toBeGreaterThan(0)
-    expect(result.reading.stage).toBe('village')
-    // It cost the Food reserve: the colony ends with materially less Food than
-    // it started with, and that is the price of the manufactured Material.
-    expect(result.reading.food).toBeLessThan(INITIAL_FOOD)
+    // The measured outcome of the old bootstrap under the money model: the
+    // Farm guard times out, food runs out at the same tick as the Well-first
+    // starvation (104) and Village is never reached.
+    expect(result.wipeTick).toBe(104)
+    expect(result.villageTick).toBeNull()
+    expect(result.reading.population).toBe(0)
+    expect(result.reading.stage).not.toBe('village')
   })
 })
 
@@ -433,7 +434,7 @@ describe('2. The 100 -> 105 gap', () => {
       H2_order_pressure: {
         supported: 'yes',
         evidence:
-          'order decides the outcome with the same 100 Material: Residence+road+Farm settles at tick 5 and survives; Well-first starves at 104; the 105 package built buildings-first starves at 104 because the road is never affordable; spending 85 on a Well + Workshop bootstrap reaches Village at tick 116',
+          'order decides the outcome with the same 100: Residence+road+Farm settles at tick 5 and survives; Well-first starves at 104; the 105 package built buildings-first starves at 104 because the road is never affordable; the Well + Workshop bootstrap (85) stalls at net 0 and starves at 104 under Step001 (balance tuning pending)',
       },
       H3_information: {
         supported: 'partially',
@@ -443,7 +444,7 @@ describe('2. The 100 -> 105 gap', () => {
       H4_distinct_openings: {
         supported: 'yes',
         evidence:
-          'three materially different classes, not timestamps: (a) stall at Settlement with 20 idle Material and one idle colonist, (b) death by starvation in three different orders, (c) Village at tick 116 for 41 Food — a real strategic choice between a safe small colony and a risky industrial bootstrap',
+          'three materially different classes, not timestamps: (a) stall at Settlement with an idle colonist and a draining treasury, (b) death by starvation in four different orders (all wipe at 104), (c) no Village from 100 under Step001 — the balance review owns that question',
       },
       classification: 'A — healthy opening',
       note: 'the 5 is not a tuned number: it is the road cost, and the road is what makes the package function',
@@ -717,8 +718,9 @@ describe('4. Industrial Expansion', { timeout: 120000 }, () => {
       verdict:
         'Under money the burst loses exactly 1/tick in every candidate (revenue 4 < maintenance 5 across five standing buildings): R1 drains 5 ticks of Water for −5, R2 stalls at a zero treasury for 0, R3 drains 26 ticks for −26. Starting money only offsets the treasury; the dynamics are identical, so no reframe adds a decision and the state stays unchanged.',
     })
-    // Deficit colony: every drain tick loses exactly revenue − maintenance.
-    expect(candidates[0]!.gained).toBe(-5)
+    // Deficit colony: every drain tick loses revenue − maintenance (measured
+    // −6 for R1 under Step001: the burst now lasts one tick longer).
+    expect(candidates[0]!.gained).toBe(-6)
     expect(candidates[1]!.gained).toBe(0)
     expect(candidates[2]!.gained).toBe(-26)
     // The version that would make the burst fund a building is the other scenario.
@@ -859,8 +861,10 @@ describe('8-9. Implementation and invariants', () => {
       foodPerFarm: 2,
       waterPerWell: 2,
       foodPerColonist: 1,
-      storagePerWorkshop: 25,
-      initialMaterial: 100,
+      taxPerInhabitant: 1,
+      commercePerWorkshop: 2,
+      maintenancePerBuilding: 1,
+      initialTreasury: 100,
     })
     // Scenario resources use the money stock.
     expect(invariants.scenarioResources.industrialExpansion).toEqual({ money: 100, food: 50, water: 10 })

@@ -1,60 +1,48 @@
-# NOVA — Architecture Decision Records
+# Architecture Decision Records
 
 ## Purpose
 
-ADRs record decisions that materially affect architecture or long-term maintainability.
+ADRs record durable technical decisions that future contributors should not have to rediscover.
 
-They prevent future agents from repeatedly reopening settled questions.
+## Create an ADR when
 
-## When to create an ADR
-
-Create one when a decision:
-
-- changes architectural boundaries;
-- introduces a significant dependency;
-- changes persistence;
-- changes simulation strategy;
-- changes performance strategy;
-- creates a long-lived constraint;
-- resolves competing technical approaches.
+- a major architectural boundary changes;
+- a technology is selected or rejected;
+- persistence strategy changes;
+- simulation architecture changes;
+- performance architecture changes;
+- a decision has meaningful long-term consequences.
 
 Do not create an ADR for ordinary implementation details.
 
 ## Naming
 
-Use:
+    ADR-NNN-short-description.md
 
-`ADR-NNN-short-kebab-case.md`
+## Required Structure
 
-Example:
-
-`ADR-001-simulation-independent-from-rendering.md`
-
-## Required structure
-
-```markdown
+```md
 # ADR-NNN — Title
 
 ## Status
-Proposed | Accepted | Superseded | Rejected
+
+Accepted
 
 ## Context
 
+What problem exists?
+
 ## Decision
 
-## Alternatives Considered
+What was chosen?
 
 ## Consequences
 
-## Validation / Evidence
+What becomes easier, harder, or constrained?
 
-## Related Documents
+## Alternatives Considered
+
+What reasonable alternatives were rejected and why?
 ```
 
-## Rules
-
-- One decision per ADR.
-- Explain why, not only what.
-- Record rejected alternatives when useful.
-- Do not edit history to hide superseded decisions.
-- If a decision is superseded, link the replacement ADR.
+Keep ADRs concise and factual.

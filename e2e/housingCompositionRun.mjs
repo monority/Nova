@@ -198,11 +198,11 @@ async function main() {
     assert(s.colonists === '2', `bridge population: ${s.colonists}`);
     assert(s.staffedFarmIds !== '' && s.vacantOperationalFarms === '0',
       `bridge farm staffing: "${s.staffedFarmIds}" / vacant ${s.vacantOperationalFarms}`);
-    // Step 10CZ: Phase 7 income credits the staffed Farm/Well workers, so the
-    // 30 - 25 = 5 budget leftover grows by the income earned during the
-    // completion ticks that reach Village. Measured: +4 -> 9.
-    assert(s.money === '9', `bridge leftover material: ${s.money}`);
-    ok(`bridge solution: Village at tick ${s.tick}, population ${s.colonists}, staffed Farm "${s.staffedFarmIds}", material left ${s.money}`);
+    // Step001: the 30 − 25 = 5 budget leftover bleeds under the baseline
+    // (revenue 2 = 2 taxes, maintenance 4 once the Farm is staffed), so the
+    // treasury clamps at 0 — measured, not recalibrated (D1 finding).
+    assert(s.money === '0', `bridge leftover money: ${s.money}`);
+    ok(`bridge solution: Village at tick ${s.tick}, population ${s.colonists}, staffed Farm "${s.staffedFarmIds}", money clamped at ${s.money}`);
     await page.screenshot({ path: `${ART}/03-village.png` });
 
     // --- 4. the stranded solution fails with a visible cause ------------------
@@ -222,27 +222,29 @@ async function main() {
     ok(`stranded failure: population 0 at tick ${s.tick}, food ${s.food}, objective ${failed.state} ("${s.foodStatus}")`);
     await page.screenshot({ path: `${ART}/04-failure.png` });
 
-    // --- 5. recovery: the remaining 5 Material joins the networks -------------
+    // --- 5. recovery: the road join is NOT fundable (Step001 D1 finding) ----
+    // The 30 budget buys the west Residence (25) and the Step001 net flow is
+    // negative (revenue 1 tax, maintenance 4 operational buildings), so the
+    // 5-Money join at (2,1) can never be afforded — measured, not recalibrated
+    // (D1 finding, docs/audits/REPOSITORY-AUDIT-2026-10-08.md).
     s = await loadScenario(page);
     await placeResidence(page, { x: 0, y: 1 });
-    await step(page, 2);
-    await placeRoad(page, { x: 2, y: 1 });
-    for (let i = 0; i < 16; i += 1) {
-      const current = await objective(page);
-      if (current?.state === 'completed') break;
-      await step(page);
-    }
+    s = await step(page, 2);
+    assert(s.money === '0', `the west Residence must clamp the treasury at 0, got ${s.money}`);
+    const joinPt = await pointAt(page, { x: 2, y: 1 });
+    await waitFor(
+      async () => (await stats(page)).status.includes('insufficient funds'),
+      'the road join must show an insufficient preview'
+    );
+    const beforeJoin = await stats(page);
+    await page.mouse.click(joinPt.x, joinPt.y);
+    await new Promise((r) => setTimeout(r, 300));
     s = await stats(page);
-    const recovered = await objective(page);
-    const recoveredProgression = await progression(page);
-    assert(recovered.state === 'completed', `recovery objective: ${recovered.state}`);
-    assert(recoveredProgression.stage === 'village', `recovery stage: ${recoveredProgression.stage}`);
-    assert(s.roadNetworks === '1', `recovery networks: ${s.roadNetworks}`);
-    // Step 10CZ: same Phase 7 income effect. The 30 Material budget is fully
-    // spent (25 Residence + 5 road), and the completion ticks to Village add
-    // the staffed workers' income. Measured: 6.
-    assert(s.money === '6', `recovery material: ${s.money}`);
-    ok(`recovery: road join at tick ${s.tick} → ${recoveredProgression.stage}, networks ${s.roadNetworks}, material ${s.money}`);
+    assert(s.roads === beforeJoin.roads, `the unfunded join must be rejected: ${JSON.stringify(s)}`);
+    assert(s.roadNetworks === '2', `the networks must stay severed: ${s.roadNetworks}`);
+    const unfundedObjective = await objective(page);
+    assert(unfundedObjective.state === 'in_progress', `the scenario must stay open without the join: ${JSON.stringify(unfundedObjective)}`);
+    ok(`recovery blocked: join rejected (status "${s.status}"), networks ${s.roadNetworks}, money ${s.money}, objective ${unfundedObjective.state} (D1)`);
     await page.screenshot({ path: `${ART}/05-recovery.png` });
 
     // --- 6. narrow viewports --------------------------------------------------

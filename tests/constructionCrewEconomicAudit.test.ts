@@ -352,11 +352,12 @@ describe('§4 — build-vs-produce opportunity cost', () => {
     const result = costOf('workshop')
     audit('COST_WORKSHOP', {
       ...result,
-      note: 'a crewed Workshop neither produces nor earns Step 10CQ income and pays no upkeep; the control nets gross + income − upkeep',
+      note: 'Step001: a crewed (vacant) Workshop still earns commerce; the crew tick completes the Well, which starts paying upkeep one tick earlier — control nets revenue 3 − upkeep 2 = +1, crewed nets 3 − 3 = 0',
     })
-    // control: +2 gross + 2 income − 1 upkeep = +3; crewed tick: 0.
-    expect((result['opportunityCost'] as { material: number }).material).toBe(3)
-    expect((result['controlDelta'] as { material: number }).material).toBe(3)
+    // control: +3 revenue (1 tax + 2 commerce) − 2 upkeep = +1;
+    // crewed tick: same revenue but the completed Well joins the upkeep pool.
+    expect((result['opportunityCost'] as { material: number }).material).toBe(1)
+    expect((result['controlDelta'] as { material: number }).material).toBe(1)
     expect((result['crewedDelta'] as { material: number }).material).toBe(0)
   })
 

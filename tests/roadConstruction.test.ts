@@ -284,9 +284,10 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
       { x: 4, y: 3 },
     ]
     state = stepSimulation(state, roads(pathCells))
-    // Authoritative cost (3 cells) + upkeep (0 — no worker yet).
+    // Same-tick tax revenue (+1, no commerce: roadless) lands before the
+    // command; then authoritative cost (3 cells) + upkeep (2).
     expect(state.resources.money).toBe(
-      materialBefore - pathCells.length * ROAD_CONSTRUCTION_COST - upkeep
+      materialBefore + 1 - pathCells.length * ROAD_CONSTRUCTION_COST - upkeep
     )
     expect(commerceRevenueForTick(state)).toBe(0)
     expect(
@@ -307,10 +308,9 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     )
   })
 
-  it('O — resumed production is stored through the unchanged 08F clamp', () => {
+  it('O — resumed production: commerce revenue flows once the roads complete', () => {
     let state = staffedWorkshopNoRoad()
-    // Place roads (under construction), then set the stock to 24 with
-    // storage capacity 25: exactly 1 unit of space for the completing tick.
+    // Place roads (under construction), then set the treasury to 24.
     state = stepSimulation(
       state,
       roads([{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 4, y: 3 }])
@@ -318,13 +318,12 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     state = { ...state, resources: { ...state.resources, money: 24 } }
     expect(commerceRevenueForTick(state)).toBe(0)
     state = stepSimulation(state)
-    // Roads complete → the worker is employed the same tick: gross 2, exactly
-    // 1 unit stored (the one free space at 24), income 2, upkeep 1:
-    // 24 + 1 + 2 − 1 = 26. The stored-1 evidence is the exact stock: a stored
-    // 2 would have landed 27. The next tick is fully clamped (stock ≥ 25).
+    // Roads complete → the worker is employed the same tick. Money is
+    // uncapped under Step001 (no storage clamp on the treasury): commerce 2
+    // plus tax 1, minus upkeep 2: 24 + 3 − 2 = 25.
     expect(commerceRevenueForTick(state)).toBe(2)
-    expect(state.resources.money).toBe(26)
-    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    expect(state.resources.money).toBe(25)
+    expect(getCommerceRevenuePerTick(state)).toBe(2)
   })
 
   it('P — under-construction road keeps employment unchanged (09K)', () => {
@@ -337,8 +336,9 @@ describe('road construction lifecycle and gameplay proof (Step 09H)', () => {
     )
     expect(after.buildings).toEqual(before.buildings)
     expect(after.colonists).toEqual(before.colonists)
-    // No worker → no upkeep.
-    expect(maintenanceDueForTick(after)).toBe(0)
+    // No worker, but Step001 maintenance is infrastructure: both operational
+    // buildings (residence + workshop) pay regardless of staffing.
+    expect(maintenanceDueForTick(after)).toBe(2)
   })
 })
 
@@ -427,7 +427,7 @@ describe('road projection, persistence and determinism (Step 09H)', () => {
     const raw = serializeSave(state)
     expect(raw.includes('connections')).toBe(false)
     expect(raw.includes('orientation')).toBe(false)
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 
   it('T — deterministic replay: same gestures, same state and hash', () => {

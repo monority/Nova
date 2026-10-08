@@ -631,8 +631,8 @@ describe('6. terrain-chokepoint fixture (variant C)', () => {
     expect(measured.westServed).toBe(true)
     expect(measured.eastServed).toBe(true)
     expect(measured.westCanReachEastFarm).toBe(true)
-    // Workshop-only income: the 5-cost road leaves 30 − 5 = 25.
-    expect(merged.resources.money).toBe(25)
+    // Step001: the 5-cost road leaves 30 − 5 = 25, minus 2 ticks of upkeep drain = 16.
+    expect(merged.resources.money).toBe(16)
   })
 
   it('case B — the connector cell as a building severs the colony', () => {

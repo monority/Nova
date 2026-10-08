@@ -364,7 +364,7 @@ const deadlockProbe = (
 // ---------------------------------------------------------------------------
 
 describe('§1/§3 — starting-state bootstrap matrix', () => {
-  it('Model A (strict) deadlocks for every Material stock below the Well price', () => {
+  it('Model A (strict) flatlines at every stock without player construction (Step001)', () => {
     const rows = [0, 1, 5, 24, 25].map((material) => {
       // Two residences and two colonists, so the Workshop IS staffed and the
       // strict gate is actually exercised.
@@ -387,11 +387,12 @@ describe('§1/§3 — starting-state bootstrap matrix', () => {
         staffedWorkshops: r.readings.staffedWorkshops,
         water: r.readings.water,
       })),
-      note: 'with income (Step 10CQ), even 0-Material colonies accumulate +1/net/tick from the staffed Workshop; the strict gate no longer deadlocks',
+      note: 'Step001: revenue (2 taxes + 2 connected commerce) exactly offsets maintenance (2 residences + farm + workshop), so the treasury holds flat at every starting stock — accumulation needs spending (the Well), not waiting',
     })
-    // Income drives accumulation past the Well price for every starting stock.
-    expect(rows[0]!.recovered).toBe(true)
-    expect(rows[4]!.recovered).toBe(true)
+    // Income no longer drives accumulation past the Well price: net is
+    // exactly 0, so the stock never rises above its start at any level.
+    expect(rows[0]!.recovered).toBe(false)
+    expect(rows[4]!.recovered).toBe(false)
   })
 
   it('Model A: a colony that keeps 25 Material can always build the Well itself', () => {
@@ -459,7 +460,7 @@ describe('§1/§3 — starting-state bootstrap matrix', () => {
 // ---------------------------------------------------------------------------
 
 describe('§5 — permanent free producer test (delayed Well)', () => {
-  it('B1/B2/E/F: cumulative Workshop output while the Well is absent', () => {
+  it('B1/B2/E/F: no accumulation while the Well is absent under money', () => {
     const rows = [1, 5, 20, 60].map((delay) => {
       const base = world({
         residences: 2,
@@ -483,9 +484,10 @@ describe('§5 — permanent free producer test (delayed Well)', () => {
       model: 'B1 colonyExemption (B2 firstWorkshopExemption behaves identically with one Workshop)',
       rows,
       verdict:
-        'UNBOUNDED free production in TIME: the exemption never expires while no operational Well exists; the STOCK saturates only because the 25-Material Workshop storage cap binds, so the colony keeps a free producer indefinitely',
+        'Step001: the exemptions change nothing fiscally (net 0 either way) — the treasury holds flat at 0 for all delays. Free production in time belonged to the staffed-production model.',
     })
-    expect(rows[3]!.material).toBeGreaterThan(rows[0]!.material)
+    // Every delay ends flat at 0: exemptions cannot lift a net-0 treasury.
+    for (const row of rows) expect(row.material).toBe(0)
   })
 
   it('E freeBatch and F materialFloor both expire, in different dimensions', () => {
@@ -512,10 +514,10 @@ describe('§5 — permanent free producer test (delayed Well)', () => {
         material: fLate.resources.money,
         staffedWorkshops: countStaffedOperationalWorkshops(fLate),
       },
-      note: 'E bounds the free window in TIME; F bounds it in STOCK — but Step 10CQ income adds +1/net/tick from the staffed Workshop, so material keeps growing',
+      note: 'Step001: E and F both sit at net 0, so neither lifts off — expiry dimensions are moot when nothing accumulates',
     })
-    // Income drives accumulation above the old 26 cap.
-    expect(f.resources.money).toBeGreaterThan(MATERIAL_FLOOR_WELL_PRICE)
+    // Neither model lifts the treasury off the floor at net 0.
+    expect(f.resources.money).toBe(0)
   })
 })
 
@@ -551,7 +553,7 @@ describe('§2 — Models C and D', () => {
     expect(rows[0]!.maxMaterial).toBeGreaterThanOrEqual(0)
   })
 
-  it('D wellCompletionWater does not fix the deadlock and adds Water outside production', () => {
+  it('D wellCompletionWater does not lift off either (net 0 under money)', () => {
     const base = world({
       residences: 2,
       farms: 1,
@@ -584,9 +586,9 @@ describe('§2 — Models C and D', () => {
         material: withWell.resources.money,
         staffedWells: operationalIdsOfType(withWell, 'well').filter((id) => countWorkersAt(withWell, id) > 0).length,
       },
-      note: 'the grant needs a completed Well, and a Well needs 25 Material: but income (Step 10CQ) lets the colony accumulate past the Well price without the grant',
+      note: 'Step001: the grant needs a completed Well, and a Well needs 25 Material — but at net 0 the colony never accumulates past the Well price with or without the grant',
     })
-    expect(probe.recovered).toBe(true)
+    expect(probe.recovered).toBe(false)
   })
 })
 

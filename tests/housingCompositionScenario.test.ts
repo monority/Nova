@@ -150,7 +150,7 @@ describe('1. start state', () => {
 // ---------------------------------------------------------------------------
 
 describe('2. spatial solutions', () => {
-  it('solution A — a cell that touches both networks completes for exactly 25 Material', () => {
+  it('solution A — a cell that touches both networks completes (treasury floors, objective holds)', () => {
     const state = run(
       [{ type: 'placeBuilding', x: 2, y: 1, buildingType: 'residence' }],
       20
@@ -161,14 +161,15 @@ describe('2. spatial solutions', () => {
     expect(measured.servedResidences).toBe(2)
     expect(measured.employed).toBe(2)
     expect(measured.foodPerTick).toBe(2)
-    // Workshop-only income: the Farm and Well workers earn no Material, so
-    // the stock rests at the 30 − 25 = 5 build remainder.
-    expect(measured.material).toBe(5)
+    // Step001: no Workshop exists, so revenue (2 taxes) never covers
+    // maintenance (4 buildings) — the 5 remainder drains to the floor.
+    // The objective (Village) holds regardless of the empty treasury.
+    expect(measured.material).toBe(0)
     expect(measured.stage).toBe('village')
     expect(outcome(state)).toBe('completed')
   })
 
-  it('solution B — housing on the far network plus a joining road completes for exactly 30', () => {
+  it('solution B — blocked under money: the joining road is unaffordable after the drain', () => {
     const state = run(
       [
         { type: 'placeBuilding', x: 0, y: 1, buildingType: 'residence' },
@@ -178,17 +179,17 @@ describe('2. spatial solutions', () => {
     )
     const measured = read(state)
     audit('SOLUTION_B_JOIN', measured)
-    expect(measured.networks).toBe(1)
-    expect(measured.population).toBe(2)
-    expect(measured.employed).toBe(2)
-    expect(measured.foodPerTick).toBe(2)
-    // Workshop-only income: the 30-cost solution spends the whole budget and
-    // the Farm/Well workers accrue nothing, so the stock rests at 0.
+    // Step001: the t1 tick drains 30 - 25 - 3 = 2, so the t2 road (cost 5)
+    // is REJECTED — networks never merge, the new residence stays
+    // unserved, no second colonist arrives, and the objective stalls.
+    // The topology solution is correct; the 30 budget cannot fund it.
+    expect(measured.networks).toBe(2)
+    expect(measured.population).toBe(1)
     expect(measured.material).toBe(0)
-    expect(outcome(state)).toBe('completed')
+    expect(outcome(state)).toBe('in_progress')
   })
 
-  it('solution C — joining first and housing anywhere serviced also completes', () => {
+  it('solution C — blocked under money: the residence is unaffordable after the road', () => {
     const state = run(
       [
         { type: 'placeRoads', cells: [{ x: 2, y: 1 }] },
@@ -198,9 +199,13 @@ describe('2. spatial solutions', () => {
     )
     const measured = read(state)
     audit('SOLUTION_C_JOIN_FIRST', measured)
-    expect(measured.population).toBe(2)
-    expect(measured.foodPerTick).toBe(2)
-    expect(outcome(state)).toBe('completed')
+    // Step001: the road IS built (networks merge to 1), but the drain
+    // leaves ~22 against the 25 residence cost — the residence is REJECTED,
+    // no second colonist arrives, and the objective stalls.
+    expect(measured.networks).toBe(1)
+    expect(measured.population).toBe(1)
+    expect(measured.material).toBe(0)
+    expect(outcome(state)).toBe('in_progress')
   })
 
   it('shows the decision is about networks, not about a single magic cell', () => {
@@ -265,7 +270,7 @@ describe('3. failure and recovery', () => {
     expect(outcome(state)).toBe('failed')
   })
 
-  it('the wrong placement is recoverable with the remaining 5 Material', () => {
+  it('the wrong placement stays unrecoverable under money (road rejected, objective open)', () => {
     const recovered = run(
       [
         { type: 'placeBuilding', x: 0, y: 1, buildingType: 'residence' },
@@ -274,14 +279,14 @@ describe('3. failure and recovery', () => {
       20
     )
     audit('RECOVERY_FROM_UNSERVED', read(recovered))
-    expect(outcome(recovered)).toBe('completed')
-    // Workshop-only income: the same recovery succeeds — the join itself
-    // restores service and employment; no income accrues on the way, so the
-    // stock ends at exactly 0.
-    expect(recovered.resources.money).toBe(0)
+    // Step001: same drain as solution B — the joining road is rejected,
+    // networks stay split, and the objective stays open. Recovery needs
+    // funds the drained treasury cannot provide.
+    expect(outcome(recovered)).toBe('in_progress')
+    expect(read(recovered).networks).toBe(2)
   })
 
-  it('recovery is also possible after the serviced-but-stranded mistake', () => {
+  it('the serviced-but-stranded mistake collapses the colony under money', () => {
     const afterMistake = run(
       [
         { type: 'placeBuilding', x: 4, y: 1, buildingType: 'residence' },
@@ -290,8 +295,10 @@ describe('3. failure and recovery', () => {
       20
     )
     audit('RECOVERY_FROM_STRANDED', read(afterMistake))
-    expect(outcome(afterMistake)).toBe('completed')
-    expect(read(afterMistake).networks).toBe(1)
+    // Step001: with no recovery funds and no staffed Farm, the colony
+    // starves to zero — the mistake is terminal under money, not a detour.
+    expect(outcome(afterMistake)).toBe('failed')
+    expect(read(afterMistake).networks).toBe(2)
   })
 })
 
@@ -355,7 +362,7 @@ describe('4. determinism, persistence and architecture', () => {
     audit('HOUSING_PERSISTENCE', rows)
     expect(rows.equalHash).toBe(true)
     expect(rows.scenarioFramingNotPersisted).toBe(true)
-    expect(rows.saveVersion).toBe(8)
+    expect(rows.saveVersion).toBe(9)
     expect(rows.networks).toBe(2)
   })
 

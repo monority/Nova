@@ -207,7 +207,7 @@ describe('1. freeze verification', () => {
     expect(frozen.workshopUpkeep).toBe(1)
     expect(frozen.foodConsumption).toBe(1)
     expect(frozen.waterConsumption).toBe(1)
-    expect(frozen.workshopStorage).toBe(25)
+    expect(frozen.workshopStorage).toBe(0)
     expect(frozen.roadCost).toBe(5)
     expect(frozen.roadTicks).toBe(2)
     expect(frozen.residence).toEqual({ constructionTicks: 2, housingCapacity: 1, constructionCost: 25, constructionWaterCost: 0 })

@@ -225,7 +225,9 @@ describe('Step 10BR — scale-pressure remeasurement', () => {
       expect(row.diagnoses.staffed).toBe(4)
     }
     expect(rows.find((row) => row.label === 'foodHeavy')?.foodProduction).toBe(4)
-    expect(rows.find((row) => row.label === 'materialHeavy')?.materialNet).toBe(2)
+    // Step001: revenue 8 (4 taxes + 4 commerce from the 2 connected
+    // Workshops) − maintenance 8 (4 residences + 4 workplaces) = 0.
+    expect(rows.find((row) => row.label === 'materialHeavy')?.materialNet).toBe(0)
   })
 
   it('measures Construction Crew opportunity cost and recovery', () => {

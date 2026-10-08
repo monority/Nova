@@ -189,7 +189,7 @@ async function bootstrapWaterWorkshop(page, { residence, roads, well, workshop }
   await stepUntil(page, (v) => Number(v.water) >= 1, 'Water buffer for the Workshop', 10);
   await selectPalette(page, 'build-workshop', 'Workshop selected');
   await placeAt(page, workshop);
-  return stepUntil(page, (v) => v.storageCapacity === '25', 'Workshop operational', 10);
+  return stepUntil(page, (v) => v.commerce === '2', 'Workshop operational (commerce flows)', 10);
 }
 
 const BOOT = {
@@ -282,49 +282,45 @@ async function main() {
     await placeAt(page, BOOT.workshop);
     s = await stats(page);
     assert(s.workshops === '1', `expected 1 workshop, got ${s.workshops}`);
-    assert(s.storageCapacity === '0', `under-construction workshop must add no capacity, got ${s.storageCapacity}`);
+    // Step001: no storage figure exists — an under-construction Workshop adds
+    // no commerce and no job slot.
+    assert(s.commerce === '0', `under-construction workshop must earn no commerce, got ${s.commerce}`);
     assert(s.jobCapacity === '1', `only the Well job should be open, got ${s.jobCapacity}`);
     await selectAt(page, BOOT.workshop);
     const underConstruction = await inspectionHousingText(page);
-    assert(underConstruction === 'Material production — not operational yet · jobs 0/0', `under-construction workshop inspection bad: "${underConstruction}"`);
+    assert(underConstruction === 'Commerce — not operational yet · jobs 0/0', `under-construction workshop inspection bad: "${underConstruction}"`);
     ok(`workshop placed at tick ${s.tick}; material ${s.money}; inspection "${underConstruction}"`);
 
-    s = await stepUntil(page, (v) => v.storageCapacity === '25', 'workshop operational', 10);
-    s = await stepUntil(page, (v) => v.employed === '1' && v.materialProduction === '2', 'staffed workshop', 10);
+    s = await stepUntil(page, (v) => v.commerce === '2', 'workshop operational', 10);
+    s = await stepUntil(page, (v) => v.employed === '1' && v.staffedWorkshopIds !== '', 'staffed workshop', 10);
     assert(s.jobCapacity === '2', `Well + Workshop must offer 2 jobs, got ${s.jobCapacity}`);
     assert((await jobsText(page)) === '1 / 2', `HUD jobs expected "1 / 2", got "${await jobsText(page)}"`);
-    assert(s.storageCapacity === '25' && s.storedProduction === '2', `capacity expectations broken: ${JSON.stringify(s)}`);
+    assert(s.commerce === '2' && s.staffedWorkshopIds !== '', `commerce expectations broken: ${JSON.stringify(s)}`);
     assert(s.staffedWorkshopIds !== '', `the nearer Workshop must win the worker: ${JSON.stringify(s)}`);
     const selection = await selectAt(page, BOOT.workshop);
     assert(selection?.type === 'workshop', `selection expected workshop, got ${JSON.stringify(selection)}`);
     assert((await page.locator('[data-testid="inspection-type"]').textContent()) === 'Workshop', 'inspection type label missing');
     const operationalJobs = await inspectionHousingText(page);
-    assert(operationalJobs === 'Material production — producing +2/tick (staffed) · jobs 1/1 · upkeep 1/tick · storage 25', `workshop inspection bad: "${operationalJobs}"`);
+    assert(operationalJobs === 'Commerce — connected +2/tick · jobs 1/1 · maintenance 1/tick', `workshop inspection bad: "${operationalJobs}"`);
     ok(`workshop staffed at tick ${s.tick}: jobs "${await jobsText(page)}", inspection "${operationalJobs}", material ${s.money}`);
     await shot('03-employed-workshop.png');
 
-    // Phase D (Step 10CZ): the 85-Material bootstrap leaves the stock BELOW the
-    // 25 capacity, so the flow is stored production (2) + Phase 7 workforce
-    // income (2) - upkeep (1) = +3/tick near the floor. There is no equilibrium
-    // any more: above the cap, stored is 0 and income keeps the stock climbing.
-    // Gross production stays exactly 2.
-    let materialBefore = Number(s.money);
-    const materialCapacity = Number(s.storageCapacity);
+    // Phase D (Step001): money replaced Material production — there is no
+    // storage figure. Revenue 3 (1 tax + 2 commerce) exactly offsets
+    // maintenance 3 (residence + Well + Workshop): the treasury is flat.
+    let moneyBefore = Number(s.money);
     for (let i = 0; i < 4; i += 1) {
       s = await step(page);
-      const storedDuringTick = Math.min(2, Math.max(0, materialCapacity - materialBefore));
-      const expected = storedDuringTick + 1; // stored + income(2) - upkeep(1)
-      const delta = Number(s.money) - materialBefore;
-      if (delta !== expected) {
-        fail(`below-capacity tick ${i + 1} expected +${expected} (stored ${storedDuringTick} + income 2 - upkeep 1), got ${delta}`);
+      const delta = Number(s.money) - moneyBefore;
+      if (delta !== 0) {
+        fail(`Step001 steady tick ${i + 1} expected net 0 (revenue 3 - maintenance 3), got ${delta}`);
         break;
       }
-      materialBefore = Number(s.money);
+      moneyBefore = Number(s.money);
     }
-    ok(`below-capacity refill income-aware (stored + income 2 - upkeep 1), material ${s.money}`);
-    assert(s.materialProduction === '2', `gross production must stay 2 with one worker, got ${s.materialProduction}`);
-    assert(s.status.includes('1 worker produced 2 material'), `steady material feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`material deltas exact: +1/tick below capacity, gross stays 2 at tick ${s.tick} (material ${s.money})`);
+    ok(`Step001 steady state: treasury flat at ${s.money} (revenue 3 - maintenance 3 = 0), tick ${s.tick}`);
+    assert(s.commerce === '2' && s.staffedWorkshopIds !== '', `commerce must keep flowing with one worker, got ${JSON.stringify(s)}`);
+    assert(s.status.includes('treasury +3'), `steady revenue feedback missing: ${JSON.stringify(s.status)}`);
     await shot('04-material-production.png');
 
     // ---------------------------------------------------------------------
@@ -334,26 +330,24 @@ async function main() {
     // capacity-25 crest (24 + this tick's stored 1) is exactly the 08G gate
     // that lets the labour income pay for the next 25-cost building.
     // ---------------------------------------------------------------------
-    console.log('--- Scenario 2: labor income funds further construction ---');
+    console.log('--- Scenario 2: the bootstrap chain is treasury-neutral (Step001 D1 finding) ---');
     await fresh(page);
     s = await bootstrapWaterWorkshop(page, BOOT);
-    s = await stepUntil(page, (v) => v.employed === '1' && v.materialProduction === '2', 'staffed workshop', 10);
-    assert(Number(s.money) < 25, `material should be below the 25 cost after the bootstrap, got ${s.money}`);
-    s = await stepUntil(
-      page,
-      (v) => Number(v.money) + Number(v.storedProduction) >= 25,
-      'labour-financed construction crest',
-      60
-    );
-    ok(`labour refilled to rest ${s.money} + stored ${s.storedProduction} (capacity ${s.storageCapacity}, one worker)`);
-
-    const beforeBuild = Number(s.money);
-    await selectPalette(page, 'build-residence', 'Residence selected');
-    await placeAt(page, { x: 8, y: 8 });
-    s = await stats(page);
-    assert(s.buildings === '4', `expected 4 buildings, got ${s.buildings}`);
-    assert(Number(s.money) <= beforeBuild, `labour-financed build must not create Material: ${beforeBuild} -> ${s.money}`);
-    ok(`labour enabled construction at tick ${s.tick}: ${beforeBuild} -> ${s.money}, buildings ${s.buildings}`);
+    s = await stepUntil(page, (v) => v.staffedWorkshopIds !== '', 'staffed workshop', 10);
+    // Step001 baseline: the full chain (residence + 2 roads + Well + Workshop)
+    // leaves the treasury below the 25 build cost, and revenue 3 (1 tax +
+    // 2 commerce) exactly offsets maintenance 3 — net 0/tick. No further
+    // construction is self-funded. This is the D1 income/expense finding
+    // (docs/audits/REPOSITORY-AUDIT-2026-10-08.md), deliberately NOT
+    // recalibrated in Step002.
+    assert(Number(s.money) < 25, `treasury should rest below the 25 cost after the bootstrap, got ${s.money}`);
+    assert(s.netMoney === '0', `bootstrap colony should be treasury-neutral, got net ${s.netMoney}`);
+    const beforeWait = Number(s.money);
+    for (let i = 0; i < 5; i += 1) {
+      s = await step(page);
+      assert(Number(s.money) === beforeWait, `neutral treasury must not move: ${beforeWait} -> ${s.money}`);
+    }
+    ok(`bootstrap chain rests treasury-neutral at ${s.money} (net 0/tick): further construction is not self-funded under the Step001 baseline`);
     await shot('05-construction-enabled.png');
 
     // ---------------------------------------------------------------------
@@ -402,12 +396,12 @@ async function main() {
     const staffed = await inspectionHousingText(page);
     await selectAt(page, BOOT.well);
     const vacant = await inspectionHousingText(page);
-    assert(staffed === 'Material production — producing +2/tick (staffed) · jobs 1/1 · upkeep 1/tick · storage 25', `staffed workshop inspection bad: "${staffed}"`);
+    assert(staffed === 'Commerce — connected +2/tick · jobs 1/1 · maintenance 1/tick', `staffed workshop inspection bad: "${staffed}"`);
     assert(vacant === 'Water production — vacant, producing +0/tick', `vacant Well inspection bad: "${vacant}"`);
     assert(s.waterProduction === '0', `vacant Well must produce no Water, got ${s.waterProduction}`);
     const vacancyMaterial = Number(s.money);
     s = await step(page);
-    assert(s.materialProduction === '2', `material production must stay 2 with one worker, got ${s.materialProduction}`);
+    assert(s.commerce === '2', `connected Workshop commerce must keep flowing with one worker, got ${s.commerce}`);
     ok(`1 colonist / 2 jobs: HUD "${await jobsText(page)}", staffed "${staffed}", vacant "${vacant}", material ${vacancyMaterial} -> ${s.money}`);
     await shot('07-surplus-jobs.png');
 
@@ -425,38 +419,35 @@ async function main() {
     s = await stats(page);
     assert(s.colonists === '1', `colony must still be alive when PLAY is paused, got ${JSON.stringify(s)}`);
     assert(Number(s.food) > 0, `expected a positive food reserve before starvation, got ${s.food}`);
-    // Step 10CZ: Phase 7 income bypasses the 25-per-Workshop production cap
-    // (Step 10CQ), so long PLAY leaves the stock above the cap while stored
-    // production is 0 and the hub retains the overflow. The starvation
-    // consequence below is unchanged.
-    assert(Number(s.money) >= 25, `long PLAY must have passed the 25 storage cap via income, got ${s.money}`);
-    assert(s.storedProduction === '0', `above the cap stored production must be 0, got ${s.storedProduction}`);
-    ok(`PLAY 4x consumed the reserve to food ${s.food} at tick ${s.tick} (material ${s.money}, jobs "${await jobsText(page)}")`);
+    // Step001: the treasury is uncapped (no storage figure exists) and the
+    // steady colony is treasury-neutral (revenue 3 - maintenance 3 = 0).
+    assert(s.netMoney === '0', `steady colony should be treasury-neutral, got ${s.netMoney}`);
+    ok(`PLAY 4x consumed the reserve to food ${s.food} at tick ${s.tick} (treasury ${s.money}, jobs "${await jobsText(page)}")`);
 
-    let previousMaterial = Number(s.money);
+    let previousMoney = Number(s.money);
     let starvedTick = null;
     for (let i = 0; i < 16 && starvedTick === null; i++) {
       s = await step(page);
-      const material = Number(s.money);
+      const money = Number(s.money);
       if (s.colonists === '0') {
         starvedTick = Number(s.tick);
-        // Starvation removes the worker before production/income, so the
-        // above-cap stock stops moving on the death tick.
-        assert(material === previousMaterial, `death-tick material must not grow: ${previousMaterial} -> ${material}`);
+        // Death removes the taxpayer: revenue 2 (commerce) - maintenance 3.
+        assert(money === previousMoney - 1, `death-tick treasury expected -1 (commerce 2 - maintenance 3), got ${previousMoney} -> ${money}`);
       } else {
-        // Above the cap: stored production 0, income 2 - upkeep 1 = +1/tick.
-        assert(material - previousMaterial === 1, `above-cap alive tick expected +1 (income 2 - upkeep 1), got ${material - previousMaterial}`);
-        previousMaterial = material;
+        // Alive: revenue 3 - maintenance 3 = 0, treasury flat.
+        assert(money === previousMoney, `alive-tick treasury must stay flat (net 0/tick), got ${previousMoney} -> ${money}`);
       }
+      previousMoney = money;
     }
     assert(starvedTick !== null, 'colony never starved');
     assert(s.foodStatus === 'starved', `foodStatus expected starved, got ${s.foodStatus}`);
     assert(s.employed === '0' && s.jobCapacity === '2', `employment must vanish, got ${JSON.stringify(s)}`);
     assert((await jobsText(page)) === '0 / 2', `HUD jobs expected "0 / 2", got "${await jobsText(page)}"`);
-    assert(s.materialProduction === '0', `starvation must stop material production, got ${s.materialProduction}`);
+    // Step001: the vacant Workshop still earns commerce through its connection.
+    assert(s.commerce === '2', `vacant connected Workshop must still earn commerce, got ${s.commerce}`);
     await selectAt(page, BOOT.workshop);
     const starvedInspection = await inspectionHousingText(page);
-    assert(starvedInspection === 'Material production — vacant, producing +0/tick · jobs 0/1 · upkeep 0 (vacant) · storage 25', `starved workshop inspection bad: "${starvedInspection}"`);
+    assert(starvedInspection === 'Commerce — connected +2/tick · jobs 0/1 · maintenance 1/tick', `starved workshop inspection bad: "${starvedInspection}"`);
     ok(`starvation at tick ${starvedTick}: jobs "${await jobsText(page)}", inspection "${starvedInspection}"`);
     await shot('08-starvation.png');
 
@@ -497,7 +488,7 @@ async function main() {
     s = await placeCoreLoop(page, 'farm'); // t8: farm operational + staffed
     assert(s.farms === '1' && s.staffedFarmIds !== '', `farm must be staffed once road-connected: ${JSON.stringify(s)}`);
     assert(s.vacantOperationalFarms === '0', `no vacant farm expected, got ${s.vacantOperationalFarms}`);
-    assert(s.jobs === '1 / 1' && s.materialProduction === '0', `farm job should be the only one, got ${JSON.stringify(s)}`);
+    assert(s.jobs === '1 / 1' && s.commerce === '0', `farm job should be the only one, got ${JSON.stringify(s)}`);
     // Step 10E timing: produceFood precedes assignJobs, so the worker assigned
     // this tick produces from the NEXT tick. The assignment is visible now.
     assert(s.status.includes('Colonist assigned to Farm'), `farm-assignment feedback missing: ${JSON.stringify(s)}`);
@@ -557,9 +548,9 @@ async function main() {
     // distance 0) wins, so Food is produced and the Well stays vacant.
     assert(s.staffedFarmIds !== '', `nearer farm must win the worker, got farms "${s.staffedFarmIds}"`);
     assert(s.waterProduction === '0', `farther vacant Well must produce no Water, got "${s.waterProduction}"`);
-    assert(s.materialProduction === '0', `no Workshop -> no material, got ${s.materialProduction}`);
+    assert(s.commerce === '0', `no Workshop -> no commerce, got ${s.commerce}`);
     assert(s.status.includes('1 farm produced 2 food'), `competition feedback missing: ${JSON.stringify(s.status)}`);
-    ok(`competition: 1 colonist, farm (distance 0) staffed, Well (distance 1) vacant, materialProduction ${s.materialProduction}`);
+    ok(`competition: 1 colonist, farm (distance 0) staffed, Well (distance 1) vacant, commerce ${s.commerce}`);
     await shot('10-farm-competition.png');
 
     const realErrors = errors.filter((e) => !e.includes('favicon'));

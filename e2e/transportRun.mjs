@@ -254,33 +254,42 @@ async function main() {
     } else ok(`C adjacent Workshop accessible: ${s.accessibleBuildings} of ${s.operational} operational`);
     await shot('03-workshop.png');
 
-    // D. Multi-hop Farm -> accessible 3. The Farm is financed by the staffed
-    //    Workshop's real labour income (net +1/tick up to the storage crest),
-    //    so the suite needs no artificial credit.
+    // D. The Workshop staffs (the Well stays disconnected/vacant). Under the
+    //    Step001 baseline the colony is treasury-neutral from here (revenue 3
+    //    = tax 1 + commerce 2, maintenance 3 = residence + Well + Workshop),
+    //    so a 25-cost Farm can never be labour-financed any more — that old
+    //    "storage crest" premise died with the Material stock. The multi-hop
+    //    Farm extension is therefore recorded as unfundable (D1 finding,
+    //    docs/audits/REPOSITORY-AUDIT-2026-10-08.md) and the accessible-set
+    //    proof ends at the Workshop.
     s = await stepUntil(
       page,
-      (v) => v.employed === '1' && v.materialProduction === '2',
+      (v) => v.employed === '1' && v.staffedWorkshopIds !== '',
       'workshop staffed',
       10
     );
-    ok(`D Workshop staffed (production ${s.materialProduction}, upkeep ${s.materialUpkeep}, material ${s.money})`);
-    s = await stepUntil(
-      page,
-      (v) => Number(v.money) + Number(v.storedProduction) >= 25,
-      'labour-financed construction crest',
-      60
+    ok(`D Workshop staffed (revenue ${s.revenue}, maintenance ${s.maintenance}, money ${s.money})`);
+    if (s.revenue !== '3' || s.maintenance !== '3' || s.netMoney !== '0') {
+      fail(`D Step001 flows bad: ${JSON.stringify(s)}`);
+    }
+    if (Number(s.money) >= 25) {
+      fail(`D expected a below-cost treasury (no labour financing under Step001), got ${s.money}`);
+    } else ok(`D treasury rests below the 25 Farm cost at ${s.money} with net 0/tick — the Farm is not self-fundable (D1)`);
+    const farmPt = await moveTo(page, FARM);
+    await waitFor(
+      async () => (await stats(page)).status.includes('insufficient funds'),
+      'farm affordability preview below cost'
     );
-    ok(`D labour funded the Farm: rest ${s.money} + stored ${s.storedProduction}`);
-    await selectPalette(page, 'build-farm', 'Farm selected');
-    await placeAt(page, FARM);
-    s = await stepUntil(page, (v) => v.operational === '4', 'farm operational', 10);
-    if (s.accessibleBuildings !== '3') {
-      fail(`D adjacent Farm must be accessible (multi-hop): ${JSON.stringify(s)}`);
+    await page.mouse.click(farmPt.x, farmPt.y);
+    await new Promise((r) => setTimeout(r, 300));
+    s = await stats(page);
+    if (s.workshops !== '1' || s.farms !== '0' || s.accessibleBuildings !== '2') {
+      fail(`D unfunded Farm must be rejected: ${JSON.stringify(s)}`);
     } else {
-      ok(`D multi-hop Residence -> Workshop -> Farm accessible: ${s.accessibleBuildings} of ${s.operational} operational`);
+      ok(`D Farm rejected below cost: accessible stays ${s.accessibleBuildings} of ${s.operational} operational`);
     }
     // The Well is still operational and still not accessible.
-    if (s.hasOperationalWell !== 'true' || s.accessibleBuildings !== '3') {
+    if (s.hasOperationalWell !== 'true' || s.accessibleBuildings !== '2') {
       fail(`D disconnected Well must stay out of the accessible set: ${JSON.stringify(s)}`);
     } else {
       ok(`D disconnected Well excluded: accessible ${s.accessibleBuildings} of ${s.operational} operational (Well counted as operational, not accessible)`);

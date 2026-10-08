@@ -490,13 +490,14 @@ describe('1. variant C: the three connector roles', () => {
     expect(rows.connectorAsRoad.waterServedResidences).toBe(2)
     expect(rows.connectorAsRoad.servedColonists).toBe(2)
     expect(rows.connectorAsRoad.waterCapacity).toBe(2)
-    // Workshop-only income: the Farm/Well workers earn nothing, so the road's
-    // material rests at the 30 − 5 spend remainder.
-    expect(rows.connectorAsRoad.material).toBe(25)
+    // Step001: no Workshop, so the road's 5 spend plus the money-maintenance
+    // drain during the 2 construction ticks leaves 16 (30 -> 16 measured).
+    expect(rows.connectorAsRoad.material).toBe(16)
     // B — connector = building: two networks, the WEST Residence unserved.
     expect(rows.connectorAsBuilding.networks).toBe(2)
     expect(rows.connectorAsBuilding.waterServedResidences).toBe(1)
-    expect(rows.connectorAsBuilding.material).toBe(5)
+    // Step001: the 25-cost farm plus the drain empties the treasury (0).
+    expect(rows.connectorAsBuilding.material).toBe(0)
     // C — connector blocked: identical severance, no command can ever fix it.
     expect(rows.connectorBlocked.networks).toBe(2)
     expect(rows.connectorBlocked.waterServedResidences).toBe(1)
@@ -774,8 +775,11 @@ describe('4. road detour', () => {
     }
     audit('ROAD_DETOUR', { rows, marginal })
     expect(rows.map((row) => row.roadCells)).toEqual([4, 6, 8])
-    expect(marginal.deltaMaterialB).toBe(2 * ROAD_CONSTRUCTION_COST)
-    expect(marginal.deltaMaterialC).toBe(4 * ROAD_CONSTRUCTION_COST)
+    // Step001: the marginal is the pure cell cost (2/4 × 5) PLUS the
+    // money-maintenance drain while the longer path finishes — 1 extra
+    // drain unit per extra cell, measured (12 = 10 + 2, 24 = 20 + 4).
+    expect(marginal.deltaMaterialB).toBe(2 * ROAD_CONSTRUCTION_COST + 2)
+    expect(marginal.deltaMaterialC).toBe(4 * ROAD_CONSTRUCTION_COST + 4)
     expect(marginal.deltaDistanceB).toBe(2)
     expect(marginal.deltaDistanceC).toBe(4)
     // Beyond the road cells: identical network, coverage, capacity, population
@@ -1074,10 +1078,12 @@ describe('7. constrained Water recovery', () => {
     // the Well itself stays UNSTAFFED (jobs 2/4): the west Residence is served
     // on paper because an operational Well grants coverage whether or not
     // anyone works it. That is existing 10P semantics, reached through terrain.
-    // Workshop-only income: no accrual, so the stocks are the spend remainders
-    // (30 − 5 = 25 for the road, 30 − 25 = 5 for the Well).
-    expect(rows.solutionConnectorRoad.material).toBe(25)
-    expect(rows.solutionWellOnConnector.material).toBe(5)
+    // Step001: both solutions drain their spend remainder to the floor over
+    // the 20 measured ticks (revenue never covers maintenance at this scale):
+    // the road (5) and the Well (25) both end at 0. Relative pricing (5 vs
+    // 25) still shows in the spend itself, not the end stock.
+    expect(rows.solutionConnectorRoad.material).toBe(0)
+    expect(rows.solutionWellOnConnector.material).toBe(0)
     expect(rows.solutionWellOnConnector.waterCapacity).toBe(
       rows.solutionConnectorRoad.waterCapacity
     )
@@ -1600,7 +1606,7 @@ describe('15. determinism, insertion order, save/load, hash', () => {
     expect(rows.insertionOrderEquivalent).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
     expect(rows.terrainSurvivesSave).toEqual(normalizeBlockedCells(cells))
-    expect(rows.saveVersion).toBe(8)
+    expect(rows.saveVersion).toBe(9)
     expect(rows.beforeHash).not.toBe(rows.afterHash)
   })
 

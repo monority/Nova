@@ -112,7 +112,9 @@ describe('Step 10BU — three-way workforce economy audit', () => {
     expect(result.summary.population).toBe(5)
     expect(result.food).toBe(4)
     expect(result.water).toBe(4)
-    expect(result.material).toBe(2)
+    // Step001: revenue = taxes (5 colonists × 1) + commerce (2 connected
+    // Workshops × 2) = 9.
+    expect(result.material).toBe(9)
   })
 
   it('measures Farm to Workshop and its reversible counterpart', () => {
@@ -123,7 +125,9 @@ describe('Step 10BU — three-way workforce economy audit', () => {
     expect(after.farms).toBe(before.farms - 1)
     expect(after.workshops).toBe(before.workshops + 1)
     expect(after.food).toBe(before.food - 2)
-    expect(after.material).toBe(before.material + 2)
+    // Step001: reassignment moves no revenue — commerce counts vacant
+    // connected Workshops, taxes follow population only.
+    expect(after.material).toBe(before.material)
     expect(after.water).toBe(before.water)
     const restored = move(changed, 'workshop', 'farm')
     expect(metrics(restored)).toEqual(before)
@@ -137,7 +141,9 @@ describe('Step 10BU — three-way workforce economy audit', () => {
     expect(after.wells).toBe(before.wells - 1)
     expect(after.workshops).toBe(before.workshops + 1)
     expect(after.water).toBe(before.water - 2)
-    expect(after.material).toBe(before.material + 2)
+    // Step001: reassignment moves no revenue — commerce counts vacant
+    // connected Workshops, taxes follow population only.
+    expect(after.material).toBe(before.material)
     expect(after.food).toBe(before.food)
     const restored = move(changed, 'workshop', 'well')
     expect(metrics(restored)).toEqual(before)

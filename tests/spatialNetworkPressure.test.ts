@@ -353,7 +353,9 @@ describe('topology scenarios D–E: branch and disconnection (Step 09J §5)', ()
       true
     )
     expect(commerceRevenueForTick(state)).toBe(2)
-    expect(maintenanceDueForTick(state)).toBe(1)
+    // Step001: maintenance is per operational building — Residence +
+    // Workshop + Farm = 3.
+    expect(maintenanceDueForTick(state)).toBe(3)
   })
 
   it('E1 — disconnected networks: the current meaningful boundary', () => {
@@ -581,10 +583,13 @@ describe('multiple workplaces on one network (Step 09J §9)', () => {
     expect(state.colonists[base.colonistId]?.workplaceId).toBe(
       base.workshopAId
     )
-    // W_b is road-served but disconnected from R → vacant, no production.
+    // W_b is road-served but disconnected from R → no worker. Step001:
+    // commerce counts road-connected operational Workshops (vacancy is
+    // irrelevant) → 2 × 2 = 4.
     expect(countWorkersAt(state, base.workshopBId)).toBe(0)
-    expect(commerceRevenueForTick(state)).toBe(2)
-    expect(maintenanceDueForTick(state)).toBe(1)
+    expect(commerceRevenueForTick(state)).toBe(4)
+    // Step001: Residence + 2 Workshops = 3 operational buildings.
+    expect(maintenanceDueForTick(state)).toBe(3)
   })
 
   it('I2 — road at W_a but no residence road: no worker under 09K', () => {
@@ -593,8 +598,11 @@ describe('multiple workplaces on one network (Step 09J §9)', () => {
     let state = operationalRoad(base.state, 3, 2).state
     state = assignJobs(state)
     expect(state.colonists[base.colonistId]?.workplaceId).toBeNull()
-    expect(commerceRevenueForTick(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
+    // Step001: W_a has road access, so it pays 2 commerce even without a
+    // residence link (employment ≠ commerce).
+    expect(commerceRevenueForTick(state)).toBe(2)
+    // Step001: Residence + 2 Workshops = 3 operational buildings.
+    expect(maintenanceDueForTick(state)).toBe(3)
   })
 
   it('I3 — R connected to W_a only: W_b stays vacant despite its road (09K)', () => {
@@ -625,7 +633,8 @@ describe('multiple workplaces on one network (Step 09J §9)', () => {
     expect(getRoadNetworkCount(state)).toBe(2)
     state = assignJobs(state)
     expect(state.colonists[base.colonistId]?.workplaceId).toBeNull()
-    expect(commerceRevenueForTick(state)).toBe(0)
+    // Step001: both Workshops have road access → 2 × 2 = 4 commerce.
+    expect(commerceRevenueForTick(state)).toBe(4)
   })
 })
 
@@ -853,6 +862,6 @@ describe('persistence and determinism of topologies (Step 09J §20)', () => {
     expect(pairFacts(loaded, residenceId, workshopId, colonistId)).toEqual(
       pairFacts(state, residenceId, workshopId, colonistId)
     )
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 })

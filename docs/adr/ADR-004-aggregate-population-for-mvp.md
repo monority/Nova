@@ -6,38 +6,24 @@ Accepted
 
 ## Context
 
-NOVA may eventually represent large civilizations, but individual simulation for every citizen is not necessary to prove population, needs, workforce and growth.
+NOVA needs population, employment, needs and growth while keeping simulation affordable.
 
 ## Decision
 
-Population is aggregate-first.
+Population is simulated primarily through aggregate cohorts/categories.
 
-Individuals are represented visually as presentation entities rather than canonical simulation actors.
-
-## Alternatives Considered
-
-### Full individual citizen simulation
-
-Deferred because it would increase CPU, memory, pathfinding and state complexity.
-
-### Completely invisible population
-
-Rejected because inhabitants must remain visually present enough to communicate that the city is alive.
+Visible inhabitants are representation, not the canonical simulation state.
 
 ## Consequences
 
 Positive:
-
-- predictable scaling;
-- simple population rules;
-- easier persistence;
+- predictable CPU cost;
+- simpler simulation;
 - easier deterministic testing.
 
-Cost:
+Constraint:
+- individual citizen simulation is not part of MVP.
 
-- individual emergent stories are not represented in the MVP.
+## Alternatives Considered
 
-## Related
-
-- `docs/05-SIMULATION.md`
-- `docs/02-MVP.md`
+Full individual simulation was rejected for MVP because it adds significant cost without being required to prove the core optimization loop.

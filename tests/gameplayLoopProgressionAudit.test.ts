@@ -756,7 +756,9 @@ describe('5-6. Short-term decisions and medium-term planning', { timeout: 30000 
       fork: 'road layout at t0',
       compact: { final: compact.final },
       corridor: { final: corridor.final },
-      materialDifferenceAt500: compact.final.material - corridor.final.material,
+      // The treasury clamps at 0 in both forks; the durable consequence of
+      // the t0 layout is the paid road budget.
+      roadCostDifferenceAt500: corridor.final.roadCost - compact.final.roadCost,
     })
 
     // Fork 3: Workshop early vs late (same final building set).
@@ -794,10 +796,10 @@ describe('5-6. Short-term decisions and medium-term planning', { timeout: 30000 
       question: 'does a decision made earlier still change the later state?',
     })
 
-    const layoutRow = rows[1] as { materialDifferenceAt500: number; compact: { final: Snapshot }; corridor: { final: Snapshot } }
+    const layoutRow = rows[1] as { roadCostDifferenceAt500: number; compact: { final: Snapshot }; corridor: { final: Snapshot } }
     expect(layoutRow.compact.final.roadCells).toBeLessThan(layoutRow.corridor.final.roadCells)
     // The road budget difference persists to tick 500: a delayed consequence.
-    expect(layoutRow.materialDifferenceAt500).toBe(15)
+    expect(layoutRow.roadCostDifferenceAt500).toBe(15)
   })
 })
 
@@ -1157,11 +1159,12 @@ describe('11-14. Failure, readability, content and scenarios', { timeout: 30000 
 
   it('records the readability surface as exposed by the UI', () => {
     // Measured from index.html (data-testid) and src/app/main.ts (the stats
-    // surface): 33 test ids and 40 readable stat fields.
+    // surface): 33 test ids and 40 readable stat fields (Step001 money era:
+    // money, taxes, commerce, revenue, maintenance, netMoney).
     const statFields = [
       'tick', 'buildings', 'operational', 'farms', 'workshops', 'colonists', 'jobs', 'employed',
-      'unemployed', 'jobCapacity', 'construction', 'materialProduction', 'materialUpkeep',
-      'netMaterial', 'accessibleBuildings', 'farmIds',
+      'unemployed', 'jobCapacity', 'money', 'taxes', 'commerce', 'revenue', 'maintenance', 'netMoney',
+      'accessibleBuildings', 'farmIds',
       'staffedFarmIds', 'vacantOperationalFarms', 'manualWorkerIds', 'crewWorkerIds',
       'crewedSiteIds', 'contractors', 'roadNetworks', 'buildingsWithRoadAccess',
       'productionBlockedByRoad', 'roads', 'operationalRoads', 'mobilityConnectedColonists',

@@ -182,11 +182,10 @@ async function main() {
     await shot('01-free-play-wilderness.png');
 
     // --- Step 10AS: the 100 -> 105 opening boundary ------------------------
-    // Four purchases spend 80 of the 100; the three steps then staff the
-    // operational Farm, and Workshop-only income means no Material accrues,
-    // so the stock is exactly 20 and the Well is 5 Material short. The hover
-    // must say so, and the Material row must NOT claim a storage cap while no
-    // Workshop exists.
+    // Four purchases spend 80 of the 100; the colony then runs a Step001 net
+    // flow (taxes 1, maintenance 2 once the Farm is operational), so the
+    // treasury rests at 17 and the Well is 8 short. The hover must say so, and
+    // the Money row shows the flow note (no storage cap exists any more).
     await selectPalette(page, 'build-residence', 'Residence selected');
     await placeAt(page, { x: 1, y: 0 });
     await selectPalette(page, 'build-road', 'Road selected');
@@ -197,17 +196,18 @@ async function main() {
     await placeAt(page, { x: 1, y: 2 });
     for (let i = 0; i < 3; i += 1) await step(page);
     const opening = await stats(page);
-    assert(opening.money === '20', `opening stock expected 20 after four purchases (Workshop-only income), got ${opening.money}`);
+    assert(opening.money === '17', `opening stock expected 17 after four purchases and the Step001 flow, got ${opening.money}`);
     await moveTo(page, { x: 2, y: 1 });
     await waitFor(
-      async () => (await stats(page)).status.includes('insufficient material (20/25)'),
-      'the Well must be reported 5 Material short'
+      async () => (await stats(page)).status.includes('insufficient funds (17/25)'),
+      'the Well must be reported 8 Money short'
     );
     const shortStatus = (await stats(page)).status;
     assert(
-      (await materialStatusText(page)) === '',
-      `no Workshop means no storage claim, got "${await materialStatusText(page)}"`
+      (await materialStatusText(page)).includes('revenue'),
+      `the Money row must name the flow, got "${await materialStatusText(page)}"`
     );
+    ok(`opening boundary: Money ${opening.money}, Well rejected with "${shortStatus}", flow note visible`);
     ok(`opening boundary: Material ${opening.money}, Well rejected with "${shortStatus}", no storage claim`);
     await shot('01b-opening-boundary.png');
     await loadScenario(page, 'default');
@@ -324,14 +324,13 @@ async function main() {
     industrialText = await page.locator('[data-testid="progression-objective-status"]').textContent();
     assert(industrial?.state === 'completed', `industrial objective expected completed after the Workshop, got ${JSON.stringify(industrial)}`);
     assert(industrialText.includes('Objective complete'), `industrial objective line expected complete, got "${industrialText}"`);
-    // Step 10AS: the Workshop makes the storage cap visible, and the 75-Material
-    // stock is above it — the reason a staffed Workshop cannot add to it.
+    // Step001: there is no storage cap — the Money row names the flow
+    // (revenue vs maintenance) instead.
     const industrialStats = await stats(page);
-    assert(industrialStats.storageCapacity === '25', `Workshop storage expected 25, got ${industrialStats.storageCapacity}`);
-    assert(Number(industrialStats.money) > 25, `the stock must exceed the cap: ${industrialStats.money}`);
+    assert(Number(industrialStats.money) >= 0, `treasury must stay valid: ${industrialStats.money}`);
     const storageNote = await materialStatusText(page);
-    assert(storageNote.includes('cap 25'), `Material row must name the cap, got "${storageNote}"`);
-    ok(`industrial storage display: Material ${industrialStats.money}, "${storageNote}"`);
+    assert(storageNote.includes('revenue') && storageNote.includes('maintenance'), `Money row must name the flow, got "${storageNote}"`);
+    ok(`industrial money display: Money ${industrialStats.money}, "${storageNote}"`);
     ok('objective evaluation: Industrial expansion completes when the Workshop is built (in progress -> complete)');
 
     // --- Reproducibility: progression is recomputed, never stored ----------
@@ -339,13 +338,13 @@ async function main() {
     const second = JSON.stringify(await progression(page));
     assert(first === second, 'progression must be recomputed identically');
     const saved = JSON.parse(await page.evaluate(() => window.__nova.serialize()));
-    assert(saved.version === 8, `save version expected 8, got ${saved.version}`);
+    assert(saved.version === 9, `save version expected 9, got ${saved.version}`);
     assert(Object.keys(saved.state).length === 8, `save must keep 8 top-level keys, got ${Object.keys(saved.state).length}`);
     const serialized = JSON.stringify(saved);
     for (const term of ['scenario', 'progression', 'stage', 'objective', 'blocker']) {
       assert(!serialized.includes(term), `save must not contain "${term}"`);
     }
-    ok('progression recomputed deterministically; save keeps version 8 with 8 keys and no scenario state');
+    ok('progression recomputed deterministically; save keeps version 9 with 8 keys and no scenario state');
     await shot('05-persistence.png');
 
     // --- Return to free play: the default game is unchanged ----------------

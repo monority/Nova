@@ -6,40 +6,25 @@ Accepted
 
 ## Context
 
-The game should visibly contain couriers, vehicles and transport infrastructure, but simulating every delivery as an independent agent would add complexity and performance cost without being necessary to prove the core optimization loop.
+NOVA needs visible logistics without requiring expensive individual transport simulation in the MVP.
 
 ## Decision
 
-MVP logistics are aggregate.
+MVP logistics use aggregate flows between production, storage, transport networks and consumers.
 
-The simulation calculates supply, demand, storage, capacity, routes, distance and congestion at a system level.
-
-Visible vehicles may represent aggregate flows.
-
-## Alternatives Considered
-
-### Individual delivery agents
-
-Rejected for MVP due to unnecessary complexity and cost.
-
-### No visible transport representation
-
-Rejected because logistics must remain visually legible and part of the city's identity.
+Visible vehicles represent the system without requiring one fully simulated agent per delivery.
 
 ## Consequences
 
 Positive:
+- lower CPU cost;
+- deterministic behavior;
+- simpler debugging;
+- scalable MVP foundation.
 
-- scalable initial simulation;
-- clear optimization variables;
-- lower implementation complexity.
+Constraint:
+- individual courier pathfinding is not part of MVP.
 
-Cost:
+## Alternatives Considered
 
-- visible vehicles are not necessarily one-to-one with economic transactions;
-- later high-fidelity transport may require an additional presentation layer.
-
-## Related
-
-- `docs/05-SIMULATION.md`
-- `docs/10-VISUAL-DIRECTION.md`
+Full per-vehicle logistics was rejected for MVP because it adds complexity and cost before the gameplay value is proven.

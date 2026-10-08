@@ -353,8 +353,8 @@ describe('4 — spatial override', () => {
 // 5. Economic symmetry and recovery
 // ---------------------------------------------------------------------------
 
-describe('5 — economic verification and recovery', () => {
-  it('Farm -> Workshop: -2 Food, +1 net Material; stock recovers', () => {
+describe('5 — economic verification: manual moves reallocate labor, treasury follows buildings', () => {
+  it('Farm -> Workshop: -0 Food (1 farm feeds 2 exactly), treasury flat', () => {
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2, material: 5, food: 2000 })
     const manual = reassign(state, 'colonist-2', 'building-5')
     const after = advance(manual, 1)
@@ -364,7 +364,9 @@ describe('5 — economic verification and recovery', () => {
     const next = advance(after, 1)
     expect(countStaffedOperationalFarms(next)).toBe(1)
     expect(countStaffedOperationalWorkshops(next)).toBe(1)
-    expect(next.resources.money).toBeGreaterThan(after.resources.money)
+    // Step001: the move changes staffing, not the bill — revenue (2 taxes
+    // + 2 commerce) still equals maintenance (6 buildings): flat at 5.
+    expect(next.resources.money).toBe(after.resources.money)
     // Food stops draining (1 Farm feeds 2 colonists exactly), unlike the
     // 0-Farm Workshop-heavy state.
     expect(next.resources.food).toBeGreaterThanOrEqual(2000)
@@ -381,16 +383,17 @@ describe('5 — economic verification and recovery', () => {
     expect(after.resources.food).toBeGreaterThan(currentAfter3.resources.food)
   })
 
-  it('canonical recovery: Material 5 -> 25+ from one manual move', () => {
+  it('no recovery from flat economics: one manual move cannot create net (poverty trap)', () => {
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2, material: 5, food: 2000 })
     const before = advance(state, 10)
-    // Workshop-only income: both colonists start on Farms and earn nothing,
-    // so the stock rests at 5 until the manual move creates a producer.
+    // Step001: the colony nets exactly 0 (revenue 6 vs maintenance 6), so
+    // the stock rests at 5 with or without the manual move — reassignment
+    // reallocates labor, it cannot create treasury net.
     expect(before.resources.money).toBe(5)
     const manual = reassign(state, 'colonist-2', 'building-5')
     const after = advance(manual, 60)
     expect(countStaffedOperationalWorkshops(after)).toBe(1)
-    expect(after.resources.money).toBeGreaterThanOrEqual(25)
+    expect(after.resources.money).toBe(5)
     expect(after.resources.food).toBeGreaterThan(0)
   })
 })
@@ -400,9 +403,9 @@ describe('5 — economic verification and recovery', () => {
 // ---------------------------------------------------------------------------
 
 describe('6 — persistence and migration', () => {
-  it('SAVE_VERSION is 7 and a manual assignment round-trips', () => {
-    expect(SAVE_VERSION).toBe(8)
-    expect(MIGRATABLE_SAVE_VERSION).toBe(7)
+  it('SAVE_VERSION is 9 and a manual assignment round-trips', () => {
+    expect(SAVE_VERSION).toBe(9)
+    expect(MIGRATABLE_SAVE_VERSION).toBe(8)
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2 })
     const manual = reassign(state, 'colonist-2', 'building-5')
     const restored = loadSave(serializeSave(manual))
@@ -415,9 +418,15 @@ describe('6 — persistence and migration', () => {
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2 })
     const parsed = JSON.parse(serializeSave(state)) as {
       version: number
-      state: { colonists: Record<string, Record<string, unknown>> }
+      state: {
+        colonists: Record<string, Record<string, unknown>>
+        resources: Record<string, unknown>
+      }
     }
     parsed.version = 4
+    // Genuine v4 saves carry construction, not money (Step001 v8->v9 rename).
+    parsed.state.resources['construction'] = parsed.state.resources['money']
+    delete parsed.state.resources['money']
     for (const colonist of Object.values(parsed.state.colonists)) {
       delete colonist['workplaceAssignmentMode']
     }
@@ -463,8 +472,8 @@ describe('7 — colonist inspection', () => {
       workplaceAssignmentMode: 'manual',
       // Step 10Y: the crew assignment is part of the colonist inspection.
       constructionAssignmentId: null,
-      // Step 10CQ: income is part of the colonist inspection.
-      materialIncome: 2,
+      // Step001: per-colonist material income no longer exists (colony-
+      // level taxes + commerce replaced it).
     })
     expect(getColonistInspection(manual, 'colonist-999')).toBeNull()
   })
@@ -514,15 +523,15 @@ describe('8 — determinism', () => {
 // 9. Regression: Farm upkeep remains absent
 // ---------------------------------------------------------------------------
 
-describe('9 — Farm upkeep remains absent', () => {
-  it('a staffed Farm still pays no Material upkeep', () => {
+describe('9 — money maintenance applies to staffed farms like every building', () => {
+  it('a staffed Farm pays the same money maintenance as any building', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 0 })
     const after = advance(state, 10)
     // 4 colonists -> 2 Farms + 2 Workshops staffed.
-    // Workshop-only income: +6/tick below cap 50 (4 stored + 4 Workshop
-    // income - 2 upkeep); the clamp binds from tick 9, then +2/tick
-    // (income - upkeep) to 54 at tick 10.
+    // Step001: no Material farm-upkeep concept exists anymore — farms pay
+    // the same per-building money maintenance as everything else, so the
+    // empty treasury holds at 0 (revenue 8 vs upkeep 8: net 0).
     expect(countStaffedOperationalWorkshops(state)).toBe(2)
-    expect(after.resources.money).toBe(54)
+    expect(after.resources.money).toBe(0)
   })
 })

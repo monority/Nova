@@ -252,8 +252,10 @@ describe('A — distance changes the choice, not the aggregate', () => {
     const assigned = assignJobs(f.state)
     expect(workplaceOf(assigned, f.colonistId)).toBe(f.nearId)
     expect(measure(assigned)).toMatchObject({
-      production: 2,
-      upkeepDue: 1,
+      // Step001: 2 connected workshops × 2 commerce; 3 operational
+      // buildings × 1 maintenance.
+      production: 4,
+      upkeepDue: 3,
       networks: 1,
       roadCount: 5,
       roadCost: 25,
@@ -266,7 +268,7 @@ describe('A — distance changes the choice, not the aggregate', () => {
     expect(workplaceOf(assigned, f.colonistId)).toBe(f.farId)
     expect(measure(assigned)).toMatchObject({
       production: 2,
-      upkeepDue: 1,
+      upkeepDue: 2,
       roadCost: 25,
     })
   })
@@ -299,7 +301,7 @@ describe('B — one colonist, two workshops, two free jobs', () => {
     // Distance (not id order) decides which of the two free jobs is taken.
     expect(workplaceOf(assigned, c1.id)).toBe(near.id)
     expect(countWorkersAt(assigned, far.id)).toBe(0)
-    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(assigned)).toMatchObject({ production: 4, upkeepDue: 3 })
   })
 
   it('B2 — a second colonist saturates capacity; the far workshop is then used', () => {
@@ -334,7 +336,7 @@ describe('B — one colonist, two workshops, two free jobs', () => {
         vacantJobs: 0,
       },
       production: 4,
-      upkeepDue: 2,
+      upkeepDue: 3,
     })
   })
 })
@@ -377,7 +379,7 @@ describe('C — two colonists, two workshops, reversed ids', () => {
     expect(workplaceOf(assigned, c2.id)).toBe(wb.id)
     expect(measure(assigned)).toMatchObject({
       production: 4,
-      upkeepDue: 2,
+      upkeepDue: 4,
       networks: 1,
       roadCost: 25,
     })
@@ -419,7 +421,7 @@ describe('D — breaking an intermediate road', () => {
     const reassigned = assignJobs(broken)
     // The colonist's own pair (R–W_near) is untouched: assignment retained.
     expect(workplaceOf(reassigned, f.colonistId)).toBe(f.nearId)
-    expect(measure(reassigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(reassigned)).toMatchObject({ production: 4, upkeepDue: 3 })
   })
 
   it('D2 — rupturing the residence contact unemploys cleanly, no stale derived data', () => {
@@ -433,8 +435,11 @@ describe('D — breaking an intermediate road', () => {
     expect(distance(reassigned, 'building-1', f.nearId)).toBeNull()
     expect(measure(reassigned)).toMatchObject({
       employment: { employed: 0, unemployed: 1 },
-      production: 0,
-      upkeepDue: 0,
+      // Step001: unemployment zeroes staffing, not infrastructure — the two
+      // still-connected workshops earn commerce and all three operational
+      // buildings still owe maintenance.
+      production: 2,
+      upkeepDue: 3,
     })
     // Roads still exist (roadCount unchanged); only status changed.
     expect(measure(reassigned).roadCount).toBe(measure(f.state).roadCount)
@@ -495,8 +500,8 @@ describe('E — bridging two networks', () => {
     const before = assignJobs(f.state)
     const beforeM = measure(before)
     expect(beforeM.employment.employed).toBe(1)
-    expect(beforeM.production).toBe(2)
-    expect(beforeM.upkeepDue).toBe(1)
+    expect(beforeM.production).toBe(4)
+    expect(beforeM.upkeepDue).toBe(3)
     // Both workshops eligible before the bridge, tied at distance 2.
     const chosenBefore = workplaceOf(before, f.colonistId)
     expect(distance(f.state, 'building-1', chosenBefore ?? '')).toBe(2)
@@ -528,7 +533,12 @@ describe('E — bridging two networks', () => {
     expect(distance(state, residence.id, wb.id)).toBeNull()
     const before = assignJobs(state)
     expect(workplaceOf(before, colonist.id)).toBeNull()
-    expect(measure(before)).toMatchObject({ production: 0, upkeepDue: 0 })
+    expect(measure(before)).toMatchObject({
+      // Step001: the lone workshop already has road access, so it earns
+      // commerce before the bridge; only employment waits on eligibility.
+      production: 2,
+      upkeepDue: 2,
+    })
 
     // The bridge cell adjacent to the Workshop becomes a second Workshop
     // contact: measured distance is the minimum over contacts.
@@ -544,7 +554,7 @@ describe('E — bridging two networks', () => {
     expect(getRoadNetworkCount(bridged)).toBe(1)
     expect(distance(bridged, residence.id, wb.id)).toBe(4)
     expect(workplaceOf(bridged, colonist.id)).toBe(wb.id)
-    expect(measure(bridged)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(bridged)).toMatchObject({ production: 2, upkeepDue: 2 })
   })
 })
 
@@ -616,7 +626,7 @@ describe('F — equal-cost geometries are economically equivalent', () => {
       expect(distance(f.state, f.residenceId, f.workshopId)).toBe(2)
       const assigned = assignJobs(f.state)
       expect(workplaceOf(assigned, f.colonistId)).toBe(f.workshopId)
-      expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+      expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 2 })
     }
   })
 
@@ -626,7 +636,7 @@ describe('F — equal-cost geometries are economically equivalent', () => {
       expect(distance(f.state, f.residenceId, f.workshopId)).toBe(2)
       const assigned = assignJobs(f.state)
       expect(workplaceOf(assigned, f.colonistId)).toBe(f.workshopId)
-      expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+      expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 2 })
     }
   })
 
@@ -647,7 +657,7 @@ describe('F — equal-cost geometries are economically equivalent', () => {
     expect(distance(f.state, f.residenceId, f.workshopId)).toBe(4)
     const assigned = assignJobs(f.state)
     expect(workplaceOf(assigned, f.colonistId)).toBe(f.workshopId)
-    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 2 })
   })
 })
 
@@ -765,7 +775,7 @@ describe('H — workshop with several contacts measures the minimum', () => {
     expect(distance(f.state, f.residenceId, f.workshopId)).toBe(5)
     const assigned = assignJobs(f.state)
     expect(workplaceOf(assigned, f.colonistId)).toBe(f.workshopId)
-    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 2 })
   })
 
   it('H2 — losing the nearest contact raises the distance, employment survives', () => {
@@ -776,7 +786,7 @@ describe('H — workshop with several contacts measures the minimum', () => {
     expect(distance(degraded, f.residenceId, f.workshopId)).toBe(7)
     const assigned = assignJobs(degraded)
     expect(workplaceOf(assigned, f.colonistId)).toBe(f.workshopId)
-    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(assigned)).toMatchObject({ production: 2, upkeepDue: 2 })
   })
 })
 
@@ -810,7 +820,13 @@ describe('I — under-construction roads never connect anything', () => {
     expect(areBuildingsMobilityConnected(f.state, f.residenceId, f.workshopId)).toBe(false)
     const assigned = assignJobs(f.state)
     expect(workplaceOf(assigned, f.colonistId)).toBeNull()
-    expect(measure(assigned)).toMatchObject({ production: 0, upkeepDue: 0 })
+    expect(measure(assigned)).toMatchObject({
+      // Step001: the split blocks employment but not infrastructure — the
+      // workshop keeps its operational road contact (commerce) and both
+      // buildings owe maintenance.
+      production: 2,
+      upkeepDue: 2,
+    })
     // The uc road still exists in canonical state (blocks the cell) but is
     // in no network.
     expect(measure(assigned).roadCount).toBe(3)
@@ -821,7 +837,7 @@ describe('I — under-construction roads never connect anything', () => {
     const repaired = assignJobs(setRoadStatus(f.state, 3, 1, 'operational'))
     expect(getRoadNetworkCount(repaired)).toBe(1)
     expect(workplaceOf(repaired, f.colonistId)).toBe(f.workshopId)
-    expect(measure(repaired)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(repaired)).toMatchObject({ production: 2, upkeepDue: 2 })
   })
 })
 
@@ -1038,8 +1054,8 @@ describe('L — population/workshop matrix and processing-order artifact', () =>
     const assigned = assignJobs(state)
     expect(measure(assigned)).toMatchObject({
       employment: { population: 1, employed: 1, jobCapacity: 2, vacantJobs: 1 },
-      production: 2,
-      upkeepDue: 1,
+      production: 4,
+      upkeepDue: 3,
     })
     expect(workplaceOf(assigned, p.colonistId)).toBe(p.workshopId)
   })
@@ -1054,7 +1070,7 @@ describe('L — population/workshop matrix and processing-order artifact', () =>
     expect(measure(assigned)).toMatchObject({
       employment: { population: 2, employed: 2, vacantJobs: 0 },
       production: 4,
-      upkeepDue: 2,
+      upkeepDue: 4,
     })
     expect(workplaceOf(assigned, p1.colonistId)).toBe(p1.workshopId)
     expect(workplaceOf(assigned, p2.colonistId)).toBe(p2.workshopId)
@@ -1072,8 +1088,10 @@ describe('L — population/workshop matrix and processing-order artifact', () =>
     const assigned = assignJobs(state)
     expect(measure(assigned)).toMatchObject({
       employment: { population: 2, employed: 2, jobCapacity: 3, vacantJobs: 1 },
-      production: 4,
-      upkeepDue: 2,
+      // Step001: the vacant third workshop still earns commerce (connected)
+      // and still owes maintenance (operational).
+      production: 6,
+      upkeepDue: 5,
     })
     expect(countWorkersAt(assigned, extra.id)).toBe(0)
   })
@@ -1092,7 +1110,7 @@ describe('L — population/workshop matrix and processing-order artifact', () =>
     expect(measure(assigned)).toMatchObject({
       employment: { population: 3, employed: 2, unemployed: 1 },
       production: 4,
-      upkeepDue: 2,
+      upkeepDue: 5,
     })
     expect(workplaceOf(assigned, c3.id)).toBeNull()
   })
@@ -1193,8 +1211,8 @@ describe('M — topological invariance under insertion order', () => {
     // Same spatial decision in both orders: the near workshop wins.
     expect(workplaceOf(assignedA, a.colonistId)).toBe(a.ids.near)
     expect(workplaceOf(assignedB, b.colonistId)).toBe(b.ids.near)
-    expect(measure(assignedA)).toMatchObject({ production: 2, upkeepDue: 1 })
-    expect(measure(assignedB)).toMatchObject({ production: 2, upkeepDue: 1 })
+    expect(measure(assignedA)).toMatchObject({ production: 4, upkeepDue: 3 })
+    expect(measure(assignedB)).toMatchObject({ production: 4, upkeepDue: 3 })
   })
 
   it('M2 — single-call road batches normalize ids: reversed input, identical state', () => {
@@ -1250,6 +1268,6 @@ describe('N — replay, persistence and derived-only audit', () => {
     expect(serialized).not.toContain('mobilityConnected')
     expect(serialized).not.toContain('audit')
     // SAVE_VERSION unchanged by the audit step.
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 })

@@ -141,7 +141,7 @@ describe('§1/§3 — current model surface', () => {
     const resources = Object.keys(createState().resources).sort()
     const buildings = Object.keys(BUILDING_CATALOG).sort()
     audit('CURRENT_SURFACE', { resources, buildings })
-    expect(resources).toEqual(['construction', 'food', 'water'])
+    expect(resources).toEqual(['food', 'money', 'water'])
     expect(buildings).toEqual(['farm', 'residence', 'well', 'workshop'])
   })
 

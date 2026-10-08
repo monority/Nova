@@ -527,9 +527,14 @@ describe('2. player decision and recovery', () => {
       [{ x: 2, y: 1 }]
     )
 
-    // R1: join the two networks with one road cell (5 Material, 2 ticks).
+    // R1: join the two networks with one road cell (5 Money, 2 ticks).
+    // The resting wrong-state bleeds its remainder (tax 1, maintenance 4),
+    // so the recovery is funded explicitly — same as the validation above.
     const joined = tick(
-      stepSimulation(wrong, { type: 'placeRoads', cells: [{ x: 2, y: 1 }] }),
+      stepSimulation(
+        { ...wrong, resources: { ...wrong.resources, money: 5 } },
+        { type: 'placeRoads', cells: [{ x: 2, y: 1 }] }
+      ),
       6
     )
     // R2: build the bridge Residence instead (25 Material, 2 ticks).
@@ -545,12 +550,12 @@ describe('2. player decision and recovery', () => {
       nothing: { cost: 0, ...read(untouched) },
     }
     audit('RECOVERY_PATHS', rows)
-    // The road join makes the Farm-network Residence served AND reachable, so
-    // the second colonist is admitted and the Farm is staffed -> Village for 5.
-    // Workshop-only income: 30 − 25 rests at 5; no income accrues on the way.
-    expect(rows.wrong.material).toBe(5)
+    // 30 − 25 residence; the 3-tick rest bleeds the remaining 5
+    // (revenue 1, maintenance 4 — net −3, clamped at 0).
+    expect(rows.wrong.material).toBe(0)
     expect(rows.repairCellIsFree).toBe(true)
-    // The 5-Material join spends the remainder exactly: the stock rests at 0.
+    // The funded 5-Money join is spent exactly: the flow (revenue 2,
+    // maintenance 4) clamps the stock back to 0.
     expect(rows.joinNetworks.material).toBe(0)
     expect(rows.joinNetworks.roads).toBe(3)
     expect(rows.joinNetworks.networks).toBe(1)
@@ -564,11 +569,12 @@ describe('2. player decision and recovery', () => {
     expect(rows.bridgeResidence.stage).toBe('village')
     // Doing nothing is fatal: the unreachable Farm means no Food at all.
     expect(rows.nothing.population).toBe(0)
-    // The cheapest recovery is the 5-Material road, not a new building: the
-    // repair costs 5 up front (vs 25 for the bridge Residence). No income
-    // accrues in either path: join 0, bridge 50 − 25 = 25.
+    // The cheapest recovery is the 5-Money road, not a new building: the
+    // repair costs 5 up front (vs 25 for the bridge Residence). Both paths
+    // bleed −2/tick afterwards: join rests clamped at 0, bridge at 11
+    // (25 remainder over 7 ticks).
     expect(rows.joinNetworks.material).toBe(0)
-    expect(rows.bridgeResidence.material).toBe(25)
+    expect(rows.bridgeResidence.material).toBe(11)
   })
 })
 
@@ -833,7 +839,8 @@ describe('6. phase A boundary and determinism', () => {
     // Only the 10AV terrain fixture exists: 10AZ added no fixture, and the
     // housing phenomenon became a curated scenario in 10BE instead.
     expect(rows.fixtures).toEqual(['terrain-chokepoint'])
-    expect(rows.saveVersion).toBe(8)
+    // Step001 money migration bumps SAVE_VERSION from 8 to 9.
+    expect(rows.saveVersion).toBe(9)
   })
 
   it('keeps the layouts deterministic and save/load stable', () => {

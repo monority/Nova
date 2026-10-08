@@ -26,6 +26,7 @@ import {
 
   areBuildingsMobilityConnected,
   assignJobs,
+  countConnectedOperationalWorkshops,
   countStaffedOperationalFarms,
   countWorkersAt,
   createBuilding,
@@ -262,12 +263,13 @@ describe('C — Workshop behavior is unchanged', () => {
     expect(foodProductionForTick(state)).toBe(0) // no farm at all
   })
 
-  it('C2 — a vacant operational Workshop produces 0', () => {
+  it('C2 — a vacant operational Workshop earns when connected, nothing when roadless', () => {
     let state = createTestState()
     const workshop = operationalBuilding(state, 'workshop', 1, 1)
     state = workshop.state
     state = roads(state, [{ x: 2, y: 1 }])
-    expect(commerceRevenueForTick(state)).toBe(0)
+    // Step001: vacant but road-connected → commerce 2 (staffing-independent).
+    expect(commerceRevenueForTick(state)).toBe(2)
   })
 })
 
@@ -283,7 +285,8 @@ describe('D — Farm + Workshop + one colonist: exactly one is staffed', () => {
     expect(workplaceOf(state, 'colonist-1')).toBe(fixture.nearId)
     expect(countStaffedOperationalFarms(state)).toBe(1)
     expect(foodProductionForTick(state)).toBe(2)
-    expect(commerceRevenueForTick(state)).toBe(0)
+    // Step001: the far vacant workshop is connected, so it earns too.
+    expect(commerceRevenueForTick(state)).toBe(2)
     expect(getEmploymentSummary(state)).toMatchObject({
       population: 1,
       employed: 1,
@@ -301,7 +304,8 @@ describe('D — Farm + Workshop + one colonist: exactly one is staffed', () => {
     expect(workplaceOf(state, 'colonist-1')).toBe(fixture.nearId)
     expect(state.buildings[fixture.nearId]?.type).toBe('farm')
     expect(foodProductionForTick(state)).toBe(2)
-    expect(commerceRevenueForTick(state)).toBe(0)
+    // Step001: the far vacant workshop is connected, so it earns too.
+    expect(commerceRevenueForTick(state)).toBe(2)
   })
 
   it('D3 — equal distance across types: lowest id wins (no type priority)', () => {
@@ -330,7 +334,8 @@ describe('D — Farm + Workshop + one colonist: exactly one is staffed', () => {
     // proving the selection is type-blind.
     expect(workplaceOf(assigned, colonist.id)).toBe(farm.id)
     expect(foodProductionForTick(assigned)).toBe(2)
-    expect(commerceRevenueForTick(assigned)).toBe(0)
+    // Step001: the vacant workshop is connected, so it earns too.
+    expect(commerceRevenueForTick(assigned)).toBe(2)
   })
 })
 
@@ -413,11 +418,12 @@ describe('F — mixed Farm/Workshop capacities', () => {
 
   const assertNoFreeProduction = (state: SimulationState): void => {
     const staffedFarms = countStaffedOperationalFarms(state)
-    const staffedWorkshops = Object.values(state.buildings).filter(
-      (b) => b.type === 'workshop' && countWorkersAt(state, b.id) > 0
-    ).length
+    // Step001: food follows staffing, but commerce follows connectedness
+    // (vacant connected workshops earn) — not staffing.
     expect(foodProductionForTick(state)).toBe(staffedFarms * 2)
-    expect(commerceRevenueForTick(state)).toBe(staffedWorkshops * 2)
+    expect(commerceRevenueForTick(state)).toBe(
+      countConnectedOperationalWorkshops(state) * 2
+    )
   }
 
   it('F1 — 2 Farms + 1 Workshop + 2 colonists: two staffed, one vacant', () => {
@@ -457,8 +463,10 @@ describe('F — mixed Farm/Workshop capacities', () => {
     expect(staffedWorkplaceCount(state)).toBe(2)
     assertOneWorkerPerWorkplace(state)
     assertNoFreeProduction(state)
+    // Step001: 1 staffed farm (food 2) + 2 connected workshops (commerce
+    // 4, vacant counts) = 6.
     expect(foodProductionForTick(state) + commerceRevenueForTick(state)).toBe(
-      4
+      6
     )
   })
 })
@@ -688,7 +696,7 @@ describe('determinism and persistence', () => {
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     // No derived staffing field is persisted or hashed.
     const serialized = serializeCanonicalState(state)
     expect(serialized).not.toContain('farmWorkers')

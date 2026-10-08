@@ -180,7 +180,7 @@ async function main() {
     );
     assert(text.objective.includes('Objective —'), `objective not displayed: "${text.objective}"`);
     assert(text.objective.includes('Constraint —'), `constraint not displayed: "${text.objective}"`);
-    assert(text.objective.includes('Material 25, Water 51'), `constraint budget wrong: "${text.objective}"`);
+    assert(text.objective.includes('Money 25, Water 51'), `constraint budget wrong: "${text.objective}"`);
     assert(text.stage === 'Village', `stage expected Village, got "${text.stage}"`);
     assert(s.money === '25', `Material expected 25, got ${s.money}`);
     assert(s.water === '51', `Water expected 51, got ${s.water}`);
@@ -238,20 +238,21 @@ async function main() {
     ok(`burst started manually: workshop ${s.staffedWorkshopIds}, well "${s.staffedWellIds}", "${s.status}"`);
     await shot('03-burst-started.png');
 
-    // 25 ticks of conversion: 50 Water -> one building of Material.
+    // 25 ticks of drain: the vacated Well stops the flow, so the 2 served
+    // colonists spend the 50 reserve exactly. Step001: the treasury is
+    // uncapped and stays clamped at 0 (revenue 4 = 2 taxes + 2 commerce vs
+    // maintenance 5) — there is no storage bound to reach.
     const waterAtBurstStart = Number(s.water);
     for (let i = 0; i < 25; i += 1) s = await step(page);
     assert(Number(s.water) === 0, `the reserve must be exhausted after 25 ticks: ${s.water}`);
-    assert(Number(s.money) >= 24, `Material must reach the storage bound: ${s.money}`);
-    assert(s.storageCapacity === '25', `one Workshop stores 25: ${s.storageCapacity}`);
-    assert(s.materialProduction === '2' && s.materialUpkeep === '1', `production/upkeep wrong: ${s.materialProduction}/${s.materialUpkeep}`);
+    assert(s.money === '0', `the treasury stays clamped at 0 (revenue 4 - maintenance 5), got ${s.money}`);
     assert(s.staffedWorkshopIds !== '', `the Workshop must still be staffed: "${s.staffedWorkshopIds}"`);
-    // Step 10AS: at the cap the Material row names the storage and the discard,
-    // so "2 produced, 1 stored" is readable instead of looking like nothing.
+    // The Money row names the flow (the Step001 replacement for the old
+    // storage note), so the treasury reading is causal, not opaque.
     const materialNote = await page.locator('[data-testid="stat-material-status"]').textContent();
     assert(
-      materialNote.includes('cap 25') && materialNote.includes('full'),
-      `Material row expected a "cap 25 · full" note, got "${materialNote}"`
+      materialNote.includes('revenue') && materialNote.includes('maintenance'),
+      `Money row expected the flow note, got "${materialNote}"`
     );
     text = await progressionText(page);
     {
@@ -260,29 +261,30 @@ async function main() {
       assert(st.blockers.includes('Reach Village'), `the Village requirement must be the blocker during the burst: ${JSON.stringify(st.blockers)}`);
     }
     assert(text.stage === 'Settlement', `industrialising must drop the stage out of Village: "${text.stage}"`);
-    ok(`burst: Water ${waterAtBurstStart} -> ${s.water}, Material -> ${s.money}, stage "${text.stage}" (Village requirement unmet while the Well is unstaffed)`);
+    ok(`burst: Water ${waterAtBurstStart} -> ${s.water}, Money ${s.money}, stage "${text.stage}" (Village requirement unmet while the Well is unstaffed)`);
     await shot('04-burst-converted.png');
 
-    // --- 4. The burst Material pays for the second Well ------------------
+    // --- 4. The second Well is NOT fundable (Step001 D1 finding) ---------
+    // The burst stock is gone and the treasury is clamped at 0 with a net
+    // −1/tick, so neither the 25 Money nor the 1 construction Water can be
+    // paid. This is the measured D1 reality recorded in
+    // docs/audits/REPOSITORY-AUDIT-2026-10-08.md — not recalibrated here.
     await selectPalette(page, 'build-well', 'Well selected');
-    s = await placeAt(page, { x: 2, y: 2 });
-    // Step 10CZ: with Phase 7 income the burst stock exceeds the 25 cost on its
-    // own, so the placement is accepted (proven by placeAt) and this checks the
-    // post-spend stock stays a valid non-negative value.
-    assert(Number(s.money) >= 0, `the second Well must leave a valid stock: ${s.money}`);
-    for (let i = 0; i < 3; i += 1) s = await step(page);
-    assert(s.buildings === '6' && s.operational === '6', `the second Well must be operational: ${JSON.stringify(s)}`);
-    // Step 10AR: still no serving Well (the burst worker holds the Workshop).
-    assert(s.waterSupply === 'shortage', `supply expected shortage while the reserve is spent, got ${s.waterSupply}`);
-    objectiveState = await objective(page);
-    assert(
-      JSON.stringify(objectiveState.blockers) === JSON.stringify(['Reach Village']),
-      `only the Village requirement may remain: ${JSON.stringify(objectiveState.blockers)}`
+    const wellPt = await moveTo(page, { x: 2, y: 2 });
+    await waitFor(
+      async () => /insufficient/.test((await stats(page)).status),
+      'the second Well must show an insufficient preview'
     );
-    ok(`second Well built from the burst Material (${s.money} left), blockers ${JSON.stringify(objectiveState.blockers)}`);
+    const beforeSecondWell = await stats(page);
+    await page.mouse.click(wellPt.x, wellPt.y);
+    await new Promise((r) => setTimeout(r, 300));
+    s = await stats(page);
+    assert(s.buildings === beforeSecondWell.buildings, `the unfunded Well must be rejected: ${JSON.stringify(s)}`);
+    assert(s.money === '0', `the rejected Well must not spend: ${s.money}`);
+    ok(`second Well rejected unfunded (status "${s.status}"), blockers unchanged`);
     await shot('05-second-well.png');
 
-    // --- 5. The recovery restores Village and completes the objective ----
+    // --- 5. The recovery restores Village; the objective stays open ------
     // Select the Workshop (which now holds the worker) and send it back.
     await selectAt(page, { x: 4, y: 2 });
     const backTargets = await enabledTargets(page);
@@ -291,7 +293,6 @@ async function main() {
     s = await moveWorker(page, wellTarget.value);
     for (let i = 0; i < 3; i += 1) s = await step(page);
     assert(s.waterProduction === '2' && s.staffedWorkshopIds === '', `recovery must staff the Well and vacate the Workshop: ${JSON.stringify(s)}`);
-    assert(s.waterProduction === '2', `the Well must produce again after recovery: ${JSON.stringify(s)}`);
     // RECORDED (Step 10AQ, not fixed): the burst spends the reserve, so the
     // recovered colony has production == need with a 0 stock and the HUD
     // reports Water "not sustainable" (stock-based label) while the objective's
@@ -307,12 +308,15 @@ async function main() {
     text = await progressionText(page);
     assert(text.stage === 'Village', `recovery must restore Village: "${text.stage}"`);
     const finalObjective = await objective(page);
-    assert(finalObjective?.state === 'completed', `objective expected completed, got ${JSON.stringify(finalObjective)}`);
-    assert(text.objectiveStatus.includes('Objective complete'), `objective line expected complete, got "${text.objectiveStatus}"`);
-    // Step 10CJ: after Village the next stage is Town (Staffed Workshop), so
-    // the blocked line names that Town requirement rather than being empty.
-    assert(text.blocked.includes('Staffed Workshop'), `blocked line must name the Town requirement, got "${text.blocked}"`);
-    ok(`recovery: stage "${text.stage}", water production ${s.waterProduction}, objective complete`);
+    // The second Well was never fundable (D1), so the objective stays
+    // in_progress with exactly the Well blocker — the measured Step001 end
+    // state of this scenario.
+    assert(finalObjective?.state === 'in_progress', `objective expected in_progress (second Well unfunded), got ${JSON.stringify(finalObjective)}`);
+    assert(
+      JSON.stringify(finalObjective.blockers) === JSON.stringify(['Well built']),
+      `the only remaining blocker must be the Well: ${JSON.stringify(finalObjective.blockers)}`
+    );
+    ok(`recovery: stage "${text.stage}", water production ${s.waterProduction}, objective open on the unfunded Well (D1)`);
     await shot('06-complete.png');
 
     // --- 6. Persistence boundaries ---------------------------------------
@@ -320,7 +324,7 @@ async function main() {
     const second = JSON.stringify(await progression(page));
     assert(first === second, 'progression must be recomputed identically');
     const saved = JSON.parse(await page.evaluate(() => window.__nova.serialize()));
-    assert(saved.version === 8, `save version expected 8, got ${saved.version}`);
+    assert(saved.version === 9, `save version expected 9, got ${saved.version}`);
     assert(Object.keys(saved.state).length === 8, `save must keep 8 top-level keys, got ${Object.keys(saved.state).length}`);
     const serialized = JSON.stringify(saved);
     for (const term of ['scenario', 'progression', 'stage', 'objective', 'blocker']) {

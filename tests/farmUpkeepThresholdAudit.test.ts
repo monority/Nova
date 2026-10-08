@@ -510,7 +510,7 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
     }
   })
 
-  it('verifies farmUpkeepDue and net = W - max(0, F - 1) for the whole matrix', () => {
+  it('verifies farmUpkeepDue and the Step001 money net for the whole matrix', () => {
     const rows: unknown[] = []
     for (const scenario of MATRIX) {
       const start = scenarioStart(scenario)
@@ -518,7 +518,12 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
       const f = r.staffedFarms
       const w = r.staffedWorkshops
       const expectedFarmUpkeep = Math.max(0, f - 1)
-      const expectedNet = w - Math.max(0, f - 1)
+      // Step001 money net: revenue (taxes F+W + commerce 2W) minus money
+      // maintenance (R+F+W buildings with R = F+W) minus the candidate
+      // farm-upkeep overlay: W - F - max(0, F-1). Residences are fiscally
+      // neutral (one taxpayer vs one maintenance unit); each workshop nets
+      // +1, each farm costs -1 plus the upkeep ladder.
+      const expectedNet = w - f - Math.max(0, f - 1)
       rows.push({
         scenario: scenario.name,
         F: f,
@@ -527,11 +532,11 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
         maintenance: r.maintenance,
         totalMaintenance: r.totalMaintenance,
         gross: r.commerce,
-        net: r.commerce - r.totalMaintenance,
+        net: r.revenue - r.totalMaintenance,
         expectedNet,
       })
       expect(r.farmUpkeep).toBe(expectedFarmUpkeep)
-      expect(r.commerce - r.totalMaintenance).toBe(expectedNet)
+      expect(r.revenue - r.totalMaintenance).toBe(expectedNet)
     }
     audit('FORMULA_VERIFICATION', rows)
   })
@@ -547,22 +552,35 @@ describe('§4/§5 — 60-tick matrix under the three models', () => {
         scenario: scenario.name,
         W: first.staffedWorkshops,
         F: first.staffedFarms,
-        net: first.commerce - first.totalMaintenance,
+        net: first.revenue - first.totalMaintenance,
         netWithIncome,
         materialCrestPeak: Math.max(...trace.records.map((r) => r.treasuryCrest)),
         materialEnd: last.material,
         classification: classify(trace.records),
-        grows: first.staffedWorkshops >= first.staffedFarms,
+        // Step001: accumulation needs W - F - max(0, F-1) > 0, i.e.
+        // W >= 2F - 1 — the money-maintenance layer moved the old W >= F
+        // boundary. No MATRIX configuration satisfies it (best is 1F+1W
+        // at exactly 0), so nothing accumulates under the candidate
+        // overlay: a measured consequence, not a regression.
+        grows: first.staffedWorkshops - first.staffedFarms - Math.max(0, first.staffedFarms - 1) > 0,
+        // Tick-0 crest artifact: starting treasury (10) + first revenue
+        // pulse (taxes F+W + commerce 2W). Only 4F+4W reaches 26, tripping
+        // the crest classifier without accumulating (ends at 0).
+        tick0Crest: 10 + (first.staffedFarms + first.staffedWorkshops) + 2 * first.staffedWorkshops >= 25,
       }
     })
     audit('ACCUMULATION_BOUNDARY', rows)
-    // Workshop-only income: income is W×2 and the candidate upkeep is
-    // W + max(0, F−1), so above-cap drift is W − max(0, F−1) — the original
-    // W >= F accumulation boundary is back. Every configuration with at
-    // least one Workshop still climbs to the 25 crest below the cap.
+    // Step001 money boundary: net = W - F - max(0, F-1). Configurations
+    // with positive net climb to the 25 crest (GROWING); the rest hold
+    // (MARGINALLY_STABLE) — except 4F+4W, which trips the crest classifier
+    // on its tick-0 pulse alone (see tick0Crest). Real accumulation is
+    // decided by the end-vs-start check below, not by the crest.
     for (const row of rows) {
-      expect(row.netWithIncome).toBe(row.W - Math.max(0, row.F - 1))
-      expect(row.classification).toBe(row.W > 0 ? 'GROWING' : 'MARGINALLY_STABLE')
+      expect(row.netWithIncome).toBe(row.W - row.F - Math.max(0, row.F - 1))
+      expect(row.classification).toBe(
+        row.grows || row.tick0Crest ? 'GROWING' : 'MARGINALLY_STABLE'
+      )
+      expect(row.materialEnd > 10).toBe(row.grows)
     }
   })
 
@@ -648,9 +666,12 @@ describe('§6 — bootstrap experiment (real command chain)', () => {
     // baseline exactly for one Farm (first Farm free). The `full` rule now
     // drains to 0 — the Farm worker earns nothing, so full farm upkeep has
     // no counterweight in this short sequence.
+    // Step001: treasury ends lower — money maintenance runs alongside the
+    // candidate overlay. Base and candidate coincide (one farm, no farm
+    // upkeep); full drains to zero.
     expect(cand.state.resources.money).toBe(base.state.resources.money)
-    expect(base.state.resources.money).toBe(15)
-    expect(cand.state.resources.money).toBe(15)
+    expect(base.state.resources.money).toBe(11)
+    expect(cand.state.resources.money).toBe(11)
     expect(full.state.resources.money).toBe(0)
     expect(getPopulationCount(cand.state)).toBe(1)
   })
@@ -740,18 +761,21 @@ describe('§8 — second-Farm pressure', () => {
     expect(b.farmUpkeepPerTick - a.farmUpkeepPerTick).toBe(1)
     expect(b.foodProductionPerTick - a.foodProductionPerTick).toBe(2)
     expect(b.colonists - a.colonists).toBe(1)
-    expect(b.netMoneyPerTick - a.netMoneyPerTick).toBe(-1)
+    // Step001: the second Farm adds 2 money-maintenance plus 1 farm upkeep.
+    expect(b.netMoneyPerTick - a.netMoneyPerTick).toBe(-3)
   })
 
-  it('the second Farm flips 1F+1W from +1 to 0 net Material', () => {
+  it('the second Farm costs 3 net per tick under money (marginal upkeep + maintenance)', () => {
     const one = runTrace(rowWorld({ residences: 2, farms: 1, workshops: 1, material: 10 }), 1, 'candidate').records[0]!
     const two = runTrace(rowWorld({ residences: 3, farms: 2, workshops: 1, material: 10 }), 1, 'candidate').records[0]!
     audit('SECOND_FARM_FLIP', {
       oneFarmNet: one.commerce - one.totalMaintenance,
       twoFarmsNet: two.commerce - two.totalMaintenance,
     })
-    expect(one.commerce - one.totalMaintenance).toBe(1)
-    expect(two.commerce - two.totalMaintenance).toBe(0)
+    // Step001: 1F+1W nets commerce 2 against 4 maintenance; 2F+1W nets
+    // commerce 2 against 7 (6 maintenance + 1 farm upkeep).
+    expect(one.commerce - one.totalMaintenance).toBe(-2)
+    expect(two.commerce - two.totalMaintenance).toBe(-5)
   })
 })
 
@@ -786,7 +810,8 @@ describe('§9 — Farm expansion pressure at fixed W = 2', () => {
       expect(m.marginalFood).toBe(2)
       expect(m.marginalFarmUpkeep).toBe(1)
       expect(m.marginalWorker).toBe(1)
-      expect(m.marginalNetMaterial).toBe(-1)
+      // Step001: each added Farm costs 2 money-maintenance + 1 farm upkeep.
+      expect(m.marginalNetMaterial).toBe(-3)
     }
   })
 })
@@ -848,9 +873,11 @@ describe('§11 — Food vs Material opportunity cost', () => {
       }
     }
     audit('OPPORTUNITY_COST', out)
-    expect((out['1F+1W'] as { netMaterial: number }).netMaterial).toBe(1)
-    expect((out['2F+1W'] as { netMaterial: number }).netMaterial).toBe(0)
-    expect((out['1F+2W'] as { netMaterial: number }).netMaterial).toBe(2)
+    // Step001 money nets (commerce minus money maintenance minus the
+    // candidate farm-upkeep overlay).
+    expect((out['1F+1W'] as { netMaterial: number }).netMaterial).toBe(-2)
+    expect((out['2F+1W'] as { netMaterial: number }).netMaterial).toBe(-5)
+    expect((out['1F+2W'] as { netMaterial: number }).netMaterial).toBe(-2)
   })
 })
 
@@ -938,10 +965,11 @@ describe('§12 — spatial pressure under the threshold', () => {
     // Workshop preference: +2 Material, 1 Workshop upkeep, but the colony starves.
     expect(shopPreferred.records[0]!.commerce).toBe(2)
     expect(shopPreferred.records.some((r) => r.foodShortage)).toBe(true)
-    // Equal distance: the id tie-break decides the mix AND the upkeep, because
-    // the first staffed Farm is free while a staffed Workshop always pays 1.
-    expect(tie.totalMaintenance).toBe(0)
-    expect(tieShop.totalMaintenance).toBe(1)
+    // Step001: upkeep is per operational building, staffing-independent —
+    // vacant buildings earn commerce (when connected) and owe maintenance.
+    // The tie still decides WHO is staffed, but no longer the upkeep bill.
+    expect(tie.totalMaintenance).toBe(3)
+    expect(tieShop.totalMaintenance).toBe(3)
   })
 })
 
@@ -976,11 +1004,13 @@ describe('§13 — multi-colonist competition', () => {
       }
     }
     audit('MULTI_COLONIST', out)
-    expect((out['2c 1F+1W'] as { netMaterial: number }).netMaterial).toBe(1)
-    expect((out['3c 2F+1W'] as { netMaterial: number }).netMaterial).toBe(0)
-    expect((out['3c 1F+2W'] as { netMaterial: number }).netMaterial).toBe(2)
-    expect((out['4c 2F+2W'] as { netMaterial: number }).netMaterial).toBe(1)
-    expect((out['5c 3F+2W'] as { netMaterial: number }).netMaterial).toBe(0)
+    // Step001 money nets (commerce minus money maintenance minus the
+    // candidate farm-upkeep overlay).
+    expect((out['2c 1F+1W'] as { netMaterial: number }).netMaterial).toBe(-2)
+    expect((out['3c 2F+1W'] as { netMaterial: number }).netMaterial).toBe(-5)
+    expect((out['3c 1F+2W'] as { netMaterial: number }).netMaterial).toBe(-2)
+    expect((out['4c 2F+2W'] as { netMaterial: number }).netMaterial).toBe(-5)
+    expect((out['5c 3F+2W'] as { netMaterial: number }).netMaterial).toBe(-8)
   })
 })
 
@@ -995,11 +1025,11 @@ describe('§14 — construction feedback loops', () => {
     audit('LOOP_FARM_TO_WORKSHOP', {
       workshopOnly: { net: withoutFarm.commerce - withoutFarm.totalMaintenance, foodNet: withoutFarm.foodProduction - withoutFarm.colonists },
       plusFarm: { net: withFarm.commerce - withFarm.totalMaintenance, foodNet: withFarm.foodProduction - withFarm.colonists },
-      note: 'the free first Farm turns a Food-negative workshop colony into a Food-neutral one without taxing Material',
+      note: 'Step001: the free first Farm fixes Food but adds 1 money maintenance to the treasury bill',
     })
     expect(withoutFarm.foodProduction - withoutFarm.colonists).toBeLessThan(0)
     expect(withFarm.foodProduction - withFarm.colonists).toBe(0)
-    expect(withFarm.commerce - withFarm.totalMaintenance).toBe(1)
+    expect(withFarm.commerce - withFarm.totalMaintenance).toBe(-2)
   })
 
   it('measures the Workshop -> Material -> Farm loop and its marginal ceiling', () => {
@@ -1012,9 +1042,9 @@ describe('§14 — construction feedback loops', () => {
       farmUpkeep: r.farmUpkeep,
       netMaterial: r.commerce - r.totalMaintenance,
     })))
-    expect(rows[0]!.commerce - rows[0]!.totalMaintenance).toBe(1)
-    expect(rows[1]!.commerce - rows[1]!.totalMaintenance).toBe(0)
-    expect(rows[2]!.commerce - rows[2]!.totalMaintenance).toBe(-1)
+    expect(rows[0]!.commerce - rows[0]!.totalMaintenance).toBe(-2)
+    expect(rows[1]!.commerce - rows[1]!.totalMaintenance).toBe(-5)
+    expect(rows[2]!.commerce - rows[2]!.totalMaintenance).toBe(-8)
   })
 
   it('shows the dependency direction: adding a Farm beyond W never adds Material', () => {
@@ -1026,7 +1056,7 @@ describe('§14 — construction feedback loops', () => {
       farmUpkeep: r.farmUpkeep,
       netMaterial: r.commerce - r.totalMaintenance,
     })))
-    expect(rows[3]!.commerce - rows[3]!.totalMaintenance).toBe(-2)
+    expect(rows[3]!.commerce - rows[3]!.totalMaintenance).toBe(-11)
   })
 })
 
@@ -1059,14 +1089,26 @@ describe('§15 — 120-tick expansion test', () => {
         firstCrestTick: crestCrossings(trace.records)[0] ?? null,
         crestTicks: crestCrossings(trace.records).length,
         classification: classify(trace.records),
-        behaviour: 'accumulates to cap',
+        behaviour: 'drains to zero (flat for 1F+1W)',
       }
     }
     audit('EXPANSION_120_TICK', out)
+    // Step001: no nF+nW configuration accumulates under the candidate
+    // overlay (net <= 0 everywhere; best is 1F+1W flat at 10). Crests stay
+    // below 25 except the 4F+4W tick-0 pulse (10 + 16 revenue = 26),
+    // which the classifier counts as GROWING without accumulating.
+    const expected: Record<string, { firstCrestTick: number | null; classification: string; materialEnd: number }> = {
+      '1F+1W': { firstCrestTick: null, classification: 'MARGINALLY_STABLE', materialEnd: 10 },
+      '2F+2W': { firstCrestTick: null, classification: 'MARGINALLY_STABLE', materialEnd: 0 },
+      '3F+3W': { firstCrestTick: null, classification: 'MARGINALLY_STABLE', materialEnd: 0 },
+      '4F+4W': { firstCrestTick: 0, classification: 'GROWING', materialEnd: 0 },
+    }
     for (const p of [1, 2, 3, 4]) {
-      const entry = out[`${p}F+${p}W`] as { firstCrestTick: number | null; classification: string }
-      expect(entry.firstCrestTick).not.toBeNull()
-      expect(entry.classification).toBe('GROWING')
+      const entry = out[`${p}F+${p}W`] as { firstCrestTick: number | null; classification: string; materialEnd: number }
+      const want = expected[`${p}F+${p}W`]!
+      expect(entry.firstCrestTick).toBe(want.firstCrestTick)
+      expect(entry.classification).toBe(want.classification)
+      expect(entry.materialEnd).toBe(want.materialEnd)
     }
   })
 
@@ -1082,19 +1124,16 @@ describe('§15 — 120-tick expansion test', () => {
       }
     }
     audit('EXPANSION_120_MODELS_2F2W', out)
-    // Step 10CQ.1: every model now reaches the crest (income outruns each
-    // model's upkeep); the models still rank by their post-cap rate
-    // baseline +4 > candidate +3 > full +2, so the end stocks separate.
+    // Step001: at W = F no model accumulates (best is baseline flat at net
+    // 0). No crest is ever reached; end stocks separate baseline (holds
+    // the starting 10) from candidate/full (drain to 0).
     for (const mode of ['baseline', 'candidate', 'full'] as const) {
-      expect((out[mode] as { firstCrestTick: number | null }).firstCrestTick).not.toBeNull()
-      expect((out[mode] as { classification: string }).classification).toBe('GROWING')
+      expect((out[mode] as { firstCrestTick: number | null }).firstCrestTick).toBeNull()
+      expect((out[mode] as { classification: string }).classification).toBe('MARGINALLY_STABLE')
     }
-    expect((out['baseline'] as { materialEnd: number }).materialEnd).toBeGreaterThan(
-      (out['candidate'] as { materialEnd: number }).materialEnd
-    )
-    expect((out['candidate'] as { materialEnd: number }).materialEnd).toBeGreaterThan(
-      (out['full'] as { materialEnd: number }).materialEnd
-    )
+    expect((out['baseline'] as { materialEnd: number }).materialEnd).toBe(10)
+    expect((out['candidate'] as { materialEnd: number }).materialEnd).toBe(0)
+    expect((out['full'] as { materialEnd: number }).materialEnd).toBe(0)
   })
 })
 
@@ -1134,11 +1173,11 @@ describe('§16 — 24/25 crest behaviour', () => {
       expect(entry.crest).toBeGreaterThanOrEqual(25)
       expect(entry.buildAccepted).toBe(true)
     }
-    // Workshop-only income from 24: stored production (2W clamped by cap
-    // headroom) + income (2W) − candidate upkeep (W + max(0, F−1)).
-    expect((out['2F+2W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(29)
-    expect((out['3F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(31)
-    expect((out['2F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(32)
+    // Step001 money crest: start 24 + revenue (taxes + commerce 2W), rest =
+    // crest - total (money maintenance + candidate farm upkeep).
+    expect((out['2F+2W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(23)
+    expect((out['3F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(22)
+    expect((out['2F+3W'] as { restAfterUpkeep: number }).restAfterUpkeep).toBe(24)
   })
 })
 
@@ -1147,7 +1186,7 @@ describe('§16 — 24/25 crest behaviour', () => {
 // ---------------------------------------------------------------------------
 
 describe('§17 — recovery from Material 0', () => {
-  it('identifies that every configuration with a Workshop recovers (Workshop-only income)', () => {
+  it('no configuration recovers from Material 0 under the candidate overlay (poverty trap)', () => {
     const configs = [
       { name: '1F+1W', residences: 2, farms: 1, workshops: 1 },
       { name: '2F+2W', residences: 4, farms: 2, workshops: 2 },
@@ -1169,13 +1208,15 @@ describe('§17 — recovery from Material 0', () => {
       }
     }
     audit('RECOVERY_FROM_ZERO', out)
-    // Step 10CQ.1: income ≥ candidate upkeep for every configuration
-    // (net = +W or +W+1 per tick), so all five recover from Material 0.
-    expect((out['1F+1W'] as { recovered: boolean }).recovered).toBe(true)
-    expect((out['2F+2W'] as { recovered: boolean }).recovered).toBe(true)
-    expect((out['2F+3W'] as { recovered: boolean }).recovered).toBe(true)
-    expect((out['3F+2W'] as { recovered: boolean }).recovered).toBe(true)
-    expect((out['3F+1W'] as { recovered: boolean }).recovered).toBe(true)
+    // Step001 poverty trap: money maintenance consumes the whole inflow at
+    // these scales (net <= 0 everywhere under the candidate overlay), so a
+    // treasury at 0 stays at 0 — maintenance is clamped, never debt, and no
+    // inflow exceeds it. Recovery needs net > 0 (W >= 2F), absent here.
+    expect((out['1F+1W'] as { recovered: boolean }).recovered).toBe(false)
+    expect((out['2F+2W'] as { recovered: boolean }).recovered).toBe(false)
+    expect((out['2F+3W'] as { recovered: boolean }).recovered).toBe(false)
+    expect((out['3F+2W'] as { recovered: boolean }).recovered).toBe(false)
+    expect((out['3F+1W'] as { recovered: boolean }).recovered).toBe(false)
   })
 })
 
@@ -1184,7 +1225,7 @@ describe('§17 — recovery from Material 0', () => {
 // ---------------------------------------------------------------------------
 
 describe('§18 — terminal states', () => {
-  it('W <= F - 1 at Material 0 is no longer terminal (Step 10CQ.1)', () => {
+  it('W <= F - 1 at Material 0 stays terminal under money (candidate overlay)', () => {
     const out: Record<string, unknown> = {}
     for (const [farms, workshops] of [
       [2, 1],
@@ -1208,10 +1249,12 @@ describe('§18 — terminal states', () => {
       }
     }
     audit('TERMINAL_SMALL', out)
-    // Step 10CQ.1: income exceeds the candidate upkeep even at W = F - 1, so
-    // every previously terminal shape now climbs back to the crest.
+    // Step001: net = W - F - max(0, F-1) < 0 for all three shapes, so the
+    // treasury never leaves 0 and the 25 crest is never reached. The 10CQ.1
+    // recovery held for the old model only; under money maintenance these
+    // shapes are terminal again (and would be under baseline too: W - F < 0).
     for (const key of Object.keys(out)) {
-      expect((out[key] as { escaped: boolean }).escaped).toBe(true)
+      expect((out[key] as { escaped: boolean }).escaped).toBe(false)
     }
   })
 
@@ -1235,10 +1278,9 @@ describe('§18 — terminal states', () => {
       }
     })
     audit('TERMINAL_LARGE_CREST', rows)
-    // Workshop-only income: from 0 the crest is stored production (2W,
-    // cap 25W is no bound from zero) plus Workshop income (2W) = 4W — every
-    // row clears the 25 build cost with room to spare.
-    expect(rows.map((r) => r.crestFromZero)).toEqual([40, 48, 52, 56])
+    // Step001: from 0 the crest is the first revenue pulse (taxes pop +
+    // commerce 2W) — 41/49/53/57 — every row clears the 25 build cost.
+    expect(rows.map((r) => r.crestFromZero)).toEqual([41, 49, 53, 57])
     expect(rows.every((r) => r.buildAffordable)).toBe(true)
   })
 
@@ -1264,7 +1306,7 @@ describe('§18 — terminal states', () => {
 // ---------------------------------------------------------------------------
 
 describe('§19 — UI information audit (hypothetical, no UI change)', () => {
-  it('the current ledger exposes only aggregate workshop upkeep', () => {
+  it('the ledger exposes aggregate money maintenance per building', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 10 })
     const r = runTrace(state, 1, 'candidate').records[0]!
     const farm = Object.values(state.buildings).find((b) => b.type === 'farm')!
@@ -1277,9 +1319,9 @@ describe('§19 — UI information audit (hypothetical, no UI change)', () => {
       aggregateNetQuery: getNetMoneyPerTick(state),
       farmInspectionKeys: inspection === null ? null : Object.keys(inspection),
       farmInspectionHasUpkeep: inspection !== null && 'upkeep' in inspection,
-      note: 'getMaintenanceDuePerTick counts Workshops only; a future Farm upkeep would need a new query/ledger line',
+      note: 'Step001: getMaintenanceDuePerTick counts every operational building (money maintenance); per-workplace upkeep is gone with the Material model',
     })
-    expect(getMaintenanceDuePerTick(state)).toBe(r.staffedWorkshops)
+    expect(getMaintenanceDuePerTick(state)).toBe(r.maintenance)
     expect(getMaintenanceDuePerTick(state)).toBeLessThan(r.totalMaintenance)
     expect(inspection).not.toHaveProperty('upkeep')
   })
@@ -1290,8 +1332,8 @@ describe('§19 — UI information audit (hypothetical, no UI change)', () => {
 // ---------------------------------------------------------------------------
 
 describe('§25 — persistence and determinism (audit-only)', () => {
-  it('SAVE_VERSION is 4; the threshold adds no persisted state', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('SAVE_VERSION is 9; the threshold adds no persisted state', () => {
+    expect(SAVE_VERSION).toBe(9)
     const state = rowWorld({ residences: 4, farms: 2, workshops: 3, material: 20 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

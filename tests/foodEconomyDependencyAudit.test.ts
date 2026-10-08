@@ -490,8 +490,9 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
   })
 
   it('shows Farm input turns Material into a mandatory Food tax', () => {
-    // 2 Farms + 2 Workshops, 4 colonists: baseline Material net +2.
-    const start = world({ residences: 6, farms: 2, workshops: 2, colonists: 4, material: 0, food: 500 })
+    // 4 residences + 2 Farms + 3 Workshops, 4 colonists: Step001 baseline
+    // net +1 (revenue 10 = 4 tax + 6 commerce, maintenance 9).
+    const start = world({ residences: 4, farms: 2, workshops: 3, colonists: 4, material: 0, food: 500 })
     const baseline = advance(start, 60)
     const withInput = runMirror(start, 60, { farmInput: 1, farmOutput: 2 }).state
     audit('FARM_INPUT_TAX', {
@@ -505,7 +506,7 @@ describe('§14 — Farm input experiment (audit mirror)', () => {
         food: withInput.resources.food,
         population: getPopulationCount(withInput),
       },
-      note: 'the 2 staffed Farms consume the 2 net Material the Workshops produce',
+      note: 'the mirror farm input drains the treasury the baseline keeps accumulating',
     })
     expect(baseline.resources.money).toBeGreaterThan(withInput.resources.money)
   })
@@ -710,7 +711,8 @@ describe('§16/§17 — Water and Material boundary regressions', () => {
   })
 
   it('Farm input makes Material a mandatory Food tax', () => {
-    const start = world({ residences: 4, farms: 2, workshops: 2, colonists: 4, material: 0, food: 1000 })
+    // Same net-positive Step001 baseline shape (revenue 10, maintenance 9).
+    const start = world({ residences: 4, farms: 2, workshops: 3, colonists: 4, material: 0, food: 1000 })
     const baseline = advance(start, 120)
     const input = runMirror(start, 120, { farmInput: 1, farmOutput: 2 }).state
     audit('MATERIAL_BOUNDARY', {
@@ -735,7 +737,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       granaryBuilding: 'if added, a new building type string only — no shape change',
       farmInput: 'no new state (reads resources.money)',
     })
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 
   it('measures 60/120/600-tick cost of the current economy', () => {

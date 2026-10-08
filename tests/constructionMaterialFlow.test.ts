@@ -128,7 +128,9 @@ describe('money flow (Step001)', () => {
     })
 
     it('5 — revenue without construction accumulates net flow', () => {
-      const before = atMoney(singleWorkshop(), 75)
+      // Complete the Workshop's second construction tick first so the resting
+      // state earns full revenue: tax 1 + commerce 2 − maintenance 2 = net 1.
+      const before = atMoney(stepSimulation(singleWorkshop()), 75)
       const after = stepSimulation(before)
       // 75 + 3 revenue − 2 maintenance = 76.
       expect(getResourceStock(after).money).toBe(76)
@@ -298,7 +300,9 @@ describe('money flow (Step001)', () => {
 
   describe('revenue reads', () => {
     it('single-workshop fixture reports revenue 3', () => {
-      expect(getRevenuePerTick(singleWorkshop())).toBe(3)
+      // The historical fixture rests one tick before completion; the
+      // operational state earns the full 3 (tax 1 + commerce 2).
+      expect(getRevenuePerTick(stepSimulation(singleWorkshop()))).toBe(3)
     })
   })
 })

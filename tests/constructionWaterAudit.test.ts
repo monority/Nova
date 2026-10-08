@@ -453,13 +453,15 @@ describe('§1/§2/§3 — cost matrix, scopes and bootstrap safety', () => {
     expect(accepted.accepted).toBe(true)
   })
 
-  it('bootstrap: a Well-less 0-Material colony stays recoverable because production is free', () => {
-    // The construction cost adds no runtime drain, so an already-built
-    // Workshop keeps producing Material with no Water at all.
+  it('bootstrap: a Well-less 0-Money colony keeps accumulating because production is free', () => {
+    // The construction cost adds no runtime drain, so established Workshops
+    // keep earning commerce with no Water at all. Two Workshops make the
+    // Step001 baseline net-positive: revenue 7 (3 tax + 4 commerce) vs
+    // maintenance 6 (5 buildings + ... 3 residences, farm, 2 workshops = 6).
     const base = world({
       residences: 3,
       farms: 1,
-      workshops: 1,
+      workshops: 2,
       colonists: 3,
       food: 50000,
       material: 0,
@@ -470,7 +472,7 @@ describe('§1/§2/§3 — cost matrix, scopes and bootstrap safety', () => {
       materialAfter20: after.resources.money,
       waterAfter20: after.resources.water,
       staffedWorkshops: countStaffedOperationalWorkshops(after),
-      note: 'unlike the 10AB per-tick rule, an established Workshop keeps working with zero Water: the one-off cost cannot trap production',
+      note: 'unlike the 10AB per-tick rule, established Workshops keep earning commerce with zero Water: the one-off cost cannot trap production',
     })
     expect(after.resources.money).toBeGreaterThan(0)
   })

@@ -344,7 +344,7 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     expect(a.vacancies).toBe(0)
     expect(b.vacancies).toBe(1)
     expect(b.workshopWorkers).toBe(0)
-    expect(b.materialNet).toBe(0)
+    expect(b.materialNet).toBe(-1) // revenue 4 (2 tax + 2 commerce) − maintenance 5
   })
 
   it('measures state C (Workshop staffed manually) and D (industrial deficit)', () => {
@@ -367,16 +367,15 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     })
     expect(c.workshopWorkers).toBe(1)
     expect(c.wellWorkers).toBe(0)
-    expect(c.materialNet).toBe(1)
+    expect(c.materialNet).toBe(-1) // revenue 4 − maintenance 5
     expect(c.waterProduction).toBe(0)
     // Both colonists are water-served, so the vacant Well costs the whole
     // need (2 / tick), not just the moved worker's share.
     expect(c.waterNet).toBe(-2)
     expect(c.foodNet).toBe(0) // the Farm keeps feeding both colonists
     expect(after20.resources.water).toBeLessThan(waterStart)
-    // Workshop-only income: climb +3/tick (2 stored + 2 income − 1 upkeep)
-    // to the 25 cap, then drift +1/tick: 37 at tick 20.
-    expect(after20.resources.money).toBe(37)
+    // Step001: revenue 4 − maintenance 5 = −1/tick, clamped to 0.
+    expect(after20.resources.money).toBe(0)
   })
 
   it('measures state E (industrial recovery) and the temporary-industry loop', () => {
@@ -415,13 +414,13 @@ describe('3-4. Industrial states and temporary industry', { timeout: 30000 }, ()
     })
     // 50 Water drained at 2/tick (both colonists are served): 25 ticks.
     expect(industrialTicks).toBe(25)
-    // Workshop-only income: 25 ticks of industry from stock 0 gain 42
-    // Material (the 25 cap, then +1/tick of income above it).
-    expect(materialGained).toBe(42)
+    // Industrial phase: 25 ticks (50 water / 2 per tick). Revenue 4 − maintenance 5 = −1/tick.
+    // Starting from 0, maintenance clamps to 0, so no Material is gained.
+    expect(materialGained).toBe(0)
     expect(e.wellWorkers).toBe(1)
     expect(e.waterProduction).toBe(2)
     expect(e.waterNet).toBe(0)
-    expect(e.materialNet).toBe(0)
+    expect(e.materialNet).toBe(-1) // revenue 4 − maintenance 5
     expect(e.population).toBe(2)
     expect(e.stage).toBe('village')
     // The industrial phase drops the stage: an unstaffed Well means no Water
@@ -535,14 +534,12 @@ describe('5-6. Industrial scenario and opening audit', { timeout: 30000 }, () =>
     expect(current.population).toBe(2)
     expect(flow(workshopFirst).buildings).toBe(current.buildings + 1)
     expect(manualFlow.workshopWorkers).toBe(1)
-    expect(manualFlow.materialNet).toBe(1)
+    expect(manualFlow.materialNet).toBe(-1) // revenue 4 − maintenance 5
     // The scenario has only 10 Water and both colonists are served: ~5 ticks.
     expect(ticks).toBeLessThanOrEqual(6)
     expect(aggressiveFlow.wellWorkers).toBe(1)
-    // Workshop-only income: above the storage cap (stock 75 > capacity 25)
-    // stored production is 0, and the Workshop worker nets exactly +1/tick
-    // (2 income − 1 upkeep): 5 industrial ticks bank 5 Material.
-    expect(materialGained).toBe(ticks)
+    // Aggressive: net −1/tick (revenue 4 − maintenance 5), starting from stockAtIndustryStart.
+    expect(materialGained).toBe(-ticks)
   })
 
   it('audits five openings from the real initial state', () => {

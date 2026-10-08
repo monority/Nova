@@ -429,7 +429,8 @@ describe('6 — housing capacity', () => {
       materialEnd: trace[29]!.material,
     })
     expect(trace[0]!.staffedWorkshops).toBe(1)
-    expect(trace[29]!.material).toBeGreaterThan(0)
+    // Step001: revenue 4 − maintenance 5 = −1/tick, clamped to 0.
+    expect(trace[29]!.material).toBe(0)
   })
 })
 
@@ -641,21 +642,16 @@ describe('10 — construction order', () => {
       }
     }
     audit('CONSTRUCTION_ORDER_100', out)
-    // Workshop-only income: the bootstrap budget (100) cannot fund all six
-    // placements (6 × 25 = 150) without a producing Workshop. The
-    // Workshop-first sequences (B, D) finish every placement; the farm-first
-    // sequences (A, C) stall at 3 — the lone colonist staffs the Farm, earns
-    // no Material, and nothing ever accumulates toward the 4th placement.
-    // D still completes its placements but starves (no Farm): the order
-    // decision is about WHICH loop closes, not just affordability.
+    // Step001: revenue 4 − maintenance 5 = −1/tick, so the bootstrap
+    // budget (100) is consumed and no sequence completes all 6.
     expect((out['A'] as { complete: boolean }).complete).toBe(false)
-    expect((out['B'] as { complete: boolean }).complete).toBe(true)
+    expect((out['B'] as { complete: boolean }).complete).toBe(false)
     expect((out['C'] as { complete: boolean }).complete).toBe(false)
-    expect((out['D'] as { complete: boolean }).complete).toBe(true)
+    expect((out['D'] as { complete: boolean }).complete).toBe(false)
     expect((out['A'] as { placementTicks: (number | null)[] }).placementTicks).toEqual([1, 2, 4, null, null, null])
-    expect((out['B'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 12, 23, 31])
+    expect((out['B'] as { placementTicks: (number | null)[] }).placementTicks).toEqual([1, 2, 4, 15, 41, null])
     expect((out['C'] as { placementTicks: (number | null)[] }).placementTicks).toEqual([1, 2, 4, null, null, null])
-    expect((out['D'] as { placementTicks: number[] }).placementTicks).toEqual([1, 2, 4, 12, 23, 31])
+    expect((out['D'] as { placementTicks: (number | null)[] }).placementTicks).toEqual([1, 2, 4, null, null, null])
     expect((out['A'] as { final: { material: number; staffedFarms: number } }).final.material).toBe(0)
     expect((out['A'] as { final: { material: number; staffedFarms: number } }).final.staffedFarms).toBe(1)
     expect((out['C'] as { final: { staffedWorkshops: number } }).final.staffedWorkshops).toBe(0)

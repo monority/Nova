@@ -1,111 +1,107 @@
-# NOVA — Current Project State
-
-> **Authority:** this file describes the repository's actual implementation state. It is not a product wish-list.
+# NOVA — Repository State
 
 ## Purpose
 
-`STATE.md` is the operational snapshot for humans and coding agents.
+This document records the **actual state of the repository**.
 
-It answers:
+It is not a roadmap and not a wish list.
 
-- What exists?
-- What is currently being worked on?
-- What is validated?
-- What is known to be incomplete?
-- What is the next approved implementation boundary?
+Never mark a feature complete without implementation and validation evidence.
 
-## Rules
+---
 
-1. Never invent state.
-2. Update this document only from observed repository evidence.
-3. Distinguish implemented, tested, partially implemented, planned and unknown.
-4. Do not mark a feature complete because its code exists; completion requires its acceptance criteria and validation.
-5. Historical details belong in step reports or Git history, not here.
-6. If the state is stale or contradictory, inspect the repository before continuing.
+## Status Vocabulary
 
-## Project Identity
+- `IMPLEMENTED` — implemented and validated
+- `PARTIAL` — partially implemented
+- `PLANNED` — documented but not implemented
+- `DEFERRED` — explicitly postponed
+- `BLOCKED` — blocked by a known issue
+- `UNKNOWN` — not inspected or evidence is insufficient
 
-- Product: NOVA
-- Genre: 3D stylized city-builder / civilization-builder
-- Initial mode: Sandbox
-- MVP target: complete Age 1 + beginning of Age 2
-- Primary gameplay: build → produce → store → distribute → consume → analyse → optimise → develop → milestone → new age
+---
 
-## Repository State
+## Repository
 
-> Observed 2026-10-07. HEAD `87f862e` (Step001 money migration).
+| Field | Value |
+|---|---|
+| Branch | `master` (tracks `Nova/master`, ahead 1) |
+| HEAD | `5700172` — docs(nova): raise doc grades — links, STATE, Step001, D1/D2/D4 decisions |
+| Working tree | `DIRTY` — Step002 foundation pass: AGENTS.md + docs corpus rewrite, 90 test files migrated to the Step001 money model, `audits.txt` debug log removed; see `docs/roadmap/Step002-money-suite-green.md` |
+| Package manager | `pnpm` (pnpm 11.21.0) |
+| Node version | v24.19.0 |
+| Typecheck | PASS — `npx tsc --noEmit`, no errors (2026-10-08) |
+| Lint | PASS — `npx eslint .`, no findings (2026-10-08) |
+| Unit tests | PASS — `npx vitest run`: 121 files / 1877 tests, all green (2026-10-08) |
+| E2E | PASS — full suite: 27/27 scripts, 336/336 checks, 0 failed, 0 skipped (`test:e2e` + all `test:e2e:*`, 2026-10-08) |
+| Build | PASS — `npm run build` (tsc -p tsconfig.build.json + vite build) (2026-10-08) |
 
-- Branch: `master`
-- HEAD: `87f862e` — test(nova): migrate audit suites to Step001 money model
-- Worktree: DIRTY — 9 modified test files, uncommitted (pre-date this docs pass; see Step001)
-- Package manager: `pnpm`
-- Runtime/toolchain: Node + Vite + Vitest + Playwright + ESLint + `tsc --noEmit`; strict TypeScript; single runtime dependency `three`
-- Build status: NOT RERUN in this pass (HEAD commit message claims `vite build` succeeds)
-- Test status: MIXED — `tsc` clean, `eslint` clean, `vitest run` 339 failed / 1538 passed (1877) — expected mid-Step001 pattern, see Step001
-- E2E status: NOT RUN in this pass (27 Playwright scripts in `e2e/`, real-browser via `vite preview`)
+Update these values from actual command output.
+
+---
 
 ## Implementation State
 
-Observed values only (HEAD `87f862e`, 2026-10-07).
-
-| Area | Status | Evidence |
+| Area | Status | Evidence / Notes |
 |---|---|---|
-| Repository foundation | Implemented | pnpm, strict TS, Vite, Vitest, Playwright, ESLint; scripts in `package.json` |
-| Deterministic world | Implemented (mechanism) | fixed tick (`domain/simulation/step.ts`), seeded world (`domain/world/grid.ts`), `determinism.test.ts`; full-suite signal red for unrelated Step001 reasons |
-| Camera / navigation | Implemented | `src/renderer/three/` (scene, camera, reconcile); real-browser E2E in `e2e/` |
-| Construction | Implemented | `domain/building/building.ts`, `domain/road/road.ts`, placement queries; costs in Money (Step001) |
-| Population | Partial | individual `ColonistState` + manual reassignment (`domain/population/colonist.ts`, `domain/jobs/jobs.ts`); aggregate-first pending (Step000 D3) |
-| Needs | Partial | binary `fed` / `shortage` signals (`domain/simulation/phases.ts`); no progressive satisfaction/QoL bands |
-| Production | Partial | 3 direct producers, no input chains, no maintenance-as-input (`domain/simulation/phases.ts`) |
-| Storage | Implemented | `domain/storage/storage.ts`; Food/Water capacity; Money uncapped and accounted, not stored |
-| Logistics | Partial | road network + building access contract (`domain/network/network.ts`, `domain/road/road.ts`); aggregate flow effects unverified (Step000 gap #8) |
-| Analysis | Implemented | inspection/diagnosis queries (`application/queries/inspection.ts`) |
-| Economy | In progress | Money treasury (tax + commerce), maintenance on operational buildings (`domain/resource/resource.ts`); baseline constants validated by user 2026-10-07; suite red mid-migration (Step001) |
-| Environment | Missing | no pollution/environment system in `src/domain` |
-| Technology | Missing | no technology system in `src/domain` |
-| Age 1 | Partial | Settlement → Village → Town capability stages; Town intentionally undefined (Step000) |
-| Age 2 beginning | Missing | deferred, no code |
-| Persistence | Implemented | `SAVE_VERSION = 9`, migrations 4–8 (`application/persistence/save.ts`); version assertions part of red Step001 suite |
-| Performance | Partial | hotspot fixes landed (road BFS/adjacency); no recorded benchmark baseline in docs |
+| Foundation | IMPLEMENTED | `src/domain` (pure simulation), `src/application` (queries/scenarios), `src/renderer`, `src/app/main.ts`; strict TS, single runtime dependency `three` |
+| World | IMPLEMENTED | seeded terrain, blocked cells (`src/domain/world`, terrain E2E) |
+| Camera | IMPLEMENTED | Three.js orbit/pan camera (`src/renderer`) |
+| Construction | IMPLEMENTED | placement commands, road drag, 2-tick construction, Construction Crew (09H/10AD) |
+| Population | IMPLEMENTED | aggregate colonists, admission gate (housing + Food + Water), deterministic growth |
+| Housing | IMPLEMENTED | residences, capacity 1 each, service queries |
+| Needs | IMPLEMENTED | Food 1/colonist/tick all-or-nothing; Water 1/served colonist/tick |
+| Production | IMPLEMENTED | Farms 2 Food/tick, Wells 2 Water/tick; Workshops earn commerce (no physical output) |
+| Storage | PARTIAL | Food/Water uncapped colony stocks; treasury uncapped; per-Workshop storage cap removed with the Material resource in Step001 |
+| Logistics | IMPLEMENTED | road networks, road access for staffing + commerce, per-network Water coverage |
+| Analysis | IMPLEMENTED | stats surface (money/taxes/commerce/revenue/maintenance/netMoney), inspection panel, food forecast |
+| Economy | IMPLEMENTED | Step001 money model: treasury 100 start, tax 1/inhabitant/tick, commerce 2/connected Workshop/tick, maintenance 1/operational building/tick, uncapped treasury |
+| Environment | UNKNOWN | not inspected this pass |
+| Technology | PLANNED | no implementation found |
+| Ages | PLANNED | progression stages implemented (wilderness→village→settlement→town); Age system is not |
+| Persistence | IMPLEMENTED | versioned save/load, `SAVE_VERSION = 9`, canonical hash, deterministic continuation |
+| Performance | UNKNOWN | no measurements taken this pass |
+
+---
 
 ## Known Issues
 
-Only reproducible issues with evidence.
+Only confirmed issues belong here.
 
-- Step001 money migration incomplete: `vitest run` 339 failed / 1538 passed (1877), uniform old-model-expectation pattern (Material costs, SAVE_VERSION 6/7 assertions). Details in `roadmap/Step001-money-migration.md`.
-- Worktree dirty: 9 modified test files, uncommitted (pre-date the 2026-10-07 docs pass).
-- Day-0 colony size decided 2026-10-07 (D2, Option A): 10-inhabitant canonical start; ~100 = MVP scale target via growth. Code migration of the start (currently empty world + 1-colonist bootstrap) is pending implementation.
-- Manual colonist reassignment deprecated as soon as the aggregate model (D3) is frozen (D4, 2026-10-07).
+| Issue | Impact | Status |
+|---|---|---|
+| Step001 baseline is net-negative for typical colonies (e.g. revenue 4 vs maintenance 5 for a 2-colonist village with a Workshop): the `water-reserve-industry` scenario cannot fund its promised second Well | Scenario promises are unfundable; commerce rarely beats maintenance | OPEN — D1 income/expense balance, deliberately deferred (see `docs/roadmap/Step002-money-suite-green.md` §D1); needs a product decision |
+
+---
 
 ## Deferred Scope
 
-Unless explicitly promoted by a product decision, these remain post-MVP:
+Examples of explicitly deferred systems:
 
+- factions;
 - advanced diplomacy;
 - complex BOT civilizations;
-- advanced warfare;
-- large-scale colonization;
-- complete world economy;
-- full resource catalogue;
-- scenarios/challenges;
-- multiplayer;
-- individual citizen simulation;
-- individual courier simulation;
-- advanced finance;
-- factions.
+- colonies;
+- war;
+- advanced global economy;
+- advanced events.
+
+Do not implement deferred scope without an explicit product decision.
+
+---
 
 ## Current Approved Step
 
-`Step001 — Money Migration` (`docs/roadmap/Step001-money-migration.md`, in progress).
-Close-out boundary: finish the 9-file test migration, commit, full green suite, build + E2E, product review of the D1 remainder. Step000 D2–D4 remain open and out of scope.
+Step002 (money-suite green + foundation docs reset) — this pass; see `docs/roadmap/Step002-money-suite-green.md`.
+
+---
 
 ## Update Protocol
 
-After a meaningful implementation step:
+Update this file only when actual repository state changes materially.
 
-1. inspect Git state;
-2. inspect changed files;
-3. run required validation;
-4. update only facts supported by evidence;
-5. record the next approved step;
-6. commit the state change together with the relevant work when appropriate.
+Do not turn it into a task list.
+
+Do not claim validation that was not executed.
+
+Record concise evidence, not long explanations.

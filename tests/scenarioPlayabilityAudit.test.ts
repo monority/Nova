@@ -298,12 +298,12 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     audit('FIRST_SETTLEMENT', { compact, extended, waterFirst })
     expect(compact.settlementTick).not.toBeNull()
     expect(compact.final.roads).toBe(1)
-    // Workshop-only income: the Farm worker earns nothing, so the 100 grant
-    // cannot fund the fifth item (the 25-Material Well) after the 105-cost
-    // package — the compact policy stalls as a stable Settlement at 20.
+    // Step001: no Workshop, so revenue (2 taxes) never covers maintenance
+    // (3 buildings) — the grant drains to the floor and the Well (25) is
+    // never affordable. The compact policy still stalls at Settlement.
     expect(compact.final.stage).toBe('settlement')
     expect(compact.villageTick).toBeNull()
-    expect(compact.final.material).toBe(20)
+    expect(compact.final.material).toBe(0)
     expect(extended.settlementTick).not.toBeNull()
     expect(extended.final.roads).toBe(4)
     expect(waterFirst.final.stage).toBe('wilderness')
@@ -488,14 +488,14 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     audit('RECOVERY', { repair, replace, inaction })
     expect(repair.final.stage).toBe('settlement')
     expect(repair.final.roads).toBe(4)
-    // Workshop-only income: the staffed Farm earns no Material, so both
-    // repairs hover at their spend remainders (15 and 5).
-    expect(repair.final.material).toBe(15)
+    // Step001: both repairs drain their remainders to the floor (1 tax vs
+    // 2 maintenance) — the stock sits at 0 either way.
+    expect(repair.final.material).toBe(0)
     expect(repair.final.staffedFarms).toBe(1)
     expect(replace.final.stage).toBe('settlement')
     expect(replace.final.roads).toBe(1)
     expect(replace.final.buildings).toBe(3)
-    expect(replace.final.material).toBe(5)
+    expect(replace.final.material).toBe(0)
     expect(inaction.final.stage).toBe('wilderness')
     expect(inaction.wipeTick).not.toBeNull()
   })
@@ -627,14 +627,14 @@ describe('5. Carried-forward findings', { timeout: 30000 }, () => {
       farmFirst: { stage: farmFirst.final.stage, materials: farmFirst.final.material, roads: farmFirst.final.roads, population: farmFirst.final.population },
       wellFirst: { stage: wellFirst.final.stage, wipeTick: wellFirst.wipeTick },
       conclusion:
-        'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell); the construction order alone decides Settlement vs starvation, and with Workshop-only income the grant alone cannot fund the Village package (farm-first stalls at 20)',
+        'the 105 minimum is the sum of catalog prices (2 Residences + Well + Farm + one shared road cell); the construction order alone decides Settlement vs starvation, and under money the grant drains to 0 after the package (farm-first floor)',
     })
     expect(INITIAL_TREASURY).toBe(100)
     expect(minimumVillageCost).toBe(105)
     expect(farmFirst.final.stage).toBe('settlement')
-    // Workshop-only income: the Farm and Well workers earn no Material, so the
-    // farm-first run stalls at the 20 left after the 105-cost package.
-    expect(farmFirst.final.material).toBe(20)
+    // Step001: the farm-first run drains its 20 remainder to the floor
+    // (2 taxes vs 3 maintenance) — Settlement holds, the treasury does not.
+    expect(farmFirst.final.material).toBe(0)
     expect(wellFirst.final.stage).toBe('wilderness')
     expect(wellFirst.wipeTick).not.toBeNull()
   })
@@ -761,7 +761,7 @@ describe('9-11. Safety, Town+ gate and classification', { timeout: 30000 }, () =
       scenarioStateInSave: serializeCanonicalState(state).includes('scenario'),
       progressionStateInSave: serializeCanonicalState(state).includes('progression'),
     })
-    expect(saved.version).toBe(8)
+    expect(saved.version).toBe(9)
     expect(Object.keys(saved.state)).toHaveLength(8)
     expect(serializeCanonicalState(state)).not.toContain('scenario')
     expect(serializeCanonicalState(state)).not.toContain('progression')

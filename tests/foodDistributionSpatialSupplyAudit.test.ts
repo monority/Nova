@@ -1026,8 +1026,9 @@ describe('11. Architecture invariants (src-immutable audit)', { timeout: 30000 }
         present: serializeCanonicalState(a).includes(term),
       })),
     })
-    expect(saved.version).toBe(8)
-    expect(SAVE_VERSION).toBe(8)
+    // Step001 money migration bumps SAVE_VERSION from 8 to 9.
+    expect(saved.version).toBe(9)
+    expect(SAVE_VERSION).toBe(9)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serializeCanonicalState(a)).not.toContain('coverage')

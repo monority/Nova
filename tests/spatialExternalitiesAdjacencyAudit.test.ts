@@ -1140,7 +1140,9 @@ describe('6. Building type externalities', { timeout: 30000 }, () => {
     })
     for (const row of rows as { snapshot: Snapshot }[]) {
       expect(row.snapshot.foodProduction).toBe(2)
-      expect(row.snapshot.materialNet).toBe(1)
+      // Step001: revenue 4 (2 taxes + 2 commerce) − maintenance 4 (2
+      // residences + Farm + Workshop) = 0 in both layouts.
+      expect(row.snapshot.materialNet).toBe(0)
     }
   })
 })
@@ -1153,13 +1155,12 @@ describe('7-8. Future spatial pressure candidates', { timeout: 30000 }, () => {
   it('progressively adds Workshops and looks for any measurable pressure', () => {
     const build = (workshops: number, grouped: boolean): SimulationState => {
       const workplaces: Placement[] = [{ type: 'farm', x: 1, y: 2 }]
-      const roads: CellCoordinate[] = [
-        { x: 1, y: 1 },
-        { x: 2, y: 1 },
-        { x: 3, y: 1 },
-        { x: 4, y: 1 },
-        { x: 5, y: 1 },
-      ]
+      // The road row must cover BOTH layouts identically, so connectivity is
+      // never the variable: separated Workshops sit at x = 2 + 2i, which for
+      // 3 Workshops reaches x = 6 — beyond the base row 1..5.
+      const maxX = Math.max(5, 2 + 2 * (workshops - 1))
+      const roads: CellCoordinate[] = []
+      for (let x = 1; x <= maxX; x += 1) roads.push({ x, y: 1 })
       for (let i = 0; i < workshops; i += 1) {
         workplaces.push({ type: 'workshop', x: grouped ? 2 + i : 2 + 2 * i, y: 2 })
       }
@@ -1446,8 +1447,9 @@ describe('13. Architecture invariants (src-immutable audit)', { timeout: 30000 }
         (term) => ({ term, present: serializeCanonicalState(a).includes(term) })
       ),
     })
-    expect(saved.version).toBe(8)
-    expect(SAVE_VERSION).toBe(8)
+    // Step001 money migration bumps SAVE_VERSION from 8 to 9.
+    expect(saved.version).toBe(9)
+    expect(SAVE_VERSION).toBe(9)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serializeCanonicalState(a)).not.toContain('coverage')

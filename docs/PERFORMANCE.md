@@ -1,79 +1,85 @@
-# NOVA — Performance Engineering
+# NOVA — Performance Rules
 
-## 1. Principle
+## Principle
 
-Performance is a product requirement, but optimization must be evidence-driven.
+Performance decisions must be based on measured constraints, not intuition.
 
-## 2. Primary budgets
+Optimize the architecture first; optimize hot paths only when evidence requires it.
 
-Track separately:
+---
 
-- simulation time per tick;
-- render frame time;
-- memory;
-- world data size;
-- save/load time;
-- browser startup time.
+## Simulation
 
-## 3. Simulation
+- Fixed simulation tick.
+- Simulation independent from rendering.
+- Avoid unnecessary per-tick work.
+- Prefer aggregate population and logistics for MVP.
+- Avoid accidental O(N²) behavior.
+- Keep deterministic behavior.
+- Do not add per-entity simulation without a demonstrated need.
 
-The MVP uses aggregate systems.
+---
 
-Avoid:
+## Rendering
 
-- per-person pathfinding;
-- per-person economic accounting;
-- unnecessary per-entity allocations each tick;
-- repeated full-world scans when local/indexed data is sufficient.
+- Avoid allocations in render loops.
+- Avoid unnecessary scene traversal.
+- Dispose Three.js resources correctly.
+- Avoid unnecessary geometry/material duplication.
+- Use instancing when measurement demonstrates a benefit.
+- Use LOD when scene complexity requires it.
 
-## 4. Rendering
+---
+
+## React
+
+- Keep core simulation state outside React.
+- Avoid unnecessary rerenders.
+- Prefer derived values over duplicated state.
+- Do not add memoization without a reason.
+- Avoid passing unstable objects/functions through large component trees without need.
+
+---
+
+## Data
 
 Prefer:
+- compact state;
+- derived values;
+- stable identifiers;
+- deterministic generation;
+- explicit ownership.
 
-- instancing;
-- batching where appropriate;
-- LOD;
-- frustum culling;
-- limited dynamic object counts.
+Avoid:
+- duplicated canonical state;
+- large transient objects;
+- repeated serialization;
+- unnecessary deep cloning.
 
-Do not optimize blindly.
+---
 
-## 5. World streaming
+## Optimization Rule
 
-The long-term world can contain many sectors, but only the relevant level of detail should be active.
+Before introducing:
+- caching;
+- workers;
+- WASM;
+- ECS;
+- spatial indexes;
+- aggressive memoization;
+- complex batching;
 
-Detailed metropolitan rendering/simulation must not imply detailed simulation of the whole planet.
+identify the measured bottleneck and the expected benefit.
 
-## 6. React
+---
 
-Avoid unnecessary re-renders of the entire application when a local panel changes.
+## Validation
 
-Use selectors/memoization only where profiling justifies them.
+Performance-sensitive changes should use evidence such as:
+- browser profiling;
+- frame timing;
+- simulation timing;
+- memory usage;
+- targeted benchmarks.
 
-## 7. Memory
-
-Watch for:
-
-- retained render objects;
-- unbounded logs;
-- duplicate content definitions;
-- cached snapshots;
-- abandoned event listeners.
-
-## 8. Profiling workflow
-
-When performance degrades:
-
-1. reproduce with a known scenario;
-2. capture baseline;
-3. profile;
-4. identify hotspot;
-5. change one major variable;
-6. rerun benchmark;
-7. retain the optimization only if the evidence supports it.
-
-## 9. Regression protection
-
-Important performance regressions should have a repeatable benchmark or scenario.
-
-Avoid fragile microbenchmarks that do not represent gameplay workloads.
+Do not claim a performance improvement without measurement.

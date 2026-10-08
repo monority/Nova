@@ -745,7 +745,10 @@ describe('4. Qualitative headroom test', { timeout: 120000 }, () => {
       expect(row.industry.population).toBe(6)
       expect(row.industry.foodNet).toBe(0)
       expect(row.industry.waterNet).toBe(0)
-      expect(row.industry.material).toBeGreaterThan(20)
+      // Step001: every P=6 configuration drains to the floor — revenue 8
+      // (6 taxes + 2 commerce) < maintenance — so the Workshop survives on
+      // Food/Water but the treasury never accumulates.
+      expect(row.industry.material).toBe(0)
     }
     expect(rows[1]!.industry.staffedWells).toBe(3)
     expect(rows[2]!.industry.staffedFarms).toBe(3)
@@ -772,16 +775,16 @@ describe('4. Qualitative headroom test', { timeout: 120000 }, () => {
     audit('TEMPORARY_LOOP_2_2', {
       start,
       rows,
-      note: 'material is banked only while the displaced Well is empty: the storage cap (25) then makes production non-productive, while Step 10CQ income keeps accumulating above the cap',
+      note: 'Step001: money floors at 0 — revenue 8 < maintenance 12, the loop never accumulates; the storage-cap banking story belongs to the old Material model',
     })
     const last = rows[rows.length - 1]!
     expect(last.water).toBe(0)
-    // Step 10CQ.1: the cap still clamps production to zero at the end of the
-    // run — only the pre-cap buildup was production; everything past 25 is
-    // employment income credited outside storage.
-    expect(getCommerceRevenuePerTick(current)).toBe(0)
-    expect(last.material).toBeGreaterThan(25)
-    expect(last.material).toBeGreaterThanOrEqual(20)
+    // Step001: the Workshop is road-connected, so commerce pays 2/tick
+    // regardless of the storage cap — the cap no longer applies to money.
+    expect(getCommerceRevenuePerTick(current)).toBe(2)
+    // Step001: revenue 8 − maintenance 12 = −4/tick → floor 0 for the
+    // whole run (the old pre-cap banking never happens).
+    expect(last.material).toBe(0)
     expect(last.waterNet).toBe(-2)
     expect(last.population).toBe(6)
   })
@@ -846,18 +849,20 @@ describe('5. Industrial phase policies', { timeout: 120000 }, () => {
       actions.push({ label: `${type}@${x},${y}`, tick: next.time.tick, accepted: false })
       return next
     }
-    // Two Residences and a fourth Well: capacity 8 admits the 7th and 8th
-    // colonist through the unchanged Water gate (8 >= served 6 + admissions + 1).
+    // Step001: the treasury drains −4/tick from tick 0 (revenue 8 <
+    // maintenance 12), so the policy buys in survival order — third Farm,
+    // fourth Well (the Water gate), then housing — and the last residence
+    // is rejected once money floors at 0.
+    expansion = placeWhenAffordable(expansion, 'farm', 27, 2)
+    expansion = placeWhenAffordable(expansion, 'well', 25, 2)
     expansion = placeWhenAffordable(expansion, 'residence', 13, 0)
     expansion = placeWhenAffordable(expansion, 'residence', 15, 0)
-    expansion = placeWhenAffordable(expansion, 'well', 25, 2)
     expansion = forceRoles(expansion, ['well', 'well', 'well', 'well', 'farm', 'farm', 'workshop'])
     const populationBeforeGrowth = getPopulationCount(expansion)
     expansion = runShadow(expansion, 10, rates)
     const populationAfterGrowth = getPopulationCount(expansion)
-    // The colony is now Food-negative (two Farms feed six of eight), so the
-    // industrial income funds the third Farm before its reserve runs out.
-    expansion = placeWhenAffordable(expansion, 'farm', 27, 2)
+    // Seven Colonists: three Farms (9 Food) beat seven mouths (+2/tick);
+    // the Workshop stays vacant — Step001 commerce counts it anyway.
     expansion = forceRoles(
       expansion,
       ['well', 'well', 'well', 'well', 'farm', 'farm', 'farm', 'workshop']
@@ -890,30 +895,36 @@ describe('5. Industrial phase policies', { timeout: 120000 }, () => {
         diagnostics,
       },
       timeToFirstSustainableWorkshop: 'tick 1 (the freed worker is assigned by the existing automatic pass)',
-      timeToFirstMaterialSurplus: 'tick 1 (+1 net Material per tick, bounded by the 25-per-Workshop cap)',
+      timeToFirstMaterialSurplus: 'never under Step001: revenue < maintenance at every P = 6 ratio, the treasury floors at 0',
     }
     audit('INDUSTRIAL_POLICIES_FARM3', {
       rows,
       objective: 'does the freed worker create a new strategic choice, or merely bigger numbers?',
     })
-    // Workshop-only income: the survival policy runs NO Workshop, and its 3
-    // Well + 2 Farm workers earn nothing — the colony simply persists at
-    // Material 0, exactly as the policy's description says.
+    // Step001: the survival policy runs NO Workshop — revenue 6 (taxes) <
+    // maintenance 11, so the treasury simply floors at 0.
     expect(rows.survival.at600.material).toBe(0)
     expect(rows.survival.at600.staffedWorkshops).toBe(0)
     expect(rows.industry.at600.staffedWorkshops).toBe(1)
-    expect(rows.industry.at600.material).toBeGreaterThan(20)
+    // Step001: revenue 8 < maintenance 11-12 — the industry colony also
+    // floors at 0 (balances are the post-green tuning question).
+    expect(rows.industry.at600.material).toBe(0)
     expect(rows.industry.at600.food).toBe(rows.industry.at100.food)
     expect(rows.industry.at600.water).toBe(rows.industry.at100.water)
-    // Expansion reaches population 8 through the existing Water gate and ends
-    // with every required workplace staffed and no deficit.
+    // Expansion grows through the Water gate only as far as money allows:
+    // three of four placements fit the draining treasury (the fourth is
+    // rejected), housing caps the colony at 7 and the shape is stable.
     expect(rows.expansion.populationBeforeGrowth).toBe(6)
-    expect(rows.expansion.populationAfterGrowth).toBe(8)
-    expect(rows.expansion.actions.every((action) => action.accepted)).toBe(true)
-    expect(rows.expansion.at600.population).toBe(8)
+    expect(rows.expansion.populationAfterGrowth).toBe(7)
+    expect(
+      rows.expansion.actions.filter((action) => action.accepted).map((action) => action.label)
+    ).toEqual(['farm@27,2', 'well@25,2', 'residence@13,0'])
+    expect(rows.expansion.at600.population).toBe(7)
     expect(rows.expansion.at600.staffedFarms).toBe(3)
     expect(rows.expansion.at600.staffedWells).toBe(4)
-    expect(rows.expansion.at600.staffedWorkshops).toBe(1)
+    // Positional roles exhaust on the Farms — the Workshop is vacant, but
+    // Step001 commerce pays for it anyway.
+    expect(rows.expansion.at600.staffedWorkshops).toBe(0)
     expect(rows.expansion.at600.foodNet).toBeGreaterThanOrEqual(0)
     expect(rows.expansion.at600.waterNet).toBeGreaterThanOrEqual(0)
     expect(rows.expansion.at600.food).toBeGreaterThan(0)
@@ -1453,18 +1464,18 @@ describe('12. Design decision', () => {
     audit('REPEATABLE_CONVERSION_2_2', {
       marks,
       reading:
-        'the Water reserve returns to its pre-loop level every cycle; each cycle converts 40 Food into one Workshop-tick of Material (bounded by the 25-per-Workshop storage cap)',
+        'Step001: the Water reserve returns to its pre-loop level every cycle and each cycle burns 40 Food, but money floors at 0 (revenue 4 < maintenance 6) — no Material is banked',
     })
     expect(marks).toHaveLength(4)
     for (const mark of marks.slice(1)) expect(mark.water).toBe(marks[0]!.water)
     expect(marks[3]!.food).toBeLessThan(marks[0]!.food)
-    // The Workshop output is banked (bounded by the 25-per-Workshop cap).
-    expect(marks[1]!.material).toBeGreaterThan(marks[0]!.material)
-    // Step 10CQ.1: the Workshop output itself stays bounded by the 25-per-
-    // Workshop cap (stored production is 0 at the final mark); the stock
-    // above the cap is accumulated Step 10CQ income from the forced roles.
-    expect(marks[3]!.material).toBeGreaterThan(25)
-    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    // Step001: money never moves — every mark sits on the 0 floor
+    // (revenue 4 = 2 taxes + 2 commerce < maintenance 6).
+    expect(marks[1]!.material).toBe(marks[0]!.material)
+    expect(marks[3]!.material).toBe(0)
+    // Step001: the connected Workshop pays commerce 2/tick even while the
+    // treasury itself floors at 0 (revenue 4 < maintenance 6).
+    expect(getCommerceRevenuePerTick(state)).toBe(2)
   })
 })
 
@@ -1549,6 +1560,6 @@ describe('16. Architectural invariants', () => {
     expect(SAVE_VERSION).toBe(9)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(a))
-    expect(Object.keys(a.resources).sort()).toEqual(['construction', 'food', 'water'])
+    expect(Object.keys(a.resources).sort()).toEqual(['food', 'money', 'water'])
   })
 })

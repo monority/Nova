@@ -409,10 +409,11 @@ describe('3 — production interaction', () => {
       material: 10,
     })
     const wellId = idsOf(base, 'well')[0]!
-    // Control: without a crew the Workshop produces 2, earns 2 Step 10CQ
-    // income and pays 1 upkeep: 10 + 2 + 2 − 1 = 13.
+    // Control: without a crew the connected Workshop earns 2 commerce +
+    // 1 tax = 3 revenue against 2 maintenance (residence + workshop):
+    // 10 + 3 − 2 = 11.
     const control = stepSimulation(base)
-    expect(control.resources.money).toBe(13)
+    expect(control.resources.money).toBe(11)
 
     const assigned = crew(base, 'colonist-1', wellId)
     const afterTick = stepSimulation(assigned)
@@ -421,11 +422,12 @@ describe('3 — production interaction', () => {
     expect(afterTick.buildings[wellId]!.status).toBe('operational')
     expect(afterTick.resources.money).toBe(10)
     expect(countWorkersAt(afterTick, idsOf(base, 'workshop')[0]!)).toBe(0)
-    // The release happens at the end of that tick, so the next tick produces
-    // (2 stored + 2 income − 1 upkeep = +3 over the crewing tick's 10).
+    // The release happens at the end of that tick; the next tick nets
+    // revenue 3 against maintenance 3 (residence + workshop + completed
+    // Well): flat at 10.
     expect(afterTick.colonists['colonist-1']!.constructionAssignmentId).toBeNull()
     const nextTick = stepSimulation(afterTick)
-    expect(nextTick.resources.money).toBe(13)
+    expect(nextTick.resources.money).toBe(10)
   })
 
   it('stops Well output while the well worker crews another site', () => {
@@ -496,7 +498,7 @@ describe('4 — economy', () => {
 
 describe('5 — persistence and hash', () => {
   it('SAVE_VERSION is 8 and an active crew round-trips', () => {
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     const base = crewWorldWithSite()
     const wellId = idsOf(base, 'well')[0]!
     const assigned = crew(base, 'colonist-1', wellId)
@@ -512,9 +514,15 @@ describe('5 — persistence and hash', () => {
     const assigned = crew(base, 'colonist-1', wellId)
     const parsed = JSON.parse(serializeSave(assigned)) as {
       version: number
-      state: { colonists: Record<string, Record<string, unknown>> }
+      state: {
+        colonists: Record<string, Record<string, unknown>>
+        resources: Record<string, unknown>
+      }
     }
     parsed.version = 6
+    // Genuine v6 saves carry construction, not money (Step001 v8->v9 rename).
+    parsed.state.resources['construction'] = parsed.state.resources['money']
+    delete parsed.state.resources['money']
     for (const colonist of Object.values(parsed.state.colonists)) {
       delete colonist['constructionAssignmentId']
     }
@@ -537,6 +545,9 @@ describe('5 — persistence and hash', () => {
       }
     }
     parsed.version = 5
+    // Genuine v5 saves carry construction, not money (Step001 v8->v9 rename).
+    parsed.state.resources['construction'] = parsed.state.resources['money']
+    delete parsed.state.resources['money']
     for (const colonist of Object.values(parsed.state.colonists)) {
       delete colonist['constructionAssignmentId']
     }
@@ -636,8 +647,8 @@ describe('6 — determinism', () => {
       workplaceId: null,
       workplaceAssignmentMode: 'automatic',
       constructionAssignmentId: wellId,
-      // Step 10CQ: crew-assigned colonists earn zero income.
-      materialIncome: 0,
+      // Step001: per-colonist material income no longer exists (colony-
+      // level taxes + commerce replaced it), so the inspection drops the field.
     })
   })
 })

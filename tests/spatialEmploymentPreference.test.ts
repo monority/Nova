@@ -154,7 +154,7 @@ describe('M-A — direct road', () => {
     const assigned = assignJobs(state)
     expect(workplaceOf(assigned, colonist.id)).toBe(workshop.id)
     expect(commerceRevenueForTick(assigned)).toBe(2)
-    expect(maintenanceDueForTick(assigned)).toBe(1)
+    expect(maintenanceDueForTick(assigned)).toBe(2)
   })
 })
 
@@ -363,8 +363,11 @@ describe('M-H — no operational path', () => {
     )
     const assigned = assignJobs(state)
     expect(workplaceOf(assigned, colonist.id)).toBeNull()
-    expect(commerceRevenueForTick(assigned)).toBe(0)
-    expect(maintenanceDueForTick(assigned)).toBe(0)
+    // Commerce follows road access only: the Workshop touches its own road
+    // cell, so it earns commerce even though the residence network is
+    // separate and no worker can reach it.
+    expect(commerceRevenueForTick(assigned)).toBe(2)
+    expect(maintenanceDueForTick(assigned)).toBe(2)
   })
 })
 
@@ -618,7 +621,7 @@ describe('M-M / M-N — capacity and multiple colonists', () => {
     expect(workplaceOf(assigned, cA.id)).toBe(workshopA.id)
     expect(workplaceOf(assigned, cB.id)).toBe(workshopB.id)
     expect(commerceRevenueForTick(assigned)).toBe(4)
-    expect(maintenanceDueForTick(assigned)).toBe(2)
+    expect(maintenanceDueForTick(assigned)).toBe(4)
   })
 })
 
@@ -770,7 +773,7 @@ describe('M-R / M-S — no persistence, stable hash', () => {
   }
 
   it('M-R — SAVE_VERSION 4, and the distance is absent from the save', () => {
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     const state = scenario()
     const raw = serializeSave(state)
     for (const fragment of ['distance', 'roadDistance', 'preference']) {

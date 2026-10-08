@@ -63,6 +63,7 @@ const workshopState = (): SimulationState => {
 const vacantWorkshopState = (): SimulationState => {
   let state = createTestState()
   state = stepSimulation(withWorkshopWater(state), place('workshop', 1, 1)) // t1
+  state = withRoadsForWorkshops(state) // connected road for commerce
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // operational, nobody housed
   return state

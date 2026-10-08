@@ -1,139 +1,106 @@
 # NOVA — Contributing
 
-## 1. Objective
-
-Keep NOVA coherent while allowing fast implementation by humans and coding agents.
-
-Correctness and product coherence take priority over raw change volume.
-
-## 2. Before coding
+## Before Coding
 
 Read:
-
 1. `AGENTS.md`
-2. `README.md`
-3. `docs/game/01-PRODUCT-VISION.md`
-4. `docs/game/02-MVP.md`
-5. `docs/game/03-DESIGN-RULES.md`
-6. `docs/game/04-ARCHITECTURE.md`
-7. relevant domain documentation
-8. `docs/STATE.md`
-9. relevant ADRs
+2. `docs/ENGINEERING-INDEX.md`
+3. `docs/STATE.md`
+4. only the documents relevant to the task.
 
-Then inspect the actual repository.
+Inspect actual repository state.
 
-## 3. Branch discipline
+---
 
-Prefer a dedicated branch for meaningful work.
+## Scope
 
-Do not push to protected/main branches unless explicitly authorized.
+Every change should have:
+- one objective;
+- explicit non-goals;
+- measurable acceptance criteria.
 
-Do not rewrite unrelated history.
+Do not mix unrelated cleanup or refactoring into a feature.
 
-## 4. Scope discipline
+---
 
-A change should have one clear purpose.
-
-Do not combine:
-
-- unrelated refactors;
-- feature work;
-- cosmetic cleanup;
-- dependency migrations;
-- speculative architecture.
-
-If cleanup is required to implement the feature safely, keep it minimal and explain why.
-
-## 5. Code changes
+## Code
 
 Prefer:
-
+- strict TypeScript;
 - explicit types;
-- small cohesive modules;
-- pure domain functions;
-- dependency direction that remains obvious;
+- cohesive modules;
+- pure domain logic;
 - deterministic behavior;
-- derived state over duplicated state;
-- explicit commands/actions;
-- clear error handling.
+- derived state;
+- explicit actions;
+- meaningful components;
+- composition.
 
 Avoid:
-
 - God objects;
 - hidden global mutable state;
 - circular dependencies;
 - UI-driven domain logic;
 - renderer-driven simulation;
-- premature generic frameworks.
+- speculative abstractions.
 
-## 6. Dependencies
+---
 
-Adding a dependency requires a concrete current justification.
+## Components
 
-Before adding one, evaluate:
+Extract meaningful reusable components.
 
-- whether the existing stack already solves the problem;
-- bundle/runtime cost;
-- maintenance quality;
-- type quality;
-- security;
-- whether the dependency creates architectural coupling.
+Do not create artificial wrapper components solely to satisfy a component-count rule.
 
-## 7. Tests
+A component should have a clear responsibility or useful boundary.
 
-New behavior requires appropriate regression coverage.
+---
 
-Prefer:
+## Dependencies
 
-- unit tests for domain rules;
-- integration tests for system interactions;
-- Playwright for critical user flows;
-- deterministic fixtures for simulation scenarios.
+Do not add a package when the repository or platform already provides a sufficient solution.
 
-Do not weaken tests merely to make a change pass.
+Every new dependency must have a concrete reason.
 
-## 8. Visual changes
+---
 
-For UI/rendering work, validate both:
+## Tests
 
-- functional behavior;
-- actual visual result.
+Add regression coverage for important behavior.
 
-A passing unit test does not prove that a visual feature is correct.
+Prefer behavior tests over implementation-detail tests.
 
-## 9. Commit quality
+---
 
-Commits should be:
+## Validation
 
-- coherent;
-- focused;
-- reversible;
-- understandable.
+Run the smallest sufficient validation first.
 
-Avoid commits containing unrelated generated files or local configuration.
+Escalate based on risk.
 
-## 10. Documentation
+See `docs/VALIDATION.md`.
 
-Update documentation when behavior or architecture changes.
+---
 
-Do not update documentation merely to describe implementation details that are obvious from code.
+## Git
 
-Product decisions belong in product/ADR documentation.
+- Preserve user changes.
+- Keep commits focused.
+- Do not rewrite history casually.
+- Do not push `main` without authorization.
+- Never use destructive cleanup commands without explicit approval.
 
-Current implementation truth belongs in `STATE.md`.
+---
 
-## 11. Review checklist
+## Review Checklist
 
-Before considering a change complete:
-
-- [ ] Product scope is respected.
-- [ ] Architecture boundaries are respected.
-- [ ] No unnecessary abstraction was introduced.
-- [ ] Tests cover important behavior.
-- [ ] Existing tests remain green.
-- [ ] Typecheck passes.
-- [ ] Lint passes.
-- [ ] Build passes.
-- [ ] E2E/visual validation was performed where relevant.
-- [ ] Git diff contains only intended changes.
-- [ ] Documentation is updated when required.
+Before finishing:
+- [ ] scope is respected
+- [ ] architecture remains coherent
+- [ ] components are meaningful
+- [ ] tests exist where needed
+- [ ] validation passed
+- [ ] no debug artifacts remain
+- [ ] no unrelated changes exist
+- [ ] final diff reviewed
+- [ ] documentation/state updated if necessary

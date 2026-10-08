@@ -248,11 +248,12 @@ describe('§3 — baseline bootstrap trajectory', () => {
     // Bounded growth: +2 produced, -1 eaten.
     expect(history[9]!.food).toBe(107)
     expect(history[9]!.population).toBe(1)
-    // Material: bootstrap 100 - residence 25 - 2 roads 10 - farm 25 = 40.
-    // Workshop-only income: the Farm worker earns no Material, so the stock
-    // rests at exactly the build remainder on every tick.
-    expect(history[0]!.material).toBe(40)
-    expect(history[9]!.material).toBe(40)
+    // Material: bootstrap 100 - residence 25 - 2 roads 10 - farm 25 = 40,
+    // minus the 1/tick drain before the farm runs (Step001: revenue 0 →
+    // tax 1 < maintenance 2) → 39 at tick 4.
+    expect(history[0]!.material).toBe(39)
+    // Step001: the colony keeps draining −1/tick (1 tax < 2 maintenance).
+    expect(history[9]!.material).toBe(30)
   })
 
   it('stable food-positive state is reachable: 1 staffed residence + farm never famines', () => {
@@ -552,7 +553,9 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     // Farm adjacent to the residence road cell (near), workshop far.
     const foodFirst = colony(2, 7)
     expect(foodProductionForTick(foodFirst)).toBe(2)
-    expect(commerceRevenueForTick(foodFirst)).toBe(0)
+    // Step001: commerce counts vacant connected Workshops — the worker's
+    // location does not change the 2/tick commerce revenue.
+    expect(commerceRevenueForTick(foodFirst)).toBe(2)
     // Workshop near, farm far: the mirror result.
     const materialFirst = colony(7, 2)
     expect(foodProductionForTick(materialFirst)).toBe(0)
@@ -584,9 +587,9 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     expect(countStaffedOperationalFarms(state)).toBe(1)
     expect(foodProductionForTick(state)).toBe(2)
     expect(commerceRevenueForTick(state)).toBe(2)
-    // Food net is flat (2 produced, 2 eaten); the storage cap still throttles
-    // Material while stock exceeds 25 per workshop.
-    expect(maintenanceDueForTick(state)).toBe(1)
+    // Food net is flat (2 produced, 2 eaten). Step001: maintenance is per
+    // operational building — 2 Residences + Farm + Workshop = 4.
+    expect(maintenanceDueForTick(state)).toBe(4)
   })
 
   it('equal 100-material budget: housing+food vs industry diverge', () => {
@@ -626,11 +629,10 @@ describe('§6 — housing growth vs food security vs industrial capacity', () =>
     const last = series[series.length - 1]!
     expect(last.population).toBe(1)
     expect(last.food).toBeLessThan(INITIAL_FOOD) // decaying: no farm
-    // Step 10CQ.1: above the cap (40 > 25) stored production is 0, but the
-    // Workshop worker earns 2 income against 1 upkeep, netting +1/tick:
-    // 40 + 8 = 48.
+    // Step001: taxes 1 + commerce 2 − maintenance 2 (Residence + Workshop)
+    // = +1/tick: 40 + 8 = 48.
     expect(last.material).toBe(INITIAL_FOOD - 25 - 10 - 25 + 8)
-    expect(maintenanceDueForTick(industry)).toBe(1)
+    expect(maintenanceDueForTick(industry)).toBe(2)
 
     // The measured tradeoff: the housing colony fed two colonists on food it
     // could not produce and ended with no Material; the industry colony has a

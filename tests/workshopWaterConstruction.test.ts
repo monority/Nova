@@ -215,8 +215,10 @@ describe('§4 — operation consumes no Water', () => {
     })
     expect(countStaffedOperationalWorkshops(state)).toBe(1)
     expect(after.resources.water).toBe(waterBefore)
-    expect(getRevenuePerTick(after)).toBe(2)
-    expect(getMaintenanceDuePerTick(after)).toBe(1)
+    // Step001: revenue 3 (1 tax + 2 commerce), maintenance 2 (residence +
+    // Workshop — every operational building pays).
+    expect(getRevenuePerTick(after)).toBe(3)
+    expect(getMaintenanceDuePerTick(after)).toBe(2)
   })
 
   it('multiple Workshops never multiply Water consumption per tick', () => {
@@ -292,8 +294,9 @@ describe('§10 — Water economy', () => {
   it('one Workshop payment coexists with the existing admission gate', () => {
     // A residence and its colonist staff a Well (2 Water/tick) and need 1, so a
     // Water surplus exists: the Workshop placement can be paid while the 10S
-    // admission gate keeps operating on production capacity.
-    let state = withStocks(createState(), { food: 500, material: 25, water: 0 })
+    // admission gate keeps operating on production capacity. Money 30 covers
+    // the 25 Workshop after the 4-tick rest (net −1/tick: revenue 1, upkeep 2).
+    let state = withStocks(createState(), { food: 500, material: 30, water: 0 })
     state = op(state, 'residence', 1, 0)
     state = op(state, 'well', 3, 2)
     state = opRoad(state, 1, 1)
@@ -353,7 +356,7 @@ describe('§8 — persistence and determinism', () => {
       saveLoadStable: serializeCanonicalState(restored) === serializeCanonicalState(after),
       water: getWaterStock(after),
     })
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(after))
     expect(hashCanonicalState(before)).not.toBe(hashCanonicalState(after))
   })

@@ -6,43 +6,25 @@ Accepted
 
 ## Context
 
-NOVA needs reproducible simulation behavior, save/load reliability and meaningful time acceleration.
-
-Frame-rate-dependent simulation would make results dependent on rendering performance.
+The simulation must remain reproducible while rendering may run at variable frame rates.
 
 ## Decision
 
-Simulation advances through a fixed logical tick.
+Simulation advances using a fixed tick independent from rendering.
 
-Rendering runs independently.
-
-Time controls modify how simulation ticks are processed, not the underlying simulation rules.
-
-## Alternatives Considered
-
-### Frame-dependent simulation
-
-Rejected because results can vary with frame rate.
-
-### Fully real-time variable timestep
-
-Deferred because deterministic replay and testing become harder.
+Randomness must be seeded and explicit.
 
 ## Consequences
 
 Positive:
+- deterministic behavior;
+- reproducible bugs;
+- stable tests;
+- rendering can vary independently.
 
-- reproducibility;
-- deterministic tests;
-- stable saves;
-- clearer time acceleration.
+Constraint:
+- systems must not rely on frame rate for simulation behavior.
 
-Cost:
+## Alternatives Considered
 
-- the engine must manage tick accumulation and speed control explicitly.
-
-## Related
-
-- `docs/04-ARCHITECTURE.md`
-- `docs/05-SIMULATION.md`
-- `docs/VALIDATION.md`
+Frame-dependent simulation was rejected because it reduces determinism and makes behavior dependent on rendering performance.

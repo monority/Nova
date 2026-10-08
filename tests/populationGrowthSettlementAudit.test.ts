@@ -342,7 +342,9 @@ describe('1. Current causal model and where the loops stop', { timeout: 30000 },
     expect(first.staffedFarms).toBe(1)
     expect(first.staffedWorkshops).toBe(0)
     expect(settled.population).toBe(2)
-    expect(settled.materialNet).toBe(0)
+    // Step001: revenue 4 (2 taxes + 2 commerce) − maintenance 5 = −1: the
+    // balanced reference colony bleeds money under the validated baseline.
+    expect(settled.materialNet).toBe(-1)
   })
 
   it('measures the housing / Water capacity / food tri-limit on admission', () => {
@@ -468,7 +470,9 @@ describe('2. Population scaling', { timeout: 30000 }, () => {
       const end = row.horizons[row.horizons.length - 1]
       if (end === undefined) throw new Error('10af: missing horizon')
       expect(end.pop).toBe(row.population)
-      expect(end.matGross).toBe(0) // the Workshop never wins a worker
+      // Step001: revenue is staffing-independent — 1 tax per colonist plus
+      // 2 commerce from the connected (vacant or staffed) Workshop.
+      expect(end.matGross).toBe(row.population + 2)
       expect(row.workplaces).toBeGreaterThanOrEqual(row.population)
       // A self-balanced colony never accumulates Water or Food surplus.
       expect(end.waterNet).toBeLessThanOrEqual(1)
@@ -614,13 +618,15 @@ describe('4. Population vs workforce ratios', { timeout: 30000 }, () => {
     const byName = (name: string) =>
       (rows as { config: string; stable: boolean; at600: Snapshot }[]).find((row) => row.config === name)
     // Measured law (600 ticks): a configuration is EITHER population-stable
-    // and Food-balanced with zero industry, OR industrial with a permanent
-    // Food deficit. There is no configuration that is both.
+    // and Food-balanced, OR industrial with a permanent Food deficit. Under
+    // Step001 both bleed money: the connected Workshop earns commerce but
+    // every operational building pays maintenance, so the net flow is
+    // exactly workshops − wells − farms per tick.
     let stableCount = 0
-    for (const row of rows as { stable: boolean; at600: Snapshot }[]) {
+    for (const row of rows as { stable: boolean; at600: Snapshot; wells: number; farms: number; workshops: number }[]) {
       if (row.stable) {
         stableCount += 1
-        expect(row.at600.materialNet).toBe(0)
+        expect(row.at600.materialNet).toBe(row.workshops - row.wells - row.farms)
         expect(row.at600.staffedWorkshops).toBe(0)
       } else {
         expect(row.at600.foodNet).toBeLessThan(0)
@@ -628,7 +634,7 @@ describe('4. Population vs workforce ratios', { timeout: 30000 }, () => {
       }
     }
     expect(stableCount).toBe(3)
-    expect(byName('2P/1F/1Ws')?.at600.materialNet).toBe(0)
+    expect(byName('2P/1F/1Ws')?.at600.materialNet).toBe(-1)
     expect(byName('6P/1F/3Ws')?.at600.foodNet).toBeLessThan(0)
   })
 })

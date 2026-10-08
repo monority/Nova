@@ -713,7 +713,8 @@ describe('3-8. Stage transition audit', { timeout: 30000 }, () => {
     })
     expect(villageScale.foodNet).toBe(0)
     expect(villageScale.waterNet).toBe(0)
-    expect(villageScale.materialNet).toBe(0)
+    // Step001: 2 tax − 4 upkeep (2 residences + farm + well) = −2.
+    expect(villageScale.materialNet).toBe(-2)
   })
 })
 

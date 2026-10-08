@@ -61,11 +61,13 @@ describe('road access production constraint (Step 09F)', () => {
   it('A — staffed + road access produces normally', () => {
     const state = staffedWorkshopWithRoad()
     expect(commerceRevenueForTick(state)).toBe(2)
-    expect(getRevenuePerTick(state)).toBe(2)
+    // Step001: revenue = taxes (1 colonist × 1) + commerce (1 connected
+    // Workshop × 2) = 3.
+    expect(getRevenuePerTick(state)).toBe(3)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(true)
   })
 
-  it('B — no mobility connection: worker not assigned, production 0, no upkeep (09K gate)', () => {
+  it('B — no mobility connection: worker not assigned, commerce 0, taxes still flow (09K gate)', () => {
     const state = staffedWorkshopNoRoad()
     const workshop = state.buildings['building-2']!
     expect(workshop.status).toBe('operational')
@@ -74,8 +76,11 @@ describe('road access production constraint (Step 09F)', () => {
     // no longer applies.
     expect(countWorkersAtSafe(state, 'building-2')).toBe(0)
     expect(commerceRevenueForTick(state)).toBe(0)
-    expect(getRevenuePerTick(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
+    // Step001: no commerce (no road), but the resident colonist still pays
+    // taxes (1), and upkeep is per operational building — it applies to the
+    // roadless Workshop + Residence regardless of employment.
+    expect(getRevenuePerTick(state)).toBe(1)
+    expect(maintenanceDueForTick(state)).toBe(2)
     expect(getBuildingRoadAccess(state, 'building-2').hasRoadAccess).toBe(false)
     // No persisted mutation: the workshop exists exactly as before.
     expect(workshop.constructionRemaining).toBe(0)
@@ -161,16 +166,17 @@ describe('road access production constraint (Step 09F)', () => {
     expect(commerceRevenueForTick(state)).toBe(0)
   })
 
-  it('I — 09K mobility gate: no worker means no upkeep for roadless workshops', () => {
+  it('I — 09K mobility gate: no worker means no commerce, upkeep still applies', () => {
     const state = staffedWorkshopNoRoad()
-    // Under 09K, no mobility connection means no worker, so upkeep is 0.
-    expect(maintenanceDueForTick(state)).toBe(0)
-    expect(getMaintenanceDuePerTick(state)).toBe(0)
+    // Step001: no mobility connection means no worker and no commerce, but
+    // upkeep is per operational building (Residence + Workshop = 2).
+    expect(maintenanceDueForTick(state)).toBe(2)
+    expect(getMaintenanceDuePerTick(state)).toBe(2)
     const before = state.resources.money
     const after = stepSimulation(state)
-    // No production, no upkeep: stock untouched by material flows.
-    expect(after.resources.money).toBe(before)
-    expect(getMaintenanceDuePerTick(after)).toBe(0)
+    // Revenue 1 (tax) − upkeep 2 = −1 per tick while roadless.
+    expect(after.resources.money).toBe(before + 1 - 2)
+    expect(getMaintenanceDuePerTick(after)).toBe(2)
   })
 
   it('J — storage mechanics (08F) unchanged with road access', () => {
@@ -179,23 +185,23 @@ describe('road access production constraint (Step 09F)', () => {
     const clamped = { ...state, resources: { ...state.resources, money: 25 } }
     expect(commerceRevenueForTick(clamped)).toBe(2)
     const storedClamped = stepSimulation(clamped)
-    // Step 10CQ.1: stored 0 + income 2 − upkeep 1 = 26.
-    expect(storedClamped.resources.money).toBe(25 + 2 - 1)
-    // Stock 24: 1 stored + 2 income − 1 upkeep = 26 (the 08F clamp still
-    // allows exactly one unit of production into the last free space).
+    // Step001: income 3 (tax 1 + commerce 2) − upkeep 2 = 26. No separate
+    // storage add: money = stock + revenue − upkeep.
+    expect(storedClamped.resources.money).toBe(25 + 3 - 2)
+    // Stock 24: same net (+1) — the 08F storage clamp does not apply to the
+    // money stock (24 + 3 − 2 = 25).
     const equilibrium = { ...state, resources: { ...state.resources, money: 24 } }
     const after = stepSimulation(equilibrium)
-    expect(after.resources.money).toBe(26)
+    expect(after.resources.money).toBe(25)
   })
 
   it('K — construction flow unchanged: costs, ticks, progress', () => {
     const state = staffedWorkshopWithRoad()
     const before = state.resources.money
     const after = stepSimulation(state, place('farm', 0, 7))
-    // Cost 25 + same-tick upkeep 1 − Step 10CQ income 2 deducted regardless
-    // of roads (production is clamped to 0 here: stock above cap 25). Farm
-    // under construction.
-    expect(after.resources.money).toBe(before - 25 - 1 + 2)
+    // Cost 25, same-tick net +1 (income 3 − upkeep 2): before − 25 + 3 − 2.
+    // Farm under construction.
+    expect(after.resources.money).toBe(before - 25 + 3 - 2)
     const placed = Object.values(after.buildings).find((b) => b.type === 'farm')!
     expect(placed.status).toBe('underConstruction')
   })
@@ -209,7 +215,7 @@ describe('road access production constraint (Step 09F)', () => {
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
     expect(getBuildingRoadAccess(loaded, 'building-2')).toEqual(before)
     expect(commerceRevenueForTick(loaded)).toBe(productionBefore)
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 
   it('M — determinism: identical runs produce identical states and production', () => {

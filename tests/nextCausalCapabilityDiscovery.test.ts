@@ -489,10 +489,11 @@ describe('2. the Town problem', () => {
     )
     expect(village.stage).toBe('village')
     expect(cityLike.stage).toBe('village')
-    // Identical flow STRUCTURE: same per-colonist Food and Water, same zero
-    // Material income, same stage. Only the quantities differ.
-    expect(village.materialPerTick).toBe(0)
-    expect(cityLike.materialPerTick).toBe(0)
+    // Identical flow STRUCTURE: same per-colonist Food and Water, same
+    // per-capita tax revenue (1/colonist, no Workshops → no commerce), same
+    // stage. Only the quantities differ.
+    expect(village.materialPerTick).toBe(village.population)
+    expect(cityLike.materialPerTick).toBe(cityLike.population)
   })
 })
 
@@ -915,12 +916,11 @@ describe('7. candidate E: production timing', () => {
       return { ticks, material: settled.material, materialPerTick: settled.materialPerTick }
     })
     audit('STORAGE_CLAMP', rows)
-    // Workshop-only income: the lone colonist staffs the nearer Farm, so the
-    // Workshop stays vacant — no production, no income, nothing accrues at
-    // any horizon. The clamp bounds Workshop production; without a staffed
-    // Workshop there is no Material inflow at all.
+    // Step001: the vacant (connected) Workshop still earns commerce —
+    // revenue 3 (1 tax + 2 commerce) exactly offsets maintenance 3, so the
+    // stock rests at 0 at every horizon while the flow itself is nonzero.
     expect(rows.map((row) => row.material)).toEqual([0, 0, 0])
-    expect(rows.every((row) => row.materialPerTick === 0)).toBe(true)
+    expect(rows.every((row) => row.materialPerTick === 3)).toBe(true)
   })
 })
 

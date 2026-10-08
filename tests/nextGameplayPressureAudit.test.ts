@@ -127,10 +127,12 @@ describe('Step 10CA — current gameplay pressure map', () => {
     const wellState = settlement(4, ['well', 'workshop', 'farm', 'farm', 'well'])
     const wellHeavy = move(wellState, 'workshop', 'well')
     expect(metrics(farmHeavy).foodRate).toBeGreaterThan(before.foodRate)
-    expect(metrics(farmHeavy).materialRate).toBeLessThan(before.materialRate)
+    // Step001: revenue is staffing-independent, so either move costs NO
+    // revenue — the trade-off is production mix, not money flow.
+    expect(metrics(farmHeavy).materialRate).toBe(before.materialRate)
     expect(metrics(wellHeavy).waterRate).toBeGreaterThan(metrics(wellState).waterRate)
-    expect(metrics(wellHeavy).materialRate).toBeLessThan(metrics(wellState).materialRate)
-    expect(metrics(move(farmHeavy, 'farm', 'workshop')).materialRate).toBe(before.materialRate)
+    expect(metrics(wellHeavy).materialRate).toBe(metrics(wellState).materialRate)
+    expect(metrics(move(farmHeavy, 'farm', 'workshop')).foodRate).toBe(before.foodRate)
   })
 
   it('measures multi-tick trajectories and distinguishes rates from stocks', () => {
@@ -139,9 +141,11 @@ describe('Step 10CA — current gameplay pressure map', () => {
     const later = metrics(advance(state, 12))
     expect(later.foodStock).toBeLessThanOrEqual(first.foodStock)
     expect(later.waterStock).toBeLessThanOrEqual(first.waterStock)
-    // Step 10CQ.1: Material is no longer flat — employment income exceeds
-    // upkeep, so the stock grows while the production/upkeep RATES stay equal.
-    expect(later.materialStock).toBeGreaterThan(first.materialStock)
+    // Step001 baseline pressure: revenue 6 (4 taxes + 2 commerce) is below
+    // maintenance 9 (4 residences + 5 workplaces), so the treasury BLEEDS
+    // while the production/upkeep RATES stay flat. The stock is the
+    // measured pressure, not a growth story.
+    expect(later.materialStock).toBeLessThan(first.materialStock)
     expect(later.foodRate).toBe(first.foodRate)
     expect(later.waterRate).toBe(first.waterRate)
     expect(later.materialRate).toBe(first.materialRate)

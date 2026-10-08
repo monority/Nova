@@ -405,17 +405,17 @@ describe('2 — baseline rules', () => {
     expect(collectRevenue(rich).resources.money).toBe(100000 + r.revenue)
   })
 
-  it('reproduces the post-cap accumulation at 97 x W after 80 ticks (Step 10CQ.1)', () => {
+  it('reproduces the uncapped accumulation at 80 x W after 80 ticks (Step001)', () => {
     const equilibria = [1, 2, 3].map((w) => {
       const start = rowWorld({ residences: w, farms: 0, workshops: w, material: 0, food: 4000 })
       const final = advance(start, 80).resources.money
       return { W: w, equilibrium: final, maintenance: maintenanceDueForTick(start) }
     })
     audit('BASELINE_EQUILIBRIUM', equilibria)
-    // Step 10CQ.1 (per Workshop): +3/tick (2 stored + 2 income − 1 upkeep)
-    // up to 24 at t8, one clamp tick reaches 26 at t9, then +1/tick
-    // (income − upkeep): 26 + 71 = 97 after 80 ticks, linear in W.
-    expect(equilibria.map((e) => e.equilibrium)).toEqual([97, 194, 291])
+    // Step001: no stored production exists — each tick adds revenue minus
+    // maintenance. R=W=w colonies net +w/tick from 0: 80 after 80 ticks,
+    // linear in W, with no cap and no clamp tick.
+    expect(equilibria.map((e) => e.equilibrium)).toEqual([80, 160, 240])
   })
 })
 
@@ -540,7 +540,10 @@ describe('4 — worker opportunity cost', () => {
       },
       delta,
     })
-    expect(delta).toEqual({ food: 2, materialGross: -2, materialNet: -1, maintenance: -1 })
+    // Step001: the move changes Food only. Both worlds run the same 5
+    // buildings (same 5 maintenance); the workshop earns its 2 commerce
+    // connected whether staffed or vacant, so treasury deltas are all 0.
+    expect(delta).toEqual({ food: 2, materialGross: 0, materialNet: 0, maintenance: 0 })
   })
 
   it('measures the reverse move Farm -> Workshop', () => {
@@ -554,7 +557,8 @@ describe('4 — worker opportunity cost', () => {
         (atFarm.commerce - atFarm.totalMaintenance),
     }
     audit('WORKER_MOVE_FARM_TO_WORKSHOP', delta)
-    expect(delta).toEqual({ food: -2, materialGross: 2, materialNet: 1 })
+    // Step001: symmetric — Food moves, treasury does not.
+    expect(delta).toEqual({ food: -2, materialGross: 0, materialNet: 0 })
   })
 
   it('the move is observable in the 60-tick stock trajectories', () => {
@@ -638,7 +642,22 @@ describe('6 — Material bottleneck', () => {
       }
     })
     audit('MATERIAL_BOTTLENECK', rows)
-    for (const row of rows) expect(row.ticksTo25).not.toBeNull()
+    // Step001 money: net = W - F, so only 1F+2W accumulates (+1/tick ->
+    // equilibrium 240); every other shape sits flat or drains to 0 and
+    // never reaches the 25 crest.
+    const expected: Record<string, { ticksTo25: number | null; equilibrium: number }> = {
+      '1F+1W': { ticksTo25: null, equilibrium: 0 },
+      '1F+2W': { ticksTo25: 19, equilibrium: 240 },
+      '2F+1W': { ticksTo25: null, equilibrium: 0 },
+      '2F+2W': { ticksTo25: null, equilibrium: 0 },
+      '3F+1W': { ticksTo25: null, equilibrium: 0 },
+      '3F+2W': { ticksTo25: null, equilibrium: 0 },
+    }
+    for (const row of rows as { scenario: string; ticksTo25: number | null; equilibrium: number }[]) {
+      const want = expected[row.scenario]!
+      expect(row.ticksTo25).toBe(want.ticksTo25)
+      expect(row.equilibrium).toBe(want.equilibrium)
+    }
   })
 
   it('confirms Material is developmental and Food is survival-only', () => {
@@ -651,7 +670,9 @@ describe('6 — Material bottleneck', () => {
       foodUses: ['population admission', 'starvation gate'],
       materialUses: ['building construction'],
     })
-    expect(before).toBe(1)
+    // Step001: the balanced colony nets exactly 0 (revenue 4 vs upkeep 4)
+    // — money is developmental the same way, but nothing accumulates here.
+    expect(before).toBe(0)
   })
 })
 
@@ -857,11 +878,14 @@ describe('10 — terminal states (baseline)', () => {
     }
     audit('TERMINAL_FOOD_ZERO', out)
     // Every mandated config is Farm-rich enough (2 Food per Farm >= pop/2) that
-    // production precedes consumption and covers the need even from Food 0.
+    // production precedes consumption and covers the need even from Food 0 —
+    // so the population survives everywhere. The treasury does not follow:
+    // nets are W - F <= 0 across these shapes, so every materialEnd is 0.
+    // Survival without accumulation is the money-model terminal picture.
     for (const config of configs) {
       const entry = out[config.name] as { populationEnd: number; materialEnd: number }
       expect(entry.populationEnd).toBeGreaterThan(0)
-      expect(entry.materialEnd).toBeGreaterThan(0)
+      expect(entry.materialEnd).toBe(0)
     }
   })
 
@@ -880,7 +904,7 @@ describe('10 — terminal states (baseline)', () => {
     expect(trace.records[119]!.population).toBe(0)
   })
 
-  it('Material 0 / Food 1000 recovers whenever a Workshop is staffed', () => {
+  it('Material 0 / Food 1000 never recovers at W <= F under money (poverty trap)', () => {
     const out: Record<string, unknown> = {}
     for (const config of configs) {
       const start = rowWorld({ residences: config.farms + config.workshops, farms: config.farms, workshops: config.workshops, material: 0, food: 4000 })
@@ -894,8 +918,12 @@ describe('10 — terminal states (baseline)', () => {
       }
     }
     audit('TERMINAL_MATERIAL_ZERO', out)
+    // Step001: nets are W - F <= 0 for every config here, so a 0 treasury
+    // holds at 0 for 120 ticks — workshops staffed or not. Recovery needs
+    // net > 0 (W > F); none of these shapes qualify.
     for (const config of configs) {
-      expect((out[config.name] as { recovered: boolean }).recovered).toBe(true)
+      const entry = out[config.name] as { recovered: boolean }
+      expect(entry.recovered).toBe(false)
     }
   })
 
@@ -1075,25 +1103,24 @@ describe('12 — counterfactual expansion strategies', () => {
       }
     }
     audit('EXPANSION_STRATEGIES', out)
-    // Build order matters — the original finding is restored by Workshop-only
-    // income: C (Farm, Farm, Workshop, Workshop) stalls because the two Farms
-    // claim both workers, the Workshop is built but never staffed, and with no
-    // staffed Workshop there is no Material income at all to pay for roads +
-    // the fourth building. A, B and D finish, but later and leaner than under
-    // the obsolete generic-income model.
-    expect(out['A']).toMatchObject({ placementTicks: [0, 1, 3, 9], materialEnd: 264 })
-    expect(out['B']).toMatchObject({ placementTicks: [0, 1, 3, 9], materialEnd: 264 })
+    // Step001 money: build order decides COMPLETION, not speed. Workshop
+    // plans (B, D) finish all four builds (treasury refills between the 25
+    // costs); farm-first plans stall when the treasury cannot fund the 4th
+    // building (A: 3 builds, end 0; C: 3 builds, workshops never staffed).
+    // D (workshops first) completes fastest, at tick 14 vs 18 for B.
+    expect(out['A']).toMatchObject({ placementTicks: [0, 1, 3, null], materialEnd: 0 })
+    expect(out['B']).toMatchObject({ placementTicks: [0, 1, 3, 18], materialEnd: 1 })
     const c = out['C'] as { placementTicks: (number | null)[]; materialEnd: number; staffedWorkshops: number; staffedFarms: number }
     expect(c.placementTicks).toEqual([0, 1, 3, null])
-    expect(c.materialEnd).toBe(5)
+    expect(c.materialEnd).toBe(0)
     expect(c.staffedWorkshops).toBe(0)
     expect(c.staffedFarms).toBe(2)
     // The finished strategies diverge in staffing and Material too.
     const ends = Object.values(out).map((v) => (v as { materialEnd: number }).materialEnd)
     expect(new Set(ends).size).toBeGreaterThan(1)
-    expect((out['D'] as { placementTicks: number[]; staffedFarms: number; materialEnd: number }).placementTicks).toEqual([0, 1, 3, 5])
+    expect((out['D'] as { placementTicks: number[]; staffedFarms: number; materialEnd: number }).placementTicks).toEqual([0, 1, 3, 14])
     expect((out['D'] as { staffedFarms: number }).staffedFarms).toBe(0)
-    expect((out['D'] as { materialEnd: number }).materialEnd).toBe(502)
+    expect((out['D'] as { materialEnd: number }).materialEnd).toBe(1)
     // Food evidence: C (two Farms) ends food-rich, D (two Workshops) food-poor.
     expect((out['C'] as { foodEnd: number }).foodEnd).toBeGreaterThan(
       (out['D'] as { foodEnd: number }).foodEnd
@@ -1124,19 +1151,33 @@ describe('13 — storage and construction pressure', () => {
       }
     }
     audit('STORAGE_CONSTRUCTION', rows)
-    // Workshop-only income: the cap (25 × W) still bounds stored production,
-    // and above it the stock drifts at exactly W/tick (2W Workshop income −
-    // W upkeep). Farm count contributes nothing to Material.
+    // Step001 money (no storage cap anywhere): equilibrium after 200 ticks
+    // is 200 x max(0, W - F), growthPerTick is max(0, W - F), and only
+    // surplus-workshop shapes ever reach the 25 crest (1F+2W at t19,
+    // 1F+3W at t9, 2F+3W at t15).
+    const expectedStorage: Record<string, { equilibrium: number; growthPerTick: number; ticksTo25: number | null }> = {
+      '1x1': { equilibrium: 0, growthPerTick: 0, ticksTo25: null },
+      '2x1': { equilibrium: 0, growthPerTick: 0, ticksTo25: null },
+      '3x1': { equilibrium: 0, growthPerTick: 0, ticksTo25: null },
+      '1x2': { equilibrium: 200, growthPerTick: 1, ticksTo25: 19 },
+      '2x2': { equilibrium: 0, growthPerTick: 0, ticksTo25: null },
+      '3x2': { equilibrium: 0, growthPerTick: 0, ticksTo25: null },
+      '1x3': { equilibrium: 400, growthPerTick: 2, ticksTo25: 9 },
+      '2x3': { equilibrium: 200, growthPerTick: 1, ticksTo25: 15 },
+      '3x3': { equilibrium: 0, growthPerTick: 0, ticksTo25: null },
+    }
     for (const row of rows as {
       farms: number
       workshops: number
       equilibrium: number
       growthPerTick: number
+      ticksTo25: number | null
       storage: number
     }[]) {
-      expect(row.storage).toBe(25 * row.workshops)
-      expect(row.equilibrium).toBeGreaterThan(24 * row.workshops)
-      expect(row.growthPerTick).toBe(row.workshops)
+      const want = expectedStorage[`${row.farms}x${row.workshops}`]!
+      expect(row.equilibrium).toBe(want.equilibrium)
+      expect(row.growthPerTick).toBe(want.growthPerTick)
+      expect(row.ticksTo25).toBe(want.ticksTo25)
     }
   })
 
@@ -1159,8 +1200,8 @@ describe('13 — storage and construction pressure', () => {
 // ---------------------------------------------------------------------------
 
 describe('16 — persistence and determinism', () => {
-  it('SAVE_VERSION 4, no persisted Farm upkeep, deterministic replay', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('SAVE_VERSION 9, no persisted Farm upkeep, deterministic replay', () => {
+    expect(SAVE_VERSION).toBe(9)
     const state = rowWorld({ residences: 5, farms: 3, workshops: 3, material: 5 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
@@ -1186,7 +1227,7 @@ describe('16 — persistence and determinism', () => {
     audit('INSERTION_ORDER', { identical: true })
   })
 
-  it('HUD exposes Workshop upkeep only (no Farm upkeep exists to report)', () => {
+  it('HUD exposes money maintenance over all buildings (Step001)', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 10 })
     const farm = Object.values(state.buildings).find((b) => b.type === 'farm')!
     audit('UI_INFORMATION', {
@@ -1196,6 +1237,6 @@ describe('16 — persistence and determinism', () => {
       farmInspectionHasUpkeep: getBuildingInspection(state, farm.id) !== null && 'upkeep' in (getBuildingInspection(state, farm.id) as object),
       workerAtFarm: countWorkersAt(state, farm.id),
     })
-    expect(getMaintenanceDuePerTick(state)).toBe(2)
+    expect(getMaintenanceDuePerTick(state)).toBe(8)
   })
 })

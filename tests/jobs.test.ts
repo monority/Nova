@@ -348,14 +348,20 @@ describe('deterministic job assignment (Step 07C §4)', () => {
 })
 
 describe('construction material production (Step 07C §6-§8)', () => {
-  it('produces nothing with zero workers', () => {
+  it('produces nothing with zero workers, upkeep on the residence', () => {
     const state = colonistState()
     expect(commerceRevenueForTick(state)).toBe(0)
-    expect(getRevenuePerTick(state)).toBe(0)
-    expect(collectRevenue(state)).toBe(state)
+    // Step001: no workshop, but the resident pays 1 tax.
+    expect(getRevenuePerTick(state)).toBe(1)
+    // Revenue is positive, so collection returns a funded copy (+1 tax).
+    expect(collectRevenue(state).resources.money).toBe(
+      state.resources.money + 1
+    )
+    // Step001: no workshop, but the residence still owes 1 maintenance.
+    expect(maintenanceDueForTick(state)).toBe(1)
   })
 
-  it('an operational workshop with no worker produces nothing', () => {
+  it('an operational workshop with no worker earns nothing, still owes upkeep', () => {
     let state = stepSimulation(withWorkshopWater(createTestState()), place('workshop', 1, 1))
     state = stepSimulation(state) // Step 10Y: 1 construction tick left
     state = stepSimulation(state) // operational
@@ -363,33 +369,33 @@ describe('construction material production (Step 07C §6-§8)', () => {
     expect(commerceRevenueForTick(state)).toBe(0)
     expect(collectRevenue(state)).toBe(state)
     const after = stepSimulation(state)
-    expect(getResourceStock(after).money).toBe(75)
+    // Step001: 75 build remainder, unconnected so no commerce: t3 lands 74,
+    // t4 (after) lands 73.
+    expect(getResourceStock(after).money).toBe(73)
   })
 
-  it('one worker produces gross +2, stored subject to workshop storage', () => {
+  it('one worker: connected commerce +2, upkeep 2 over both buildings, net +1', () => {
     const state = workshopState()
-    // Gross production is still 2/worker; upkeep due is still 1.
     expect(commerceRevenueForTick(state)).toBe(2)
-    expect(maintenanceDueForTick(state)).toBe(1)
+    // Step001: residence + workshop both pay.
+    expect(maintenanceDueForTick(state)).toBe(2)
     expect(getNetMoneyPerTick(state)).toBe(1)
-    // Step 08F: workshopState carries bootstrap stock (51: 50 bootstrap − 1
-    // upkeep + 2 Step 10CQ income) above the single-workshop capacity (25),
-    // so nothing is stored this tick.
+    // Step001: no cap exists — the revenue query returns commerce (2) at
+    // any balance; it is no longer a storable share.
     const before = getResourceStock(state).money
-    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    expect(getCommerceRevenuePerTick(state)).toBe(2)
     const after = stepSimulation(state)
-    // Step 10CQ.1: above the cap nothing is stored; income +2, upkeep −1.
+    // Step001: revenue 3 (1 tax + 2 commerce) minus upkeep 2: +1.
     expect(getResourceStock(after).money).toBe(before + 1)
     expect(getResourceStock(after).food).toBe(getResourceStock(state).food - 1)
-    // Below capacity the full gross inflow is stored: 0 + 2 stored + 2 income
-    // − 1 upkeep = 3.
+    // From an empty stock the same tick nets revenue 3 minus upkeep 2.
     const empty = withMoney(state, 0)
     expect(getCommerceRevenuePerTick(empty)).toBe(2)
     const recovered = stepSimulation(empty)
-    expect(getResourceStock(recovered).money).toBe(3)
+    expect(getResourceStock(recovered).money).toBe(1)
   })
 
-  it('multiple workers add linearly', () => {
+  it('multiple workers add commerce linearly; upkeep counts every building', () => {
     let state = twoWorkshopState() // 1 colonist, 2 workshops
     state = stepSimulation(state, place('residence', 0, 0)) // t10
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
@@ -397,13 +403,13 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = stepSimulation(state) // t12: second colonist admitted and employed
     expect(getEmploymentSummary(state).employed).toBe(2)
     expect(commerceRevenueForTick(state)).toBe(4)
-    // Step 08C: two staffed Workshops pay 2 upkeep, net +2.
-    expect(maintenanceDueForTick(state)).toBe(2)
+    // Step001: 2 residences + 2 workshops pay 4 upkeep (net +2 with
+    // revenue 2 taxes + 4 commerce = 6).
+    expect(maintenanceDueForTick(state)).toBe(4)
     expect(getNetMoneyPerTick(state)).toBe(2)
     const before = getResourceStock(state).money
     const after = stepSimulation(state)
-    // Step 10CQ.1 (below the 50 cap): 4 stored + 4 income − 2 upkeep = +6.
-    expect(getResourceStock(after).money).toBe(before + 6)
+    expect(getResourceStock(after).money).toBe(before + 2)
   })
 
   it('a newly operational workshop is staffed and produces the same tick', () => {
@@ -415,10 +421,9 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = stepSimulation(state) // t6: operational this tick
     expect(state.buildings['building-2']?.status).toBe('operational')
     expect(state.colonists['colonist-1']?.workplaceId).toBe('building-2')
-    // Step 08C: same-tick production (+2) pays same-tick upkeep (−1).
-    // Step 08F: the bootstrap stock (50) already covers the new 25
-    // capacity, so stored production is 0. Step 10CQ.1: income +2.
-    expect(getCommerceRevenuePerTick(state)).toBe(0)
+    // Step001: same-tick commerce (+2, connected from completion) with no
+    // cap; revenue 3 minus upkeep 2 nets the +1 measured below.
+    expect(getCommerceRevenuePerTick(state)).toBe(2)
     expect(getResourceStock(state).money).toBe(before + 1)
   })
 
@@ -443,13 +448,12 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = stepSimulation(state) // t12: colonist-2 admitted this tick
     expect(Object.keys(state.colonists)).toHaveLength(2)
     expect(state.colonists['colonist-2']?.workplaceId).toBe('building-3')
-    // Step 08C: two staffed Workshops produce +4 and pay 2 upkeep (net +2).
-    // Step 10CQ.1: below the cap the admission tick adds 4 stored + 4 income
-    // − 2 upkeep = +6.
-    expect(getResourceStock(state).money).toBe(beforeAdmission + 6)
+    // Step001: two staffed Workshops earn 4 commerce + 2 taxes = 6 revenue
+    // against 4 upkeep (2 residences + 2 workshops): +2 on the tick.
+    expect(getResourceStock(state).money).toBe(beforeAdmission + 2)
   })
 
-  it('starvation removes the worker before production: no death-tick material', () => {
+  it('starvation removes the worker before production: no death-tick food, treasury nets zero', () => {
     const state = withFood(workshopState(), 0)
     const materialBefore = getResourceStock(state).money
     expect(getEmploymentSummary(state).employed).toBe(1)
@@ -457,7 +461,9 @@ describe('construction material production (Step 07C §6-§8)', () => {
     expect(Object.keys(after.colonists)).toHaveLength(0)
     expect(getResourceStock(after).food).toBe(0)
     expect(getEmploymentSummary(after).employed).toBe(0)
-    expect(getRevenuePerTick(after)).toBe(0)
+    // Step001: the vacant but connected workshop still earns 2 commerce
+    // against 2 maintenance — the death tick nets zero either way.
+    expect(getRevenuePerTick(after)).toBe(2)
     expect(getResourceStock(after).money).toBe(materialBefore)
   })
 
@@ -467,7 +473,9 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = withFood(state, 0)
     const after = stepSimulation(state)
     expect(Object.keys(after.colonists)).toHaveLength(0)
-    expect(getResourceStock(after).money).toBe(75)
+    // Step001: no colonists, no taxes, unconnected workshop (no roads here)
+    // earns nothing; the lone building still owes 1: 75 - 1 = 74.
+    expect(getResourceStock(after).money).toBe(74)
     expect(commerceRevenueForTick(after)).toBe(0)
   })
 
@@ -613,8 +621,8 @@ describe('employment render projection (Step 07C §13)', () => {
 })
 
 describe('jobs persistence (Step 07C §10)', () => {
-  it('bumps the save version to 4', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('bumps the save version to 9', () => {
+    expect(SAVE_VERSION).toBe(9)
   })
 
   it('round-trips employment state with hash and behavioral equivalence', () => {
@@ -724,7 +732,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
     const state = twoColonistState()
     getFoodTicksRemaining(state)
     isFoodSupplySustainable(state)
-    expect(Object.keys(state.resources).sort()).toEqual(['construction', 'food', 'water'])
+    expect(Object.keys(state.resources).sort()).toEqual(['food', 'money', 'water'])
     expect(Object.keys(state).sort()).toEqual([
       'buildings',
       'colonists',

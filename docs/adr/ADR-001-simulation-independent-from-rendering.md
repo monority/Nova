@@ -6,46 +6,25 @@ Accepted
 
 ## Context
 
-NOVA combines a deep simulation with a 3D visual presentation.
-
-Coupling simulation rules to React or Three.js would make deterministic testing, save/load, debugging and future performance work harder.
+NOVA requires deterministic simulation, testability and independent rendering.
 
 ## Decision
 
-The simulation is an independent domain layer.
+The simulation/domain layer must not depend on React, Three.js, DOM APIs or rendering lifecycle.
 
-React and Three.js consume simulation/application data and do not own canonical simulation state.
-
-## Alternatives Considered
-
-### Rendering-owned state
-
-Rejected because simulation behavior would become coupled to frame rate and presentation.
-
-### React global state as simulation source of truth
-
-Rejected because domain behavior would become coupled to UI lifecycle.
-
-### Full ECS from the beginning
-
-Deferred because MVP evidence does not justify the complexity.
+Rendering consumes simulation state.
 
 ## Consequences
 
 Positive:
-
-- deterministic simulation;
-- easier unit testing;
-- easier save/load;
-- independent render rate;
+- deterministic tests;
+- easier headless simulation;
+- renderer can evolve independently;
 - clearer architecture.
 
-Cost:
+Constraint:
+- rendering-specific behavior must not become a hidden source of simulation state.
 
-- explicit boundaries between simulation and presentation;
-- render snapshots/selectors may be required.
+## Alternatives Considered
 
-## Related
-
-- `docs/04-ARCHITECTURE.md`
-- `docs/05-SIMULATION.md`
+Coupling simulation directly to scene objects was rejected because it increases coupling and makes deterministic testing harder.

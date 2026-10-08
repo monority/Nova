@@ -109,7 +109,10 @@ describe('Step 10BO — concrete scale-pressure measurement', () => {
     const rows = [2, 3, 4, 5, 6, 8, 10].map((population) => ({ ...metrics(colony(population)), population }))
     for (const row of rows) {
       expect(row.foodNet).toBeGreaterThanOrEqual(0)
-      expect(row.materialNet).toBeGreaterThanOrEqual(0)
+      // Step001: no Workshop → no commerce; taxes P vs maintenance
+      // P + 2·ceil(P/2) — the balanced workshop-less colony bleeds exactly
+      // 2·ceil(P/2) per tick under the validated baseline.
+      expect(row.materialNet).toBe(-2 * Math.ceil(row.population / 2))
       expect(row.stage).toBe('village')
     }
     expect(rows.find((row) => row.population === 2)?.waterCapacity).toBe(2)
@@ -140,7 +143,8 @@ describe('Step 10BO — concrete scale-pressure measurement', () => {
     const start = colony(4)
     const sites = [...iterateBuildings(start)].filter((b) => b.type === 'residence').length
     expect(sites).toBe(4)
-    expect(getRevenuePerTick(start)).toBe(0)
+    // Step001: taxes only (no Workshop) — 4 colonists earn 4/tick.
+    expect(getRevenuePerTick(start)).toBe(4)
     expect(start.resources.money).toBe(1000)
   })
 })

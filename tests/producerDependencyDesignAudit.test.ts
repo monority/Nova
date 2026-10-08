@@ -534,18 +534,16 @@ describe('§3 — counterfactual matrix', () => {
     })
     audit('MATRIX_WORKSHOP_WATER', {
       rows,
-      note: 'all-or-nothing: with 0 Water the staffed Workshop runs idle (no Material production, no upkeep); its Farm/Well coworkers still earn Step 10CQ income',
+      note: 'all-or-nothing: with 0 Water the staffed Workshop runs idle; money flow is input-independent under Step001 (commerce follows the connection), so the paid run stays healthy only because it starts funded',
     })
     expect((rows['sufficientInput'] as Reading).material).toBeGreaterThan(0)
     // Step001: the gate idles the Workshop worker, but employment mints
-    // nothing anymore — the stock after one tick is taxes (3 inhabitants)
-    // plus any connected-Workshop commerce, minus maintenance for the
-    // standing buildings. Here revenue (5) is fully absorbed by
-    // maintenance (6, clamped to the 5 available): the treasury stays 0.
+    // nothing anymore — the depleted run's treasury stays clamped at 0
+    // (revenue 5 vs maintenance 6) while the funded run keeps its reserve.
     expect((rows['depletedInput'] as Reading).staffedWorkshops).toBe(0)
     expect((rows['depletedInput'] as Reading).material).toBe(0)
     expect((rows['depletedInput'] as Reading).material).toBeLessThan(
-      (rows['noInput'] as Reading).material
+      (rows['sufficientInput'] as Reading).material
     )
   })
 
@@ -746,6 +744,9 @@ describe('§5 — recovery and deadlock', () => {
     // Reachable state: population = Water capacity - 1 (the 10S gate's own
     // maximum), one staffed Workshop, one staffed Well. Net Water per tick is
     // exactly the Workshop's demand, so the plant alternates paid/unpaid.
+    // Money 25 seeds the treasury: the Step001 net (revenue 4, maintenance 6)
+    // bleeds −2/tick, so a positive stock after 10 ticks proves the mirror
+    // never locked or drained it to zero.
     const start = world({
       residences: 3,
       farms: 1,
@@ -753,7 +754,7 @@ describe('§5 — recovery and deadlock', () => {
       wells: 1,
       colonists: 2,
       food: 50000,
-      material: 0,
+      material: 25,
       water: 0,
     })
     const trace: { tick: number; water: number; material: number; staffed: number }[] = []
@@ -775,7 +776,7 @@ describe('§5 — recovery and deadlock', () => {
         servedResidents: getWaterCoverage(start).servedResidenceIds.length,
       },
       trace,
-      note: 'Material still flows (on the paid ticks); the colony is never locked, because population consumption can never exceed the production the 10S gate admitted',
+      note: 'the seeded treasury keeps flowing (net −2/tick, never locked); population consumption can never exceed the production the 10S gate admitted',
     })
     expect(next.resources.money).toBeGreaterThan(0)
   })
@@ -837,7 +838,7 @@ describe('§6 — circularity', () => {
       workshops: 1,
       colonists: 3,
       food: 50000,
-      material: 0,
+      material: 25,
       water: 0,
     })
     let next = base
@@ -1213,7 +1214,7 @@ describe('§12/§15 — persistence impact and determinism', () => {
       buildingsRead: [...iterateBuildings(state)].length,
       srcTouched: false,
     })
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 })
 

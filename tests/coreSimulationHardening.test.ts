@@ -118,7 +118,9 @@ describe('Step 10BY — core simulation hardening', () => {
     expect(getFoodConsumptionPerTick(state)).toBe(summary.foodConsumption)
     expect(getWaterProductionPerTick(state)).toBe(summary.waterCapacity)
     expect(getWaterNeedPerTick(state)).toBe(summary.waterNeed)
-    expect(getRevenuePerTick(state)).toBe(2)
+    // Step001: revenue is population tax + connected-workshop commerce, so
+    // it is staffing-independent: 5 taxes + 2×2 connected commerce = 9.
+    expect(getRevenuePerTick(state)).toBe(9)
     expect(state.resources.food).not.toBe(getFoodProductionPerTick(state))
     expect(state.resources.water).not.toBe(getWaterProductionPerTick(state))
     expect(state.resources.money).not.toBe(getRevenuePerTick(state))
@@ -159,7 +161,15 @@ describe('Step 10BY — core simulation hardening', () => {
     const target = source === undefined ? undefined : getReassignmentOptions(start, source.id).find((option) => option.type === 'workshop' && option.eligible)
     if (source === undefined || target === undefined) throw new Error('missing move target')
     const changed = stepSimulation(start, { type: 'reassignColonist', colonistId: source.id, workplaceId: target.workplaceId })
-    expect(getRevenuePerTick(changed)).toBeGreaterThan(getRevenuePerTick(start))
+    // Step001: revenue is staffing-independent (tax = population, commerce =
+    // connected Workshops), so reassignment moves PRODUCTION mix instead:
+    // the move into the Workshop forfeits one worker's Food or Water output.
+    const startOutput =
+      getFoodProductionPerTick(start) + getWaterProductionPerTick(start)
+    const changedOutput =
+      getFoodProductionPerTick(changed) + getWaterProductionPerTick(changed)
+    expect(changedOutput).toBeLessThan(startOutput)
+    expect(getRevenuePerTick(changed)).toBe(getRevenuePerTick(start))
     expect(getTownCapabilityStatus(changed).available).toBe(getTownCapabilityStatus(start).available)
   })
 

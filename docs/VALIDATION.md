@@ -1,170 +1,114 @@
-# NOVA — Validation Contract
+# NOVA — Validation
 
-## 1. Purpose
+## Principle
 
-Validation is evidence, not a statement of intent.
+Validation is evidence, not intention.
 
-A gate is green only when the command or inspection was actually executed and its result was observed.
+Never report a check as passing unless it was actually executed.
 
-Never report a check as passed because:
+---
 
-- it passed previously;
-- another test covers something similar;
-- the code appears correct;
-- the command was started but its exit status was not captured.
+## Validation Levels
 
-## 2. Validation levels
+### G0 — Repository Integrity
 
-### G0 — Repository integrity
-
-Verify:
-
-- current branch;
+Check:
+- branch;
 - HEAD;
-- worktree;
-- intended changed files;
-- no unexpected local modifications.
+- working tree;
+- unexpected changes.
 
-### G1 — Type safety
+### G1 — Type Safety
 
-Run the repository's canonical typecheck.
-
-Acceptance:
-
-- exit code 0;
-- no suppressed or ignored new type errors.
+Run the project's TypeScript validation.
 
 ### G2 — Lint
 
-Run the canonical lint command.
+Run the configured linter.
 
-Acceptance:
+### G3 — Focused Tests
 
-- exit code 0;
-- no new warnings hidden without justification.
+Run tests directly related to the change.
 
-### G3 — Unit tests
+### G4 — Related Tests
 
-Run relevant tests and, for a meaningful milestone, the complete unit suite.
-
-Acceptance:
-
-- exit code 0;
-- no test silently excluded to obtain a green result.
-
-### G4 — Integration/domain validation
-
-For simulation changes, validate system interactions such as:
-
-- production → storage;
-- storage → logistics;
-- logistics → consumption;
-- needs → population;
-- population → workforce;
-- environment → consequences.
+Run the affected domain/module test suite.
 
 ### G5 — Build
 
-Run the production build.
-
-Acceptance:
-
-- exit code 0;
-- generated output is usable.
+Run the production build when relevant.
 
 ### G6 — E2E
 
-Run critical Playwright flows when the change affects user behavior.
+Run browser tests when user-facing behavior changed.
 
-Minimum MVP flow eventually becomes:
+### G7 — Visual
 
-    start
-    → build
-    → produce
-    → store
-    → distribute
-    → consume
-    → inspect
-    → optimise
-    → milestone
-    → age transition
-
-### G7 — Visual validation
-
-For rendering/UI changes, inspect the actual result.
-
-Check:
-
-- readability;
-- layout;
-- camera;
-- scale;
-- visual hierarchy;
-- absence of obvious artifacts;
-- interaction states.
+Perform browser/visual inspection when rendering or UI appearance changed.
 
 ### G8 — Performance
 
-Measure only the relevant scenario.
-
-Record:
-
-- population;
-- building count;
-- simulation speed;
-- frame behavior where relevant;
-- memory if relevant;
-- hardware/environment.
-
-Do not claim performance from intuition.
+Measure when the change affects simulation, rendering, large data sets, or frame-time-sensitive code.
 
 ### G9 — Persistence
 
-For save/load changes:
+Validate save/load compatibility when persistence is affected.
 
-1. create a known state;
-2. save;
-3. reload;
-4. compare canonical state;
-5. verify version handling.
+### G10 — Final Diff
 
-### G10 — Final diff audit
+Review:
+- changed files;
+- accidental changes;
+- debug artifacts;
+- generated files;
+- unrelated refactors.
 
-Before delivery:
+---
 
-- inspect `git diff`;
-- inspect `git status`;
-- confirm intended files only;
-- confirm no credentials/local settings/generated junk;
-- confirm tests correspond to the actual implementation.
+## Escalation
 
-## 3. Validation report
+Use the cheapest sufficient validation first:
 
-Every substantial step should report:
+    focused
+      ↓
+    related
+      ↓
+    full
+      ↓
+    E2E
+      ↓
+    performance
 
-| Gate | Command / Method | Result | Evidence |
-|---|---|---|---|
-| G0 | repository inspection | PASS/FAIL | actual output |
-| G1 | typecheck | PASS/FAIL | exit code |
-| G2 | lint | PASS/FAIL | exit code |
-| G3 | tests | PASS/FAIL | counts |
-| G4 | integration | PASS/FAIL | scenario |
-| G5 | build | PASS/FAIL | exit code |
-| G6 | E2E | PASS/FAIL/N/A | counts |
-| G7 | visual | PASS/FAIL/N/A | observation |
-| G8 | performance | PASS/FAIL/N/A | measurements |
-| G9 | persistence | PASS/FAIL/N/A | comparison |
-| G10 | diff audit | PASS/FAIL | inspected diff |
+Do not repeatedly execute expensive checks while iterating on a low-level change.
 
-## 4. Failure handling
+---
 
-If a gate fails:
+## Failure Handling
 
-1. preserve the evidence;
-2. identify the root cause;
-3. repair;
-4. rerun the relevant gate;
-5. rerun dependent gates;
-6. report the final state.
+When validation fails:
 
-Never hide a failure by filtering output without preserving the real exit status.
+1. identify the first meaningful failure;
+2. determine root cause;
+3. fix it;
+4. rerun the smallest relevant check;
+5. escalate validation again.
+
+Do not hide failures by weakening tests.
+
+---
+
+## Report
+
+A validation report should contain:
+
+| Check | Command | Result |
+|---|---|---|
+| Typecheck | actual command | PASS/FAIL |
+| Lint | actual command | PASS/FAIL |
+| Focused tests | actual command | PASS/FAIL |
+| Full tests | actual command | PASS/FAIL |
+| Build | actual command | PASS/FAIL |
+| E2E | actual command | PASS/FAIL |
+| Visual | actual method | PASS/FAIL |
+| Performance | actual measurement | PASS/FAIL/N/A |
+| Diff review | actual review | PASS/FAIL |

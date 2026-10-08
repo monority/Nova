@@ -180,6 +180,9 @@ const ledger = (state: SimulationState): unknown => ({
   foodConsumed: getPopulationCount(state),
   materialGross: commerceRevenueForTick(state),
   materialStored: getCommerceRevenuePerTick(state),
+  // Step001: upkeep bills EVERY operational building (not workshops only),
+  // and materialNet below is commerce-only (taxes excluded) — a narrow
+  // audit metric, not the treasury net. Field names kept for history.
   workshopUpkeep: maintenanceDueForTick(state),
   materialNet: commerceRevenueForTick(state) - maintenanceDueForTick(state),
   foodStock: state.resources.food,
@@ -204,13 +207,15 @@ describe('§1 — player agency (2R/2F/2W)', () => {
       manualLedger: ledger(manual),
     })
     expect(snapshot(manual)).toMatchObject({ staffedFarms: 1, staffedWorkshops: 1 })
+    // Step001: both workshops connected, so gross is 4 either way; upkeep
+    // bills all 6 buildings (6); the move changes Food only (4 -> 2).
     expect(ledger(manual)).toMatchObject({
       foodProduced: 2,
-      materialGross: 2,
-      workshopUpkeep: 1,
-      materialNet: 1,
+      materialGross: 4,
+      workshopUpkeep: 6,
+      materialNet: -2,
     })
-    expect(ledger(auto)).toMatchObject({ foodProduced: 4, materialGross: 0, materialNet: 0 })
+    expect(ledger(auto)).toMatchObject({ foodProduced: 4, materialGross: 4, materialNet: -2 })
 
     const farms = idsOf(auto, 'farm')
     const reverse = reassign(manual, 'colonist-2', farms[1]!)
@@ -341,8 +346,8 @@ describe('§3 — automatic + manual interaction', () => {
 // §4 — Recovery of the 10K/10L dead-end
 // ---------------------------------------------------------------------------
 
-describe('§4 — 10K/10L dead-end recovery', () => {
-  it('reproduces the stuck state and recovers with one manual move', () => {
+describe('§4 — 10K/10L dead-end: manual moves reallocate labor, never treasury', () => {
+  it('reproduces the stuck state; no manual move recovers it under money', () => {
     const stuck = rowWorld({ residences: 2, farms: 2, workshops: 2, material: 5, food: 2000 })
     const workshops = idsOf(stuck, 'workshop')
     const preRun = advance(stuck, 10)
@@ -372,7 +377,11 @@ describe('§4 — 10K/10L dead-end recovery', () => {
       })
     }
     audit('DEADEND_RECOVERY', trace)
-    expect(state.resources.money).toBeGreaterThanOrEqual(25)
+    // Step001: the farm-first state nets exactly 0 (revenue 6 vs upkeep 6)
+    // with or without the manual move — reassignment reallocates labor, it
+    // cannot create treasury net. Staffing and mode assertions below still
+    // hold; only the fiscal recovery is gone (poverty trap).
+    expect(state.resources.money).toBe(5)
     expect(countStaffedOperationalWorkshops(state)).toBe(1)
     expect(state.colonists['colonist-2']!.workplaceAssignmentMode).toBe('manual')
   })
@@ -504,8 +513,8 @@ describe('§6 — distance semantics', () => {
 // §7 — Construction order recovery
 // ---------------------------------------------------------------------------
 
-describe('§7 — construction order recovery', () => {
-  it('F,F,W,W and W,W,F,F both become recoverable through manual reassignment', () => {
+describe('§7 — construction order: manual reassignment stabilizes staffing, not treasury', () => {
+  it('F,F,W,W and W,W,F,F stabilize through manual reassignment (fiscal recovery gone)', () => {
     const farmFirst = rowWorld({ residences: 2, farms: 2, workshops: 2, material: 5, food: 2000 })
     const workshops = idsOf(farmFirst, 'workshop')
     expect(snapshot(farmFirst)).toMatchObject({ staffedFarms: 2, staffedWorkshops: 0 })
@@ -520,7 +529,10 @@ describe('§7 — construction order recovery', () => {
       farmFirst: { before: { f: 2, w: 0 }, after: snapshot(farmFixed) },
       workshopFirst: { before: { f: 0, w: 2 }, after: snapshot(shopFixed) },
     })
-    expect(farmFixed.resources.money).toBeGreaterThanOrEqual(25)
+    // Step001: both branches stabilize staffing and food; neither recovers
+    // fiscally (net 0 either way) — the recovery this test once proved was
+    // a Material-model effect. Staffing/food assertions below are unchanged.
+    expect(farmFixed.resources.money).toBe(5)
     expect(countStaffedOperationalFarms(shopFixed)).toBe(1)
     expect(shopFixed.resources.food).toBeGreaterThan(0)
   })
@@ -565,9 +577,15 @@ describe('§8 — save/load and migration', () => {
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2, material: 5 })
     const parsed = JSON.parse(serializeSave(state)) as {
       version: number
-      state: { colonists: Record<string, Record<string, unknown>> }
+      state: {
+        colonists: Record<string, Record<string, unknown>>
+        resources: Record<string, unknown>
+      }
     }
     parsed.version = 4
+    // Genuine v4 saves carry construction, not money (Step001 v8->v9 rename).
+    parsed.state.resources['construction'] = parsed.state.resources['money']
+    delete parsed.state.resources['money']
     for (const colonist of Object.values(parsed.state.colonists)) {
       delete colonist['workplaceAssignmentMode']
     }
@@ -713,8 +731,8 @@ describe('§14 — economic ledger', () => {
       automaticShopHeavy: ledger(shopHeavy),
       manualFarm: ledger(manualFarm),
     })
-    expect(ledger(auto)).toMatchObject({ foodProduced: 4, materialGross: 0, materialNet: 0 })
-    expect(ledger(manual)).toMatchObject({ foodProduced: 2, materialGross: 2, workshopUpkeep: 1, materialNet: 1 })
+    expect(ledger(auto)).toMatchObject({ foodProduced: 4, materialGross: 4, materialNet: -2 })
+    expect(ledger(manual)).toMatchObject({ foodProduced: 2, materialGross: 4, workshopUpkeep: 6, materialNet: -2 })
   })
 })
 

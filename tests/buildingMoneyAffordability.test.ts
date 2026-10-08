@@ -166,14 +166,16 @@ describe('Step001 — revenue-aware building affordability', () => {
     const cells = [FREE]
     expect(getRoadsPlacementAffordability(state, cells).affordable).toBe(true)
     const after = stepSimulation(state, { type: 'placeRoads', cells })
-    expect(Object.keys(after.roads)).toHaveLength(1)
+    // 1 pre-existing contact road + 1 new road.
+    expect(Object.keys(after.roads)).toHaveLength(2)
     // 3 + 3 revenue − 5 road − 2 maintenance (clamped to the 1 left) = 0.
     expect(after.resources.money).toBe(0)
 
     const short = withMoney(revenueFixture(), 1)
     expect(getRoadsPlacementAffordability(short, cells).affordable).toBe(false)
     const refused = stepSimulation(short, { type: 'placeRoads', cells })
-    expect(Object.keys(refused.roads)).toHaveLength(0)
+    // The rejected command adds nothing: only the pre-existing contact road.
+    expect(Object.keys(refused.roads)).toHaveLength(1)
   })
 
   it('M7 — the query agrees with the command across a treasury sweep', () => {

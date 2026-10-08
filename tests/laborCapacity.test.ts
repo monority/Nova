@@ -101,53 +101,57 @@ const capacityState = (residences: number, workshops: number): SimulationState =
 }
 
 describe('productive labor constraint (Step 08E)', () => {
-  it('A — zero Workshops: colonists exist, production 0, upkeep 0', () => {
+  it('A — zero Workshops: colonists exist, production 0, upkeep on residences', () => {
     const state = capacityState(2, 0)
     const population = Object.keys(state.colonists).length
     expect(population).toBeGreaterThan(0)
     expect(getJobCapacity(state)).toBe(0)
     expect(getProductiveWorkerCount(state)).toBe(0)
     expect(commerceRevenueForTick(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
+    // Step001: no workshops, but the 2 residences still owe maintenance —
+    // exactly offset by their 2 taxes, so the stock holds flat.
+    expect(maintenanceDueForTick(state)).toBe(2)
     const before = getResourceStock(state).money
     const after = stepSimulation(stepSimulation(state))
     expect(getResourceStock(after).money).toBe(before)
   })
 
-  it('B — vacant operational Workshop: production 0, upkeep 0', () => {
+  it('B — vacant operational Workshop: no commerce (unconnected), upkeep 1', () => {
     let state = createTestState()
     state = placeCatchUp(withWorkshopWater(state), place('workshop', 1, 1)) // t1
     state = stepSimulation(state) // t2: operational, nobody housed
     expect(state.buildings['building-1']?.status).toBe('operational')
     expect(getProductiveWorkerCount(state)).toBe(0)
     expect(commerceRevenueForTick(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
+    // Step001: vacant and unconnected earns nothing but still owes 1.
+    expect(maintenanceDueForTick(state)).toBe(1)
   })
 
-  it('C — one staffed Workshop: 1 productive => 2 material, upkeep 1', () => {
+  it('C — one staffed Workshop: connected commerce 2, upkeep 2 (both buildings)', () => {
     const state = capacityState(1, 1)
     expect(getProductiveWorkerCount(state)).toBe(1)
     expect(commerceRevenueForTick(state)).toBe(2)
-    expect(maintenanceDueForTick(state)).toBe(1)
+    expect(maintenanceDueForTick(state)).toBe(2)
     expect(getNetMoneyPerTick(state)).toBe(1)
   })
 
-  it('D — two Workshops, one worker: productive 1 => 2 material', () => {
+  it('D — two Workshops, one worker: both connected workshops earn (Step001)', () => {
     const state = capacityState(1, 2)
     expect(getEmploymentSummary(state).employed).toBe(1)
     expect(getProductiveWorkerCount(state)).toBe(1)
     expect(countStaffedOperationalWorkshops(state)).toBe(1)
-    // The second Workshop is vacant and therefore free.
-    expect(commerceRevenueForTick(state)).toBe(2)
-    expect(maintenanceDueForTick(state)).toBe(1)
-    expect(getNetMoneyPerTick(state)).toBe(1)
+    // Step001: the vacant workshop is connected, so it earns commerce too:
+    // 2 workshops x 2 = 4 against 3 maintenance (residence + 2 workshops).
+    expect(commerceRevenueForTick(state)).toBe(4)
+    expect(maintenanceDueForTick(state)).toBe(3)
+    expect(getNetMoneyPerTick(state)).toBe(2)
   })
 
-  it('E — two Workshops, two workers: productive 2 => 4 material', () => {
+  it('E — two Workshops, two workers: commerce 4, upkeep 4 (all buildings)', () => {
     const state = capacityState(2, 2)
     expect(getProductiveWorkerCount(state)).toBe(2)
     expect(commerceRevenueForTick(state)).toBe(4)
-    expect(maintenanceDueForTick(state)).toBe(2)
+    expect(maintenanceDueForTick(state)).toBe(4)
     expect(getNetMoneyPerTick(state)).toBe(2)
   })
 
@@ -164,10 +168,11 @@ describe('productive labor constraint (Step 08E)', () => {
     expect(commerceRevenueForTick(state)).toBe(
       getProductiveWorkerCount(state) * COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK
     )
-    expect(maintenanceDueForTick(state)).toBe(2)
+    // Step001: 5 residences + 2 workshops pay 7 maintenance.
+    expect(maintenanceDueForTick(state)).toBe(7)
   })
 
-  it('G — Workshop under money: no production, no upkeep', () => {
+  it('G — Workshop under construction: no commerce, upkeep on the residence only', () => {
     let state = createTestState()
     state = placeCatchUp(state, place('residence', 2, 2)) // t1
     state = stepSimulation(state) // t2: colonist-1
@@ -175,12 +180,14 @@ describe('productive labor constraint (Step 08E)', () => {
     expect(state.buildings['building-2']?.status).toBe('underConstruction')
     expect(getProductiveWorkerCount(state)).toBe(0)
     expect(commerceRevenueForTick(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
+    // Step001: the constructing workshop pays nothing, the operational
+    // residence already owes 1.
+    expect(maintenanceDueForTick(state)).toBe(1)
     // Construction never implies capacity, even with a waiting colonist.
     expect(getJobCapacity(state)).toBe(0)
   })
 
-  it('H — starvation: 0 workers => 0 production, 0 upkeep, no penalty', () => {
+  it('H — starvation: 0 workers => 0 commerce, upkeep still due, stock drops by maintenance', () => {
     // Farm-less colony: food 0 starves on the very next tick.
     let state = createTestState()
     state = placeCatchUp(state, place('residence', 2, 2)) // t1
@@ -193,8 +200,10 @@ describe('productive labor constraint (Step 08E)', () => {
     expect(Object.keys(state.colonists)).toHaveLength(0)
     expect(getProductiveWorkerCount(state)).toBe(0)
     expect(commerceRevenueForTick(state)).toBe(0)
-    expect(maintenanceDueForTick(state)).toBe(0)
-    expect(getResourceStock(state).money).toBe(materialBefore)
+    // Step001: residence + workshop stay operational and owe 2 against 0
+    // revenue — death costs the treasury one maintenance bill.
+    expect(maintenanceDueForTick(state)).toBe(2)
+    expect(getResourceStock(state).money).toBe(materialBefore - 2)
   })
 
   it('productive count equals actual valid assignments', () => {
@@ -224,26 +233,29 @@ describe('productive labor constraint (Step 08E)', () => {
     }
   })
 
-  it('production query equals simulation production (tick delta)', () => {
+  it('production query equals simulation revenue (single stream, no double count)', () => {
     const state = capacityState(2, 2)
-    const expected = commerceRevenueForTick(state)
+    const income = getRevenuePerTick(state)
     const upkeep = maintenanceDueForTick(state)
     const before = getResourceStock(state).money
     const after = stepSimulation(state)
-    // No build commanded: delta is production plus Step 10CQ income minus
-    // upkeep paid (stock stays below the cap here, so stored = production).
-    expect(getResourceStock(after).money).toBe(
-      before + expected + getRevenuePerTick(state) - upkeep
-    )
+    // Step001: ONE revenue stream (taxes + commerce) minus the upkeep
+    // actually paid (clamped to stock + income). The old formula added
+    // stored production and income separately — that double-counts
+    // commerce now that revenue already includes it.
+    const upkeepPaid = Math.min(before + income, upkeep)
+    expect(getResourceStock(after).money).toBe(before + income - upkeepPaid)
   })
 
-  it('upkeep unchanged by 08E (staffed 1=>1, 2=>2)', () => {
-    expect(getMaintenanceDuePerTick(capacityState(1, 1))).toBe(1)
-    expect(getMaintenanceDuePerTick(capacityState(2, 2))).toBe(2)
-    expect(maintenanceDueForTick(capacityState(5, 2))).toBe(2)
+  it('upkeep counts all operational buildings (Step001)', () => {
+    // capacityState(1, 1): residence + workshop; (2, 2): +residence +workshop;
+    // (5, 2): 5 residences + 2 workshops.
+    expect(getMaintenanceDuePerTick(capacityState(1, 1))).toBe(2)
+    expect(getMaintenanceDuePerTick(capacityState(2, 2))).toBe(4)
+    expect(maintenanceDueForTick(capacityState(5, 2))).toBe(7)
   })
 
-  it('conservation: material >= 0, upkeep <= production on valid states', () => {
+  it('conservation: treasury never negative (deficits clamp, no debt)', () => {
     const starts: SimulationState[] = [
       capacityState(2, 0),
       capacityState(1, 1),
@@ -251,12 +263,12 @@ describe('productive labor constraint (Step 08E)', () => {
       capacityState(5, 2),
       withConstruction(capacityState(2, 2), 0),
     ]
+    // Step001: upkeep routinely exceeds commerce (deficit colonies); the
+    // conserved quantity is the floor — maintenance is clamped to stock +
+    // income, so the treasury can rest at 0 but never below it.
     for (const start of starts) {
       let state = start
       for (let i = 0; i < 20; i++) {
-        expect(maintenanceDueForTick(state)).toBeLessThanOrEqual(
-          commerceRevenueForTick(state)
-        )
         state = stepSimulation(state)
         expect(getResourceStock(state).money).toBeGreaterThanOrEqual(0)
       }
@@ -277,8 +289,8 @@ describe('productive labor constraint (Step 08E)', () => {
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
   })
 
-  it('save/hash: SAVE_VERSION 4, round-trip stable, nothing new persisted', () => {
-    expect(SAVE_VERSION).toBe(8)
+  it('save/hash: SAVE_VERSION 9, round-trip stable, nothing new persisted', () => {
+    expect(SAVE_VERSION).toBe(9)
     const state = stepSimulation(capacityState(5, 2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('productive')

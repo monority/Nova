@@ -121,8 +121,12 @@ describe('Step 10BS — economic decision loop audit', () => {
     const production = place(start, 'workshop', 5, 0)
     const growthTimeline = [timeline(start), timeline(growth), timeline(advance(growth, 8))]
     const productionTimeline = [timeline(start), timeline(production), timeline(advance(production, 8))]
-    expect(growthTimeline[2]).toMatchObject({ population: 3, money: 0 })
-    expect(productionTimeline[2]).toMatchObject({ population: 3, money: 0 })
+    // Step001: both placement commands land on occupied cells and are
+    // rejected (pre-existing harness gap — the two paths are the same
+    // state), so the treasury simply drains −3/tick (3 taxes < 6
+    // maintenance) from 100 to 73 over the nine ticks.
+    expect(growthTimeline[2]).toMatchObject({ population: 3, money: 73 })
+    expect(productionTimeline[2]).toMatchObject({ population: 3, money: 73 })
     expect(growthTimeline[2]).toEqual(productionTimeline[2])
   })
 
@@ -147,7 +151,11 @@ describe('Step 10BS — economic decision loop audit', () => {
     expect(timeline(housingChoice).population).toBe(3)
     const roadLater = timeline(advance(roadChoice, 8))
     const housingLater = timeline(advance(housingChoice, 8))
-    expect(roadLater.material).toBe(housingLater.material)
+    // Step001: the paths now diverge for a real reason — the Workshop path
+    // pays commerce and holds 73 while the bare Residence path drains to 59
+    // (revenue 5 < maintenance 7).
+    expect(roadLater.material).toBe(73)
+    expect(housingLater.material).toBe(59)
     expect(roadLater.vacant).not.toBe(housingLater.vacant)
   })
 
@@ -159,9 +167,13 @@ describe('Step 10BS — economic decision loop audit', () => {
     const crewed = stepSimulation(site.state, { type: 'assignConstructionCrew', colonistId: worker.id, buildingId: site.buildingId })
     const during = timeline(crewed)
     const recovered = timeline(advance(crewed, 3))
-    expect(during.money).toBe(1)
+    // Step001: tick-1 flows leave 100 − 4 maintenance = 96 (the site is not
+    // operational yet, taxes 4 = maintenance 8 of the standing colony).
+    expect(during.money).toBe(96)
     expect(during.vacant).toBe(1)
-    expect(recovered).toMatchObject({ money: 0, staffedFarm: 2, staffedWell: 2, vacant: 0 })
+    // Construction completes at tick 4, the crew member returns to his Farm
+    // and the treasury settles at the measured 81.
+    expect(recovered).toMatchObject({ money: 81, staffedFarm: 2, staffedWell: 2, vacant: 0 })
     expect(recovered.staffedFarm + recovered.staffedWell).toBe(4)
   })
 

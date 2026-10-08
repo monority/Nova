@@ -2,110 +2,114 @@
 
 ## Purpose
 
-AI agents must know when they can implement autonomously and when a product or architectural decision is required.
+Prevent the agent from silently changing product scope or architecture.
 
-## Decision classes
+---
 
-### CLASS A — Implement
+## Decision Classes
 
-Proceed without asking when:
+### Class A — Local Implementation
 
-- the requirement is explicit;
-- it fits the MVP;
-- it does not contradict an ADR;
-- the architecture already supports it;
-- the change is local and reversible;
-- acceptance criteria are clear.
+The requirement is clear and existing architecture supports it.
 
-### CLASS B — Record and Implement
+Proceed.
 
-Proceed, but create/update an ADR when:
+Examples:
+- bug fix;
+- missing test;
+- local component extraction;
+- small UI correction;
+- implementation of an already-defined rule.
 
-- a meaningful technical decision is required;
-- multiple reasonable implementations exist;
-- the choice affects future architecture;
-- the decision is local enough not to alter product scope.
+### Class B — Architectural Decision
 
-The ADR must record alternatives and consequences.
+The requirement is clear but requires a meaningful architectural choice.
 
-### CLASS C — Stop and Ask
+Before or during implementation:
+- document the decision;
+- create an ADR when durable;
+- implement only after the decision is clear.
 
-Stop before implementation when:
+### Class C — Product Decision
 
-- the request contradicts the product vision;
-- the request changes MVP scope materially;
-- two authoritative documents conflict;
-- a new gameplay system is required;
-- a new resource is required without justification;
-- an irreversible player-facing rule is being introduced;
-- persistence compatibility would be broken;
-- the architecture would need a major redesign;
-- an optimization is being proposed without evidence;
-- required information cannot be established from the repository.
-
-## Product change rule
-
-Code must not silently change:
-
-- game rules;
+The implementation would change:
+- gameplay;
+- MVP scope;
 - progression;
-- resource semantics;
-- population behavior;
-- economic rules;
-- win/failure conditions;
-- age structure;
-- MVP scope.
+- resource model;
+- player interaction;
+- major visual identity;
+- simulation philosophy.
 
-Such changes require an explicit product decision.
+Stop and request a decision.
 
-## Architecture change rule
+---
 
-Before introducing a new architectural layer, ask:
+## Ambiguity
 
-1. What concrete problem exists?
-2. What evidence demonstrates it?
-3. Why does the existing architecture fail?
-4. What is the smallest viable change?
-5. What are the alternatives?
-6. What future cost does the decision create?
+If two reasonable interpretations exist and they produce materially different behavior:
 
-## Optimization rule
+Do not guess.
 
-> **Measure first. Optimize second.**
+Identify:
+- interpretation A;
+- interpretation B;
+- impact;
+- recommendation if useful.
 
-A theoretical future bottleneck is not sufficient.
+Request a decision.
 
-## Ambiguity rule
+---
 
-When requirements are ambiguous:
+## Contradictions
 
-- resolve using existing documentation first;
-- prefer the smallest coherent interpretation;
-- preserve existing behavior;
-- do not invent product requirements.
+When documents conflict:
 
-If ambiguity materially affects gameplay or architecture, stop and ask.
+1. identify the conflicting rules;
+2. check authoritative documentation;
+3. inspect implementation;
+4. determine whether the contradiction is stale documentation or real product ambiguity.
 
-## Contradiction rule
+Do not silently choose.
 
-When two documents conflict:
+---
 
-1. do not choose silently;
-2. identify the conflict;
-3. determine which document has higher authority;
-4. if authority is insufficient, stop;
-5. record the resolution.
+## Optimization
 
-## New-system test
+Do not optimize without evidence.
 
-Before implementing a new system:
+Required sequence:
 
-- What decision does it create?
-- What existing system does it interact with?
-- Why is it needed now?
-- Is it MVP?
-- How will it be observed?
-- How will it be tested?
-- What is explicitly not being built?
+    observe
+      ↓
+    measure
+      ↓
+    identify bottleneck
+      ↓
+    change
+      ↓
+    measure again
 
-If these questions cannot be answered, defer it.
+---
+
+## New Systems
+
+Before introducing a new system, answer:
+
+1. What problem does it solve?
+2. Why is the existing architecture insufficient?
+3. Is it MVP?
+4. What is its minimal form?
+5. What does it depend on?
+6. How will it be tested?
+7. What is the removal cost?
+
+If the answer indicates significant scope expansion, stop.
+
+---
+
+## Product Change Rule
+
+A technical implementation must never silently become a design decision.
+
+When implementation requires changing the intended player experience, request explicit approval.

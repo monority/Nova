@@ -142,15 +142,18 @@ describe('10CS — road expenditure affordability', () => {
 
     const after = stepSimulation(before, { type: 'placeRoads', cells: [FREE_CELL] })
     expect(roadCount(after)).toBe(roadCount(before) + 1)
-    // 4 stock + 2 stored + 2 income − 5 road − 1 upkeep = exactly 2 left.
-    expect(after.resources.money).toBe(2)
+    // 4 stock + 3 revenue − 5 road − 2 upkeep = exactly 0 left.
+    expect(after.resources.money).toBe(0)
   })
 
-  it('R3 — control: without the worker income the same stock is short', () => {
+  it('R3 — control: without any inflow the same stock is short', () => {
     const before = withMaterial(workshopWorkerFixture(), ROAD_CONSTRUCTION_COST - 1)
-    const workerless: SimulationState = { ...before, colonists: {} }
-    const affordability = getRoadsPlacementAffordability(workerless, [FREE_CELL])
+    // Step001: a workerless colony still earns commerce, so the control
+    // isolates the inflow clause by disconnecting the network (commerce 0)
+    // and removing the colonists (taxes 0) — zero revenue, stock 4 < 5.
+    const workerless: SimulationState = { ...before, colonists: {}, roads: {} }
     expect(getRevenuePerTick(workerless)).toBe(0)
+    const affordability = getRoadsPlacementAffordability(workerless, [FREE_CELL])
     expect(affordability.coveredBySameTickInflow).toBe(false)
     expect(affordability.affordable).toBe(false)
   })
@@ -207,9 +210,9 @@ describe('10CS — road expenditure affordability', () => {
     const before = withMaterial(workshopWorkerFixture(), 0)
     const after = stepSimulation(before, { type: 'placeRoads', cells: [FREE_CELL] })
     expect(roadCount(after)).toBe(roadCount(before))
-    // Same-tick inflow (2 stored + 2 income) is credited and upkeep (−1) is
+    // Same-tick inflow (3 revenue) is credited and upkeep (−2) is
     // paid independently of the rejected command; the road cost is not spent.
-    expect(after.resources.money).toBe(3)
+    expect(after.resources.money).toBe(1)
     expect(after.resources.money).toBeLessThan(ROAD_CONSTRUCTION_COST)
   })
 
@@ -243,6 +246,6 @@ describe('10CS — road expenditure affordability', () => {
     expect(getRoadsPlacementAffordability(restored, [FREE_CELL])).toEqual(
       getRoadsPlacementAffordability(state, [FREE_CELL])
     )
-    expect(SAVE_VERSION).toBe(8)
+    expect(SAVE_VERSION).toBe(9)
   })
 })
