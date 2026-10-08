@@ -629,7 +629,7 @@ describe('§12 — save/hash: persisted vs derived audit', () => {
     ]) {
       expect(serialized).not.toContain(`"${key}"`)
     }
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
   })
 
   it('corrupt/foreign saves are rejected, never silently migrated', () => {

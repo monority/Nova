@@ -65,11 +65,11 @@ export const SAVE_FORMAT = 'nova-save'
  * world that actually owns blocked cells carries the field. No migration and
  * therefore NO version bump: SAVE_VERSION stays 8.
  */
-export const SAVE_VERSION = 9
-/** The single previous version this build knows how to migrate (v4..v8 chain through it). */
-export const MIGRATABLE_SAVE_VERSION = 8
+export const SAVE_VERSION = 10
+/** The single previous version this build knows how to migrate (v4..v9 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 9
 /** Every older version the chained migration still accepts. */
-export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8]
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -110,7 +110,8 @@ const assertString = (value: unknown, field: string): void => {
  *   v6 -> v7: stamp every colonist `constructionAssignmentId: null`;
  *   v7 -> v8: add empty StorageHub;
  *   v8 -> v9: rename `resources.construction` to `money`, fold hub
- *     `storage.material` into the treasury, drop the hub material slot.
+ *     `storage.material` into the treasury, drop the hub material slot;
+ *   v9 -> v10: add `resources.wood` (0) and empty `woodDeposits` (Step003).
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -127,6 +128,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV7ToV8(current)
     } else if (version === 8) {
       current = migrateV8ToV9(current)
+    } else if (version === 9) {
+      current = migrateV9ToV10(current)
     } else {
       break
     }
@@ -189,6 +192,32 @@ const migrateV6ToV7 = (save: Record<string, unknown>): Record<string, unknown> =
         : value
   }
   return { ...save, state: { ...state, colonists } }
+}
+
+/**
+ * v9 -> v10: Step003 physical-wood slice. Adds `resources.wood` (deterministic
+ * default 0: wood only ever enters through extraction, so pre-Step003 colonies
+ * hold none) and `woodDeposits` (deterministic default: no deposits — the
+ * world had none before this version). Value-preserving: no existing field is
+ * renamed or dropped.
+ */
+const migrateV9ToV10 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state) || !isRecord(state['resources'])) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const resources = state['resources'] as Record<string, unknown>
+  return {
+    ...save,
+    state: {
+      ...state,
+      resources: {
+        ...resources,
+        wood: typeof resources['wood'] === 'number' ? resources['wood'] : 0,
+      },
+      woodDeposits: state['woodDeposits'] ?? {},
+    },
+  }
 }
 
 /** v8 -> v9: Step001 money migration (value-preserving, see version doc). */
@@ -356,6 +385,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     money: resources['money'] as number,
     food: resources['food'] as number,
     water: resources['water'] as number,
+    wood: resources['wood'] as number,
   }
 
   const validatedRoads: Record<string, RoadState> = {}
@@ -395,6 +425,9 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     buildings: validatedBuildings,
     colonists: validatedColonists,
     roads: validatedRoads,
+    // Step003: deposits are canonical persisted state — validated as a whole
+    // by the round-trip check below (normalized form: canonical keys).
+    woodDeposits: (raw['woodDeposits'] ?? {}) as SimulationState['woodDeposits'],
     counters: {
       nextBuildingId: counters['nextBuildingId'] as number,
       nextColonistId: counters['nextColonistId'] as number,

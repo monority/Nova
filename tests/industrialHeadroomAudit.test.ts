@@ -101,6 +101,7 @@ const scene = (spec: SceneSpec): SimulationState => {
       money: spec.material ?? 500,
       food: spec.food ?? 1000,
       water: spec.water ?? 50,
+      wood: 0,
     },
   }
   for (const cell of spec.residences) state = op(state, 'residence', cell.x, cell.y)
@@ -850,7 +851,7 @@ describe('9-10. Town implication and content candidates', { timeout: 30000 }, ()
           requirements: [{ kind: 'stage', stage: 'settlement' }],
           failsWithoutColonists: false,
         },
-        resources: { money: 100, food: 100, water: 0 },
+        resources: { money: 100, food: 100, water: 0 , wood: 0},
         buildings: [
           ...candidate.data.residences.map((cell) => ({
             type: 'residence' as const,

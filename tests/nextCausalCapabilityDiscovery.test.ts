@@ -143,6 +143,7 @@ const scene = (spec: SceneSpec): SimulationState => {
       money: spec.material ?? 100,
       food: spec.food ?? 200,
       water: spec.water ?? 100,
+      wood: 0,
     },
   }
   for (const [x, y] of spec.residences) {
@@ -344,7 +345,7 @@ describe('1. delta-only closed capability matrix', () => {
     // 10CI added three Town-goal scenarios.
     expect(frozen.scenarioCount).toBe(11)
     expect(frozen.catalogueHasTerrain).toBe(false)
-    expect(frozen.saveVersion).toBe(9)
+    expect(frozen.saveVersion).toBe(10)
     expect(frozen.objectiveKinds).toEqual([
       'building',
       'foodBalance',
@@ -1223,7 +1224,7 @@ describe('12. determinism, save/load, frozen architecture', () => {
     audit('AUDIT_FIXTURE_DETERMINISM', rows)
     expect(rows.deterministic).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
-    expect(rows.saveVersion).toBe(9)
+    expect(rows.saveVersion).toBe(10)
     expect(rows.terrainFree).toBe(true)
   })
 
@@ -1255,6 +1256,6 @@ describe('12. determinism, save/load, frozen architecture', () => {
     }
     audit('FROZEN_ARCHITECTURE', named)
     expect(named.candidateIdentifiers).toEqual([])
-    expect(named.terrainReaders).toBe(9)
+    expect(named.terrainReaders).toBe(10)
   })
 })

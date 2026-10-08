@@ -22,6 +22,7 @@ import {
   normalizeBlockedCells,
   type WorldConfig,
 } from '../world/grid.js'
+import { normalizeWoodDeposits, type WoodDeposits } from '../world/woodDeposits.js'
 
 export interface SimulationTime {
   /** Current tick. Starts at 0, increments once per completed tick. */
@@ -46,6 +47,9 @@ export interface SimulationState {
   /** Authoritative mobility infrastructure (Step 09C). Derived road
    * connectivity is never stored here. */
   readonly roads: Readonly<Record<string, RoadState>>
+  /** Finite wood deposits present in the sector (Step003). Mutable state:
+   * extraction decrements `remaining`; exhausted deposits stay with 0. */
+  readonly woodDeposits: WoodDeposits
   readonly counters: EntityCounters
 }
 
@@ -93,6 +97,7 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
     buildings: {},
     colonists: {},
     roads: {},
+    woodDeposits: normalizeWoodDeposits(normalized.world.woodDeposits ?? []),
     counters: { nextBuildingId: 1, nextColonistId: 1, nextRoadId: 1 },
   }
 }

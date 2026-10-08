@@ -108,6 +108,7 @@ const withStocks = (
     money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
+    wood: 0,
   },
 })
 
@@ -737,7 +738,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       granaryBuilding: 'if added, a new building type string only — no shape change',
       farmInput: 'no new state (reads resources.money)',
     })
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
   })
 
   it('measures 60/120/600-tick cost of the current economy', () => {

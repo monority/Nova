@@ -110,6 +110,7 @@ const build = (fixture: Fixture): SimulationState => {
       money: fixture.material ?? 0,
       food: fixture.food ?? 200,
       water: fixture.water ?? 0,
+      wood: 0,
     },
   }
   const columns = fixture.residences + fixture.types.length
@@ -243,7 +244,7 @@ describe('1. Economic baseline', { timeout: 30000 }, () => {
       foodPerColonist: 1,
       waterPerColonist: 1,
       treasuryCap: 'uncapped',
-      saveVersion: 9,
+      saveVersion: 10,
     })
   })
 })
@@ -863,7 +864,7 @@ describe('16. Architectural invariants', () => {
       requirementKinds: [...new Set(SCENARIOS.flatMap((s) => s.objective.requirements.map((r) => r.kind)))].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(9)
+    expect(invariants.saveVersion).toBe(10)
     expect(invariants.saveKeys).toEqual([
       'buildings',
       'colonists',
@@ -873,10 +874,11 @@ describe('16. Architectural invariants', () => {
       'roads',
       'storage',
       'time',
+      'woodDeposits',
     ])
     expect(invariants.deterministic).toBe(true)
     expect(invariants.saveRoundTrip).toBe(true)
-    expect(invariants.noNewResource).toEqual(['food', 'money', 'water'])
+    expect(invariants.noNewResource).toEqual(['food', 'money', 'water', 'wood'])
     expect(invariants.requirementKinds).toEqual(['building', 'foodBalance', 'population', 'stage', 'waterCapacity'])
   })
 })

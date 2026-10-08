@@ -223,6 +223,10 @@ const ROAD_CONSEQUENCE_BY_TYPE: Readonly<Record<BuildingType, string>> = {
   workshop:
     'Workers cannot reach this Workshop, so it cannot be staffed and produces no Material.',
   well: 'Workers cannot reach this Well, so it cannot be staffed, produces no Water and serves no network.',
+  lumberCamp:
+    'Workers cannot reach this Lumber Camp, so it cannot be staffed and extracts no Wood.',
+  colonyCenter:
+    'Residents cannot reach any workplace, and Water cannot reach this Colony Center.',
   residence:
     'Residents cannot reach any workplace, and Water cannot reach this Residence.',
 }

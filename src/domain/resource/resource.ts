@@ -23,6 +23,14 @@ export interface ResourceStock {
    * derived and never stored.
    */
   readonly water: number
+  /**
+   * Colony wood reserve in whole log-units (Step003). The FIRST physical
+   * resource: extracted from finite cell-keyed Wood deposits by staffed
+   * Lumber Camps (or the Colony Center's primitive collection). Canonical
+   * persisted state like food and water; the treasury does not buy it and
+   * it is never created ex nihilo.
+   */
+  readonly wood: number
 }
 
 /** Deterministic starting treasury (never random). Buys the day-0 setup. */
@@ -31,6 +39,9 @@ export const INITIAL_TREASURY = 100
 export const INITIAL_FOOD = 100
 /** Deterministic starting water stock (Step 10P: explicitly zero). */
 export const INITIAL_WATER = 0
+/** Deterministic starting wood stock (Step003: explicitly zero — wood only
+ * enters the colony through extraction from finite deposits). */
+export const INITIAL_WOOD = 0
 /** One live colonist needs exactly one food unit per tick (Step 05B). */
 export const FOOD_PER_COLONIST_PER_TICK = 1
 /** One operational farm produces exactly two food units per tick (Step 06B). */
@@ -63,6 +74,18 @@ export const WATER_PER_WELL_PER_TICK = 2
 export const WATER_PER_COLONIST_PER_TICK = 1
 
 /**
+ * One staffed operational Lumber Camp extracts two wood units per tick
+ * (Step003) — capped by the remaining quantity of the adjacent deposits.
+ */
+export const WOOD_PER_LUMBER_CAMP_PER_TICK = 2
+/**
+ * The Colony Center's primitive collection (Step003, audit D4): deliberately
+ * one wood unit per tick — a low-rate anti-self-lock fallback that must never
+ * replace a Lumber Camp economically.
+ */
+export const WOOD_PER_COLONY_CENTER_PER_TICK = 1
+
+/**
  * Settlement-phase storage allocation constants (Step 10BG).
  * Storage enables strategic buffering: surplus fills the hub,
  * shortages are absorbed before colony-level consumption.
@@ -73,6 +96,7 @@ export const createInitialResourceStock = (): ResourceStock => ({
   money: INITIAL_TREASURY,
   food: INITIAL_FOOD,
   water: INITIAL_WATER,
+  wood: INITIAL_WOOD,
 })
 
 export const hasSufficientResources = (stock: ResourceStock, cost: number): boolean =>

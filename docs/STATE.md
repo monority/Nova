@@ -32,8 +32,8 @@ Never mark a feature complete without implementation and validation evidence.
 | Node version | v24.19.0 |
 | Typecheck | PASS — `npx tsc --noEmit`, no errors (2026-10-08) |
 | Lint | PASS — `npx eslint .`, no findings (2026-10-08) |
-| Unit tests | PASS — `npx vitest run`: 121 files / 1877 tests, all green (2026-10-08) |
-| E2E | PASS — full suite: 27/27 scripts, 336/336 checks, 0 failed, 0 skipped (`test:e2e` + all `test:e2e:*`, 2026-10-08) |
+| Unit tests | PASS — `npx vitest run`: 122 files / 1889 tests, all green (2026-10-08, Step003) |
+| E2E | PASS — full suite: 27/27 scripts, 0 failed (Step003 pass, 2026-10-08); two pre-existing single-read hover races noted (pass in isolation) |
 | Build | PASS — `npm run build` (tsc -p tsconfig.build.json + vite build) (2026-10-08) |
 
 Update these values from actual command output.
@@ -59,7 +59,7 @@ Update these values from actual command output.
 | Environment | UNKNOWN | not inspected this pass |
 | Technology | PLANNED | no implementation found |
 | Ages | PLANNED | progression stages implemented (wilderness→village→settlement→town); Age system is not |
-| Persistence | IMPLEMENTED | versioned save/load, `SAVE_VERSION = 9`, canonical hash, deterministic continuation |
+| Persistence | IMPLEMENTED | versioned save/load, `SAVE_VERSION = 10` (Step003 wood slice: `resources.wood` + `woodDeposits`), canonical hash, deterministic continuation |
 | Performance | UNKNOWN | no measurements taken this pass |
 
 ---
@@ -92,7 +92,7 @@ Do not implement deferred scope without an explicit product decision.
 
 ## Current Approved Step
 
-Step002 (money-suite green + foundation docs reset) — this pass; see `docs/roadmap/Step002-money-suite-green.md`.
+Step003 (physical wood + extraction + Colony Center) — complete; see `docs/roadmap/Step003-wood-extraction.md`.
 
 ---
 

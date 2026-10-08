@@ -58,6 +58,7 @@ import {
 import {
   countWorkersAt,
   isOperationalFarm,
+  isOperationalLumberCamp,
   isOperationalWorkplace,
   isOperationalWorkshop,
 } from '../jobs/jobs.js'
@@ -90,7 +91,14 @@ import {
   hasSufficientWater,
   MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   TAX_PER_INHABITANT_PER_TICK,
+  WOOD_PER_COLONY_CENTER_PER_TICK,
+  WOOD_PER_LUMBER_CAMP_PER_TICK,
 } from '../resource/resource.js'
+import {
+  extractAdjacentWood,
+  adjacentWoodRemaining,
+  hasWoodDepositAt,
+} from '../world/woodDeposits.js'
 import type { CellCoordinate } from '../world/grid.js'
 import { isInBounds, isTerrainBlocked } from '../world/grid.js'
 import { waterProductionForTick } from '../water/water.js'
@@ -163,6 +171,7 @@ export type PlacementValidation =
         | 'outOfBounds'
         | 'terrainBlocked'
         | 'cellOccupied'
+        | 'depositBlocked'
         | 'insufficientResources'
         | 'insufficientWater'
     }
@@ -183,6 +192,13 @@ export const validatePlacement = (
   // affordability — a blocked cell is not a cost problem.
   if (isTerrainBlocked(state.config.world, cell)) {
     return { valid: false, reason: 'terrainBlocked' }
+  }
+  // Step003: a wood deposit is a physical world feature — a building must
+  // never overwrite it (and a camp sitting ON a deposit could never extract
+  // from it: extraction requires orthogonal adjacency). Checked like terrain,
+  // before occupancy and affordability — a deposit is not a cost problem.
+  if (hasWoodDepositAt(state.woodDeposits, cell.x, cell.y)) {
+    return { valid: false, reason: 'depositBlocked' }
   }
   if (isCellBlocked(state, cell)) {
     return { valid: false, reason: 'cellOccupied' }
@@ -906,6 +922,81 @@ export const produceWater = (state: SimulationState): SimulationState => {
   return {
     ...state,
     resources: { ...state.resources, water: state.resources.water + output },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4c - Wood extraction (Step003: first physical resource)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wood extracted this tick by ONE staffed operational Lumber Camp from the
+ * deposits orthogonally adjacent to it: the constant camp yield, capped by
+ * what actually remains. Pure and deterministic.
+ */
+export const woodExtractionForCamp = (state: SimulationState, camp: {
+  readonly x: number
+  readonly y: number
+}): number =>
+  Math.min(
+    WOOD_PER_LUMBER_CAMP_PER_TICK,
+    adjacentWoodRemaining(state.woodDeposits, camp.x, camp.y)
+  )
+
+/**
+ * Wood extracted this tick by ONE operational Colony Center from the deposits
+ * orthogonally adjacent to it (audit D4): the deliberately low-rate primitive
+ * collection, unstaffed by contract, capped by what actually remains.
+ */
+export const woodCollectionForCenter = (state: SimulationState, center: {
+  readonly x: number
+  readonly y: number
+}): number =>
+  Math.min(
+    WOOD_PER_COLONY_CENTER_PER_TICK,
+    adjacentWoodRemaining(state.woodDeposits, center.x, center.y)
+  )
+
+/**
+ * Add this tick's wood extraction to the shared stock (Step003). Sources, in
+ * deterministic sorted-id order:
+ * - every STAFFED operational Lumber Camp: WOOD_PER_LUMBER_CAMP_PER_TICK;
+ * - every operational Colony Center: WOOD_PER_COLONY_CENTER_PER_TICK (the
+ *   unstaffed anti-self-lock fallback, audit D4).
+ *
+ * Extraction NEVER exceeds the remaining quantity of the adjacent deposits
+ * and NEVER creates wood ex nihilo: with all deposits exhausted, output is
+ * exactly 0. Mirrors `produceFood` timing: reads the PREVIOUS tick's
+ * assignments (assignJobs runs later in the same tick), so a newly assigned
+ * camp worker extracts from the next tick.
+ */
+export const produceWood = (state: SimulationState): SimulationState => {
+  let yieldTotal = 0
+  let deposits = state.woodDeposits
+  for (const building of iterateBuildings(state)) {
+    if (building.status !== 'operational') continue
+    if (isOperationalLumberCamp(building)) {
+      if (countWorkersAt(state, building.id) === 0) continue
+      const amount = woodExtractionForCamp(state, building)
+      if (amount === 0) continue
+      const extracted = extractAdjacentWood(deposits, building.x, building.y, amount)
+      deposits = extracted.deposits
+      yieldTotal += extracted.extracted
+    } else if (building.type === 'colonyCenter') {
+      const amount = woodCollectionForCenter(state, building)
+      if (amount === 0) continue
+      const extracted = extractAdjacentWood(deposits, building.x, building.y, amount)
+      deposits = extracted.deposits
+      yieldTotal += extracted.extracted
+    }
+  }
+  if (yieldTotal === 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: { ...state.resources, wood: state.resources.wood + yieldTotal },
+    woodDeposits: deposits,
   }
 }
 

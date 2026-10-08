@@ -8,7 +8,13 @@
  * capacity once operational. No economic/material costs in Step 0.
  */
 
-export type BuildingType = 'residence' | 'farm' | 'workshop' | 'well'
+export type BuildingType =
+  | 'residence'
+  | 'farm'
+  | 'workshop'
+  | 'well'
+  | 'lumberCamp'
+  | 'colonyCenter'
 
 export type BuildingStatus = 'underConstruction' | 'operational'
 
@@ -65,6 +71,17 @@ export const BUILDING_CATALOG: Readonly<
   // lifecycle and cost as every other building; no special construction path.
   // Step 10AD: the Well is the Water bootstrap ROOT and is never Water-costed.
   well: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  // Step003: the first extraction building. A concrete workplace (capacity 1,
+  // jobs.ts) that extracts wood from ADJACENT finite deposits while staffed.
+  // Same lifecycle and cost as every other building; the deposit sits in the
+  // world (woodDeposits.ts), the camp never creates wood ex nihilo.
+  lumberCamp: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  // Step003 (audit D4): the anti-self-lock bootstrap building. NOT a
+  // workplace — its primitive wood collection is unstaffed by contract and
+  // deliberately low-rate (WOOD_PER_COLONY_CENTER_PER_TICK). Same lifecycle
+  // and cost as every other building; it must never replace a Lumber Camp
+  // economically.
+  colonyCenter: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
 }
 
 export const getBuildingDefinition = (

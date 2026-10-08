@@ -367,7 +367,7 @@ describe('10DD — economic and temporal depth', () => {
 
 describe('10DD — persistence and replay evidence', () => {
   it('keeps SAVE_VERSION 9 with deterministic divergent states', () => {
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
   })
 })
 

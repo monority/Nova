@@ -272,7 +272,7 @@ describe('10DA — affordability coherence and persistence', () => {
   })
 
   it('stays at SAVE_VERSION 8 with a stable save/load round-trip', () => {
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
     const state = build({ residences: 1, workshops: 1, colonists: 1 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

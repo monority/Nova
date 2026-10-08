@@ -38,7 +38,7 @@ const base = (): SimulationState => {
   const state = createInitialState(config)
   return {
     ...state,
-    resources: { money: 1000, food: 1000, water: 1000 },
+    resources: { money: 1000, food: 1000, water: 1000 , wood: 0},
   }
 }
 

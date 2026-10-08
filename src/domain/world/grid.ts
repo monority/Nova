@@ -10,6 +10,12 @@
  * exist (buildable, blocked) and nothing else.
  */
 
+export interface WoodDepositSeed {
+  readonly x: number
+  readonly y: number
+  readonly remaining: number
+}
+
 export interface WorldConfig {
   readonly seed: string
   readonly width: number
@@ -21,6 +27,12 @@ export interface WorldConfig {
    * its historical canonical form and hash.
    */
   readonly blockedCells?: readonly string[]
+  /**
+   * Step003: finite wood deposits seeded into the sector. Copied into the
+   * canonical state at initialization (deposits are MUTABLE: extraction
+   * decrements them), normalized/deduplicated by the same key convention.
+   */
+  readonly woodDeposits?: readonly WoodDepositSeed[]
 }
 
 export interface CellCoordinate {

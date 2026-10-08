@@ -85,6 +85,7 @@ const withStocks = (
     money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
+    wood: 0,
   },
 })
 
@@ -613,7 +614,7 @@ describe('§11 — deadlock and recovery', () => {
 
 describe('§12/§13 — architecture, persistence, determinism', () => {
   it('confirms no framework, no new state, no migration, no hash change', () => {
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
     const state = world({ residences: 4, farms: 1, workshops: 1, wells: 4, colonists: 4 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

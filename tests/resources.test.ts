@@ -27,7 +27,7 @@ const placeResidence = (x: number, y: number): PlaceBuildingCommand => ({
 
 const withStock = (state: SimulationState, money: number): SimulationState => ({
   ...state,
-  resources: { money, food: 100, water: 0 },
+  resources: { money, food: 100, water: 0 , wood: 0},
 })
 
 const withFood = (state: SimulationState, food: number): SimulationState => ({
@@ -155,13 +155,13 @@ describe('food resource (Step 05)', () => {
   })
 
   it('hasSufficientFood is a colony-level all-or-nothing check', () => {
-    expect(hasSufficientFood({ money: 0, food: 5, water: 0 }, 5)).toBe(true)
-    expect(hasSufficientFood({ money: 0, food: 4, water: 0 }, 5)).toBe(false)
-    expect(hasSufficientFood({ money: 0, food: 0, water: 0 }, 0)).toBe(true)
+    expect(hasSufficientFood({ money: 0, food: 5, water: 0, wood: 0 }, 5)).toBe(true)
+    expect(hasSufficientFood({ money: 0, food: 4, water: 0, wood: 0 }, 5)).toBe(false)
+    expect(hasSufficientFood({ money: 0, food: 0, water: 0, wood: 0 }, 0)).toBe(true)
   })
 
   it('deductFood is atomic and pure', () => {
-    const stock = { money: 0, food: 10, water: 0 }
+    const stock = { money: 0, food: 10, water: 0, wood: 0 }
     const deducted = deductFood(stock, 3)
     expect(deducted.food).toBe(7)
     expect(deducted).not.toBe(stock)
@@ -169,10 +169,10 @@ describe('food resource (Step 05)', () => {
   })
 
   it('deductFood rejects negative amounts and insufficient food', () => {
-    expect(() => deductFood({ money: 0, food: 10, water: 0 }, -1)).toThrow(
+    expect(() => deductFood({ money: 0, food: 10, water: 0, wood: 0 }, -1)).toThrow(
       'Negative food deduction'
     )
-    expect(() => deductFood({ money: 0, food: 2, water: 0 }, 5)).toThrow(
+    expect(() => deductFood({ money: 0, food: 2, water: 0, wood: 0 }, 5)).toThrow(
       'Insufficient food'
     )
   })

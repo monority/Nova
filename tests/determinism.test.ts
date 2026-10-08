@@ -50,6 +50,7 @@ describe('determinism', () => {
       storage: b.storage,
       config: b.config,
       roads: {},
+      woodDeposits: {},
     }
     expect(serializeCanonicalState(a)).toBe(
       serializeCanonicalState(reordered)

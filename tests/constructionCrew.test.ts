@@ -48,6 +48,7 @@ const withStocks = (
     money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
+    wood: 0,
   },
 })
 
@@ -498,7 +499,7 @@ describe('4 — economy', () => {
 
 describe('5 — persistence and hash', () => {
   it('SAVE_VERSION is 8 and an active crew round-trips', () => {
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
     const base = crewWorldWithSite()
     const wellId = idsOf(base, 'well')[0]!
     const assigned = crew(base, 'colonist-1', wellId)

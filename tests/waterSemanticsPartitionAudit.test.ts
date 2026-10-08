@@ -113,6 +113,7 @@ const scene = (spec: Spec): SimulationState => {
       money: spec.material ?? 100,
       food: 100,
       water: spec.water ?? 0,
+      wood: 0,
     },
   }
   for (const [x, y] of spec.residences) state = op(state, 'residence', x, y)
@@ -564,7 +565,7 @@ describe('5. Water semantics', { timeout: 30000 }, () => {
       note: 'the status is a query over canonical state: nothing new is persisted',
     })
     expect(JSON.stringify(first)).toBe(JSON.stringify(second))
-    expect(keys).toHaveLength(8)
+    expect(keys).toHaveLength(9)
     expect(JSON.stringify(JSON.parse(saved))).not.toContain('waterSupply')
     expect(hashCanonicalState(state)).toBe(hashCanonicalState(partitioned()))
     expect(getWaterProductionPerTick(state)).toBe(getWaterStatus(state).productionPerTick)
@@ -673,14 +674,14 @@ describe('8. Architectural invariants', () => {
       ].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(9)
-    expect(invariants.saveKeys).toHaveLength(8)
+    expect(invariants.saveVersion).toBe(10)
+    expect(invariants.saveKeys).toHaveLength(9)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
     // Step 10CI added three Town-goal scenarios; water rules below unchanged.
     expect(invariants.scenarioCount).toBe(11)
     expect(invariants.waterRules).toEqual({ perWell: 2, perColonist: 1 })
-    expect(invariants.noNewResource).toEqual(['food', 'money', 'water'])
+    expect(invariants.noNewResource).toEqual(['food', 'money', 'water', 'wood'])
     expect(invariants.objectiveKinds).toEqual([
       'building',
       'foodBalance',

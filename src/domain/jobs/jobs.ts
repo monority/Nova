@@ -43,6 +43,10 @@ export interface WorkplaceLike {
 /** Jobs offered by one operational Farm (Step 10E: capacity = 1, like Workshops). */
 export const FARM_JOB_CAPACITY = 1
 
+/** Jobs offered by one operational Lumber Camp (Step003: capacity = 1, like
+ * every other workplace). The Colony Center is deliberately NOT a workplace. */
+export const LUMBER_CAMP_JOB_CAPACITY = 1
+
 /** An operational Farm offers jobs (Step 10E). Same lifecycle rule as Workshops. */
 export const isOperationalFarm = (building: WorkplaceLike): boolean =>
   building.type === 'farm' && building.status === 'operational'
@@ -54,11 +58,17 @@ export const isOperationalFarm = (building: WorkplaceLike): boolean =>
 export const isOperationalWell = (building: WorkplaceLike): boolean =>
   building.type === 'well' && building.status === 'operational'
 
-/** A building offers jobs once operational: Farm, Workshop or Well (Step 10P). */
+/** An operational Lumber Camp offers jobs (Step003). Concrete type. */
+export const isOperationalLumberCamp = (building: WorkplaceLike): boolean =>
+  building.type === 'lumberCamp' && building.status === 'operational'
+
+/** A building offers jobs once operational: Farm, Workshop, Well or Lumber
+ * Camp (Step003). The Colony Center is never a workplace (audit D4). */
 export const isOperationalWorkplace = (building: WorkplaceLike): boolean =>
   isOperationalWorkshop(building) ||
   isOperationalFarm(building) ||
-  isOperationalWell(building)
+  isOperationalWell(building) ||
+  isOperationalLumberCamp(building)
 
 /** A workplace only offers jobs once operational (docs/06 lifecycle). */
 export const isOperationalWorkshop = (building: WorkplaceLike): boolean =>

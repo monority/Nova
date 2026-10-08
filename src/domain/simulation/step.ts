@@ -24,6 +24,7 @@ import {
   payMaintenance,
   produceFood,
   produceWater,
+  produceWood,
   progressPlacedRoads,
   releaseCompletedConstructionCrew,
   updateNeeds,
@@ -57,8 +58,14 @@ export const stepSimulation = (
   // Phase 4b: Well production into the shared Water stock.
   const watered = produceWater(produced)
 
+  // Phase 4c: wood extraction from finite deposits (Step003). Staffed Lumber
+  // Camps + the Colony Center's unstaffed primitive collection; decrements
+  // the deposits. Runs before commands so a same-tick placement sees the
+  // pre-extraction deposits (same convention as food/water production).
+  const extractedWood = produceWood(watered)
+
   // Phase 5: all-or-nothing colony feeding.
-  const consumed = consumeFood(watered, requiredFood)
+  const consumed = consumeFood(extractedWood, requiredFood)
 
   // Phase 5b: Water coverage/consumption (Step 10P).
   const waterActive = hasOperationalWell(consumed.state)

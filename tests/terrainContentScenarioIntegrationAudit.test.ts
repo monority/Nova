@@ -174,6 +174,7 @@ const scene = (spec: SceneSpec, blockedCells: readonly string[] = []): Simulatio
       money: spec.material ?? 100,
       food: spec.food ?? 100,
       water: spec.water ?? 0,
+      wood: 0,
     },
   }
   for (const [x, y] of spec.residences) {
@@ -1606,7 +1607,7 @@ describe('15. determinism, insertion order, save/load, hash', () => {
     expect(rows.insertionOrderEquivalent).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
     expect(rows.terrainSurvivesSave).toEqual(normalizeBlockedCells(cells))
-    expect(rows.saveVersion).toBe(9)
+    expect(rows.saveVersion).toBe(10)
     expect(rows.beforeHash).not.toBe(rows.afterHash)
   })
 
@@ -1663,6 +1664,7 @@ describe('16. architecture audit', () => {
       'src/domain/simulation/phases.ts',
       'src/domain/simulation/state.ts',
       'src/domain/world/grid.ts',
+      'src/domain/world/woodDeposits.ts',
       'src/renderer/three/novaRenderer.ts',
     ].sort()
     audit('TERRAIN_CONSUMERS', { readers, expected })

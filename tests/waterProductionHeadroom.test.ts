@@ -83,6 +83,7 @@ const withStocks = (
     money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
+    wood: 0,
   },
 })
 
@@ -382,7 +383,7 @@ describe('6 — Food regression', () => {
 
 describe('7 — persistence and determinism', () => {
   it('SAVE_VERSION stays 9 and admission is deterministic', () => {
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
     const run = (): SimulationState =>
       advance(waterWorld({ residences: 8, wells: 2, colonists: 1, water: 3 }), 60)
     const a = run()

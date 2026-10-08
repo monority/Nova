@@ -203,7 +203,7 @@ describe('road construction command path (Step 09H)', () => {
   it('K — insufficient Material is rejected with zero mutation', () => {
     const poor: SimulationState = {
       ...createTestState(),
-      resources: { money: ROAD_CONSTRUCTION_COST - 1, food: 100, water: 0 },
+      resources: { money: ROAD_CONSTRUCTION_COST - 1, food: 100, water: 0 , wood: 0},
     }
     const state = stepSimulation(poor, roads([{ x: 2, y: 2 }]))
     expect(Object.keys(state.roads)).toEqual([])
@@ -242,7 +242,7 @@ describe('road placement preview contract (Step 09H)', () => {
     })
     const poor: SimulationState = {
       ...state,
-      resources: { money: 0, food: 100, water: 0 },
+      resources: { money: 0, food: 100, water: 0 , wood: 0},
     }
     expect(validateRoadsPlacement(poor, [{ x: 2, y: 2 }])).toEqual({
       valid: false,
@@ -427,7 +427,7 @@ describe('road projection, persistence and determinism (Step 09H)', () => {
     const raw = serializeSave(state)
     expect(raw.includes('connections')).toBe(false)
     expect(raw.includes('orientation')).toBe(false)
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
   })
 
   it('T — deterministic replay: same gestures, same state and hash', () => {

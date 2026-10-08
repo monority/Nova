@@ -86,6 +86,7 @@ const withStocks = (
     money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
+    wood: 0,
   },
 })
 
@@ -141,8 +142,8 @@ describe('§1/§3 — current model surface', () => {
     const resources = Object.keys(createState().resources).sort()
     const buildings = Object.keys(BUILDING_CATALOG).sort()
     audit('CURRENT_SURFACE', { resources, buildings })
-    expect(resources).toEqual(['food', 'money', 'water'])
-    expect(buildings).toEqual(['farm', 'residence', 'well', 'workshop'])
+    expect(resources).toEqual(['food', 'money', 'water', 'wood'])
+    expect(buildings).toEqual(['colonyCenter', 'farm', 'lumberCamp', 'residence', 'well', 'workshop'])
   })
 
   it('has one household consumption flow (Food) and no second service', () => {
@@ -261,7 +262,7 @@ describe('§3 — missing causal dependencies (surface evidence)', () => {
     )
     audit('BUILDING_CATALOG', defs)
     expect(getBuildingDefinition('farm').constructionCost).toBe(25)
-    expect(Object.keys(defs).length).toBe(4)
+    expect(Object.keys(defs).length).toBe(6)
     expect(getBuildingDefinition('well').constructionCost).toBe(25)
   })
 })
@@ -273,7 +274,7 @@ describe('§3 — missing causal dependencies (surface evidence)', () => {
 describe('§17 — baseline health', () => {
   it('SAVE_VERSION, determinism and save/load remain intact', () => {
     const state = rowWorld({ residences: 4, farms: 2, workshops: 2, material: 5 })
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))
     const a = advance(state, 60)

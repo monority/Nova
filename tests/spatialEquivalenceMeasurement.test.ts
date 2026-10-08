@@ -67,7 +67,7 @@ const staffedPair = (
 ): SimulationState => {
   let state = {
     ...createInitialState(config),
-    resources: { money: 10000, food: 100, water: 0 },
+    resources: { money: 10000, food: 100, water: 0, wood: 0 },
   }
   for (const [x, y] of residenceCells) state = operational(state, 'residence', x, y)
   state = operationalRoads(state, roadCells)

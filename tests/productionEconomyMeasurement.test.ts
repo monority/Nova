@@ -79,6 +79,7 @@ const withStocks = (
     money: stocks.material ?? state.resources.money,
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
+    wood: 0,
   },
 })
 
@@ -214,7 +215,7 @@ const HORIZONS = [1, 4, 12, 24, 60] as const
 
 describe('1. Production dependency (measured from the catalog and the runtime)', () => {
   it('every building definition carries construction/housing only — no input, recipe or efficiency field', () => {
-    for (const type of ['residence', 'farm', 'workshop', 'well'] as const) {
+    for (const type of ['residence', 'farm', 'workshop', 'well', 'lumberCamp', 'colonyCenter'] as const) {
       expect(Object.keys(getBuildingDefinition(type)).sort()).toEqual([
         'constructionCost',
         'constructionTicks',
@@ -527,7 +528,7 @@ describe('6. Candidate Phase 8 directions — evidence only (no ranking)', () =>
     const rows = trace(chain, [12])
     audit('DIRECTION_B_CHAINS', { rows })
     // Every producer's output is a terminal good consumed by colonists or construction.
-    expect(Object.keys(BUILDING_CATALOG)).toEqual(['residence', 'farm', 'workshop', 'well'])
+    expect(Object.keys(BUILDING_CATALOG)).toEqual(['residence', 'farm', 'workshop', 'well', 'lumberCamp', 'colonyCenter'])
   })
 
   it('C — consumption: the only produced-goods consumption is Food/Water by colonists', () => {

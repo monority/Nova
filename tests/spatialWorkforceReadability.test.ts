@@ -108,7 +108,7 @@ const scene = (spec: SceneSpec): SimulationState => {
   let state = createInitialState(config())
   state = {
     ...state,
-    resources: { money: 200, food: 200, water: spec.water ?? 0 },
+    resources: { money: 200, food: 200, water: spec.water ?? 0 , wood: 0},
   }
   for (const [x, y] of spec.residences) {
     state = withBuilding(state, 'residence', x, y)
@@ -542,7 +542,7 @@ describe('3. placement spatial preview', () => {
     audit('GAMEPLAY_INVARIANT', rows)
     expect(rows.identical).toBe(true)
     // Step001 money migration bumps SAVE_VERSION from 8 to 9.
-    expect(rows.saveVersion).toBe(9)
+    expect(rows.saveVersion).toBe(10)
     // 7 when this step ran; Step 10BE added one content scenario and Step
     // 10CI added three Town-goal scenarios; identical replay still holds.
     expect(rows.scenarioCatalogue).toBe(11)

@@ -75,17 +75,17 @@ const runTicks = (state: SimulationState, ticks: number): SimulationState => {
 }
 
 describe('10DE — persistence contract', () => {
-  it('freezes SAVE_VERSION 9 with the v4-v8 migration chain and an 8-key state', () => {
-    expect(SAVE_VERSION).toBe(9)
-    expect(MIGRATABLE_SAVE_VERSION).toBe(8)
-    expect([...MIGRATABLE_SAVE_VERSIONS]).toEqual([4, 5, 6, 7, 8])
+  it('freezes SAVE_VERSION 10 with the v4-v9 migration chain and a 9-key state', () => {
+    expect(SAVE_VERSION).toBe(10)
+    expect(MIGRATABLE_SAVE_VERSION).toBe(9)
+    expect([...MIGRATABLE_SAVE_VERSIONS]).toEqual([4, 5, 6, 7, 8, 9])
 
     const parsed = JSON.parse(serializeSave(createInitialState(config))) as {
       version: number
       state: Record<string, unknown>
     }
-    expect(parsed.version).toBe(9)
-    expect(Object.keys(parsed.state)).toHaveLength(8)
+    expect(parsed.version).toBe(10)
+    expect(Object.keys(parsed.state)).toHaveLength(9)
   })
 
   it('keeps derived progression/objective/scenario state out of the save', () => {

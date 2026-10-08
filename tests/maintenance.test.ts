@@ -251,7 +251,7 @@ describe('building maintenance (Step001)', () => {
     expect(getResourceStock(state).money).toBe(
       getResourceStock(after).money + 2
     )
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
   })
 
   it('collectRevenue is pure and additive', () => {

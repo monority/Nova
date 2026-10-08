@@ -171,6 +171,8 @@ const BUILDING_LABELS: Readonly<Record<string, string>> = {
   farm: 'Farm',
   workshop: 'Workshop',
   well: 'Well',
+  lumberCamp: 'Lumber Camp',
+  colonyCenter: 'Colony Center',
 }
 
 const labelOf = (building: BuildingInspection): string =>
@@ -1297,6 +1299,11 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     // Explainable failure (Step 4 §13): values come from real queries.
     return `cell ${cell.x},${cell.y} — insufficient funds (${affordability.moneyAvailable}/${affordability.moneyRequired})`
   }
+  if (!placement.valid && placement.reason === 'depositBlocked') {
+    // Step003: a wood deposit is a physical world feature, never a building
+    // site — the refusal names the deposit, not a cost problem.
+    return `cell ${cell.x},${cell.y} — blocked by a wood deposit`
+  }
   if (!placement.valid && placement.reason === 'insufficientWater') {
     // Step 10AD: the Water construction investment is its own causal reason,
     // and same-tick revenue never covers it.
@@ -1704,6 +1711,7 @@ window.__nova = {
       unemployed: String(employment.unemployed),
       jobCapacity: String(employment.jobCapacity),
       money: String(getMoneyStock(state)),
+      wood: String(state.resources.wood),
       taxes: String(getTaxRevenuePerTick(state)),
       commerce: String(getCommerceRevenuePerTick(state)),
       revenue: String(getRevenuePerTick(state)),

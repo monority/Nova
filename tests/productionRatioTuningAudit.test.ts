@@ -266,6 +266,7 @@ const build = (fixture: Fixture): SimulationState => {
       money: fixture.material ?? 500,
       food: fixture.food ?? 400,
       water: fixture.water ?? 200,
+      wood: 0,
     },
   }
   const columns = fixture.residences + fixture.types.length
@@ -484,7 +485,7 @@ describe('1. Baseline contract', { timeout: 30000 }, () => {
     expect(contract.workshopProduction).toBe(2)
     expect(contract.workshopUpkeep).toBe(1)
     expect(contract.initialMaterial).toBe(100)
-    expect(contract.saveVersion).toBe(9)
+    expect(contract.saveVersion).toBe(10)
   })
 
   it('reads the Water admission gate and the Workforce contract', () => {
@@ -1557,9 +1558,9 @@ describe('16. Architectural invariants', () => {
       noNewBuilding: [...new Set([...iterateBuildings(a)].map((b) => b.type))].sort(),
       productionChanged: false,
     })
-    expect(SAVE_VERSION).toBe(9)
+    expect(SAVE_VERSION).toBe(10)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(a))
-    expect(Object.keys(a.resources).sort()).toEqual(['food', 'money', 'water'])
+    expect(Object.keys(a.resources).sort()).toEqual(['food', 'money', 'water', 'wood'])
   })
 })

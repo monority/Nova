@@ -761,8 +761,8 @@ describe('9-11. Safety, Town+ gate and classification', { timeout: 30000 }, () =
       scenarioStateInSave: serializeCanonicalState(state).includes('scenario'),
       progressionStateInSave: serializeCanonicalState(state).includes('progression'),
     })
-    expect(saved.version).toBe(9)
-    expect(Object.keys(saved.state)).toHaveLength(8)
+    expect(saved.version).toBe(10)
+    expect(Object.keys(saved.state)).toHaveLength(9)
     expect(serializeCanonicalState(state)).not.toContain('scenario')
     expect(serializeCanonicalState(state)).not.toContain('progression')
   })

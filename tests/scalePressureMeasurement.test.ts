@@ -54,6 +54,7 @@ const road = (state: SimulationState, x: number, y: number): SimulationState => 
       ...created.state.roads,
       [id]: { ...createdRoad, status: 'operational', constructionRemaining: 0 },
     },
+    woodDeposits: {},
   }
 }
 
@@ -66,7 +67,7 @@ const row = (state: SimulationState, length: number): SimulationState => {
 const colony = (population: number): SimulationState => {
   let state = {
     ...base(),
-    resources: { money: 1000, food: 1000, water: 1000 },
+    resources: { money: 1000, food: 1000, water: 1000, wood: 0 },
   }
   for (let i = 0; i < population; i += 1) state = operational(state, 'residence', i, 0)
   const farmCount = Math.ceil(population / 2)
