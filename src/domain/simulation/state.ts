@@ -23,7 +23,7 @@ import {
   normalizeBlockedCells,
   type WorldConfig,
 } from '../world/grid.js'
-import { hasWoodDepositAt, normalizeWoodDeposits, type WoodDeposits } from '../world/woodDeposits.js'
+import { hasDepositAt, normalizeDeposits, type Deposits } from '../world/deposits.js'
 
 export interface SimulationTime {
   /** Current tick. Starts at 0, increments once per completed tick. */
@@ -50,7 +50,9 @@ export interface SimulationState {
   readonly roads: Readonly<Record<string, RoadState>>
   /** Finite wood deposits present in the sector (Step003). Mutable state:
    * extraction decrements `remaining`; exhausted deposits stay with 0. */
-  readonly woodDeposits: WoodDeposits
+  readonly woodDeposits: Deposits
+  /** Finite stone deposits present in the sector (Step005). Same rules. */
+  readonly stoneDeposits: Deposits
   readonly counters: EntityCounters
 }
 
@@ -99,7 +101,8 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
     buildings: {},
     colonists: {},
     roads: {},
-    woodDeposits: normalizeWoodDeposits(world.woodDeposits ?? []),
+    woodDeposits: normalizeDeposits(world.woodDeposits ?? []),
+    stoneDeposits: normalizeDeposits(world.stoneDeposits ?? []),
     counters: { nextBuildingId: 1, nextColonistId: 1, nextRoadId: 1 },
   }
   // Step004 (audit D4, day-0 bootstrap hardening): every new colony owns
@@ -110,7 +113,7 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
   // founding structure, not a construction project). A world without a
   // single valid cell cannot host a colony at all — that is a config error,
   // thrown here.
-  const cell = firstAnchorCell(world, base.woodDeposits)
+  const cell = firstAnchorCell(world, base.woodDeposits, base.stoneDeposits)
   if (cell === null) {
     throw new Error(
       'Invalid world: no buildable cell available for the Colony Center'
@@ -144,14 +147,16 @@ export const COLONY_CENTER_ID = 'colony-center'
  */
 const firstAnchorCell = (
   world: WorldConfig,
-  deposits: WoodDeposits
+  wood: Deposits,
+  stone: Deposits
 ): { readonly x: number; readonly y: number } | null => {
   for (let y = world.height - 1; y >= 0; y -= 1) {
     for (let x = world.width - 1; x >= 0; x -= 1) {
       const cell = { x, y }
       if (!isInBounds(world, cell)) continue
       if (isTerrainBlocked(world, cell)) continue
-      if (hasWoodDepositAt(deposits, x, y)) continue
+      if (hasDepositAt(wood, x, y)) continue
+      if (hasDepositAt(stone, x, y)) continue
       return cell
     }
   }

@@ -81,6 +81,7 @@ const BUILDING_LABELS: Readonly<Record<BuildingType, string>> = {
   well: 'Well',
   lumberCamp: 'Lumber Camp',
   colonyCenter: 'Colony Center',
+  quarry: 'Quarry',
 }
 
 const countOperational = (state: SimulationState, type: BuildingType): number =>

@@ -83,6 +83,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -1215,7 +1216,7 @@ describe('§12/§15 — persistence impact and determinism', () => {
       buildingsRead: [...iterateBuildings(state)].length,
       srcTouched: false,
     })
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
   })
 })
 

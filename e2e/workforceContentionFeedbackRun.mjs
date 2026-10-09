@@ -52,7 +52,7 @@ try {
     const nova = await import('/src/index.ts')
     const config = { world: { seed: 'nova-step10bq-browser', width: 16, height: 8 } }
     let state = nova.createInitialState(config)
-    state = { ...state, resources: { money: 1000, food: 1000, water: 1000, wood: 0 }, woodDeposits: {} }
+    state = { ...state, resources: { money: 1000, food: 1000, water: 1000, wood: 0, stone: 0 }, woodDeposits: {}, stoneDeposits: {} }
     const operational = (current, type, x, y) => {
       const created = nova.createBuilding(current, type, x, y, 2)
       const building = created.state.buildings[created.buildingId]

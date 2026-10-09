@@ -22,7 +22,7 @@ import {
   advanceConstruction,
   produceWood,
   applyCommand,
-  adjacentWoodRemaining,
+  adjacentRemaining,
   hashCanonicalState,
   validatePlacement,
   type BuildingType,
@@ -249,7 +249,7 @@ describe('Step003 — wood extraction', () => {
     state = { ...roadCreated.state, roads }
     state = assignJobs(state)
 
-    expect(adjacentWoodRemaining(state.woodDeposits, 5, 3)).toBe(0)
+    expect(adjacentRemaining(state.woodDeposits, 5, 3)).toBe(0)
 
     const after = produceWood(state)
     expect(after.resources.wood).toBe(0)

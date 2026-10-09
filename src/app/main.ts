@@ -173,6 +173,7 @@ const BUILDING_LABELS: Readonly<Record<string, string>> = {
   well: 'Well',
   lumberCamp: 'Lumber Camp',
   colonyCenter: 'Colony Center',
+  quarry: 'Quarry',
 }
 
 const labelOf = (building: BuildingInspection): string =>
@@ -1712,6 +1713,7 @@ window.__nova = {
       jobCapacity: String(employment.jobCapacity),
       money: String(getMoneyStock(state)),
       wood: String(state.resources.wood),
+      stone: String(state.resources.stone),
       taxes: String(getTaxRevenuePerTick(state)),
       commerce: String(getCommerceRevenuePerTick(state)),
       revenue: String(getRevenuePerTick(state)),

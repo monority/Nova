@@ -128,6 +128,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -1292,7 +1293,7 @@ describe('§15 — Farm vs Workshop production timing', () => {
 
 describe('§16 — persistence and determinism', () => {
   it('SAVE_VERSION is 9 and employment survives save/load', () => {
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
     const state = rowWorld({ residences: 3, farms: 2, workshops: 2 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

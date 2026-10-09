@@ -23,6 +23,7 @@ import {
   consumeWater,
   payMaintenance,
   produceFood,
+  produceStone,
   produceWater,
   produceWood,
   progressPlacedRoads,
@@ -64,8 +65,13 @@ export const stepSimulation = (
   // pre-extraction deposits (same convention as food/water production).
   const extractedWood = produceWood(watered)
 
+  // Phase 4d: stone extraction from finite deposits (Step005). Staffed
+  // Quarries only — wood remains the primitive recovery resource, so the
+  // Colony Center does not collect stone.
+  const extractedStone = produceStone(extractedWood)
+
   // Phase 5: all-or-nothing colony feeding.
-  const consumed = consumeFood(extractedWood, requiredFood)
+  const consumed = consumeFood(extractedStone, requiredFood)
 
   // Phase 5b: Water coverage/consumption (Step 10P).
   const waterActive = hasOperationalWell(consumed.state)

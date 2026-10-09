@@ -31,6 +31,12 @@ export interface ResourceStock {
    * it is never created ex nihilo.
    */
   readonly wood: number
+  /**
+   * Colony stone reserve in whole block-units (Step005). Extracted from
+   * finite cell-keyed Stone deposits by staffed Quarries. Canonical
+   * persisted state like food, water and wood; never created ex nihilo.
+   */
+  readonly stone: number
 }
 
 /** Deterministic starting treasury (never random). Buys the day-0 setup. */
@@ -42,6 +48,8 @@ export const INITIAL_WATER = 0
 /** Deterministic starting wood stock (Step003: explicitly zero — wood only
  * enters the colony through extraction from finite deposits). */
 export const INITIAL_WOOD = 0
+/** Deterministic starting stone stock (Step005: explicitly zero, same rule). */
+export const INITIAL_STONE = 0
 /** One live colonist needs exactly one food unit per tick (Step 05B). */
 export const FOOD_PER_COLONIST_PER_TICK = 1
 /** One operational farm produces exactly two food units per tick (Step 06B). */
@@ -84,6 +92,11 @@ export const WOOD_PER_LUMBER_CAMP_PER_TICK = 2
  * replace a Lumber Camp economically.
  */
 export const WOOD_PER_COLONY_CENTER_PER_TICK = 1
+/**
+ * One staffed operational Quarry extracts two stone units per tick (Step005)
+ * — same modest rate as the Lumber Camp, capped by the adjacent deposits.
+ */
+export const STONE_PER_QUARRY_PER_TICK = 2
 
 /**
  * Settlement-phase storage allocation constants (Step 10BG).
@@ -97,6 +110,7 @@ export const createInitialResourceStock = (): ResourceStock => ({
   food: INITIAL_FOOD,
   water: INITIAL_WATER,
   wood: INITIAL_WOOD,
+  stone: INITIAL_STONE,
 })
 
 export const hasSufficientResources = (stock: ResourceStock, cost: number): boolean =>

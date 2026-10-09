@@ -338,8 +338,8 @@ async function main() {
     const second = JSON.stringify(await progression(page));
     assert(first === second, 'progression must be recomputed identically');
     const saved = JSON.parse(await page.evaluate(() => window.__nova.serialize()));
-    assert(saved.version === 11, `save version expected 11, got ${saved.version}`);
-    assert(Object.keys(saved.state).length === 9, `save must keep 9 top-level keys, got ${Object.keys(saved.state).length}`);
+    assert(saved.version === 12, `save version expected 12, got ${saved.version}`);
+    assert(Object.keys(saved.state).length === 10, `save must keep 10 top-level keys, got ${Object.keys(saved.state).length}`);
     const serialized = JSON.stringify(saved);
     for (const term of ['scenario', 'progression', 'stage', 'objective', 'blocker']) {
       assert(!serialized.includes(term), `save must not contain "${term}"`);

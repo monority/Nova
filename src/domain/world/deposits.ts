@@ -1,5 +1,5 @@
 /**
- * Wood deposits (Step003) — the first physical world resource.
+ * Cell-keyed physical world deposits (Step003 Wood, Step005 Stone).
  *
  * A deposit is a finite, cell-keyed quantity of wood that exists in the
  * sector BEFORE the colony arrives (validated product decision: resources are
@@ -18,18 +18,18 @@
 import type { CellCoordinate } from './grid.js'
 
 /** One finite wood deposit on one cell. */
-export interface WoodDeposit {
+export interface Deposit {
   readonly x: number
   readonly y: number
-  /** Extractable wood units left. 0 = exhausted (entry remains). */
+  /** Extractable resource units left. 0 = exhausted (entry remains). */
   readonly remaining: number
 }
 
 /** Canonical deposit map: keyed by `"x,y"`, iterated in sorted-key order. */
-export type WoodDeposits = Readonly<Record<string, WoodDeposit>>
+export type Deposits = Readonly<Record<string, Deposit>>
 
 /** Canonical `"x,y"` key, identical to the road/terrain key convention. */
-export const woodDepositKey = (x: number, y: number): string => `${x},${y}`
+export const depositKey = (x: number, y: number): string => `${x},${y}`
 
 /** The four orthogonal neighbours of a cell (same deltas as road contact). */
 const NEIGHBOR_DELTAS: readonly CellCoordinate[] = [
@@ -40,11 +40,11 @@ const NEIGHBOR_DELTAS: readonly CellCoordinate[] = [
 ]
 
 /**
- * Total extractable wood in the deposits orthogonally adjacent to a building
+ * Total extractable quantity in the deposits orthogonally adjacent to a building
  * cell. Deterministic: sorted-key iteration, pure.
  */
-export const adjacentWoodRemaining = (
-  deposits: WoodDeposits,
+export const adjacentRemaining = (
+  deposits: Deposits,
   x: number,
   y: number
 ): number => {
@@ -65,23 +65,23 @@ export const adjacentWoodRemaining = (
 }
 
 /**
- * Extract up to `amount` wood from the deposits orthogonally adjacent to a
+ * Extract up to `amount` units from the deposits orthogonally adjacent to a
  * building cell, draining the lowest canonical key first. Pure: returns the
  * extracted quantity (may be less than requested when deposits run low) and
  * the next deposits record. Exhausted deposits stay in the map with
  * `remaining: 0`.
  */
-export const extractAdjacentWood = (
-  deposits: WoodDeposits,
+export const extractAdjacent = (
+  deposits: Deposits,
   x: number,
   y: number,
   amount: number
-): { readonly deposits: WoodDeposits; readonly extracted: number } => {
+): { readonly deposits: Deposits; readonly extracted: number } => {
   if (amount < 0) {
-    throw new Error(`Negative wood extraction: ${amount}`)
+    throw new Error(`Negative extraction: ${amount}`)
   }
   let remaining = amount
-  const next: Record<string, WoodDeposit> = { ...deposits }
+  const next: Record<string, Deposit> = { ...deposits }
   for (const key of Object.keys(deposits).sort()) {
     if (remaining === 0) break
     const deposit = deposits[key]
@@ -102,14 +102,14 @@ export const extractAdjacentWood = (
 }
 
 /** True iff the cell hosts a wood deposit (placement must not overwrite it). */
-export const hasWoodDepositAt = (deposits: WoodDeposits, x: number, y: number): boolean =>
-  deposits[woodDepositKey(x, y)] !== undefined
+export const hasDepositAt = (deposits: Deposits, x: number, y: number): boolean =>
+  deposits[depositKey(x, y)] !== undefined
 
 /** Normalize a deposit seed list: validate, dedupe by cell, sort by key. */
-export const normalizeWoodDeposits = (
-  deposits: readonly WoodDeposit[]
-): WoodDeposits => {
-  const map: Record<string, WoodDeposit> = {}
+export const normalizeDeposits = (
+  deposits: readonly Deposit[]
+): Deposits => {
+  const map: Record<string, Deposit> = {}
   for (const deposit of deposits) {
     if (
       !Number.isInteger(deposit.x) ||
@@ -121,7 +121,7 @@ export const normalizeWoodDeposits = (
         `Malformed wood deposit: ${JSON.stringify(deposit)}`
       )
     }
-    map[woodDepositKey(deposit.x, deposit.y)] = {
+    map[depositKey(deposit.x, deposit.y)] = {
       x: deposit.x,
       y: deposit.y,
       remaining: deposit.remaining,

@@ -33,4 +33,4 @@ AUDIT
 - Product decisions that change the contract update `../game/` or
   `../adr/` in the same step and say so explicitly.
 - Validation claims must cite commands actually executed.
-- Current step is tracked here: **Step004 (day-0 bootstrap hardening, complete — see Step004 file)**.
+- Current step is tracked here: **Step005 (physical stone + extraction, complete — see Step005 file)**.

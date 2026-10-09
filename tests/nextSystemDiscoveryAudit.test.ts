@@ -124,6 +124,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -809,7 +810,7 @@ describe('§10/§11 — Material and population feedback', () => {
 
 describe('§12/§13 — implementation cost, persistence, performance', () => {
   it('estimates the Construction Crew contract and confirms current persistence', () => {
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
     const state = world({ residences: 4, farms: 1, wells: 1, colonists: 4 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

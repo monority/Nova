@@ -141,6 +141,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -1549,7 +1550,7 @@ describe('§21 — audit harness performance (separate from production)', () => 
 
 describe('§22 — persistence and determinism (audit-only)', () => {
   it('SAVE_VERSION is 9 and no candidate state exists to persist', () => {
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
     const state = rowWorld({ residences: 3, farms: 2, workshops: 2, material: 20 })
     const serialized = serializeCanonicalState(state)
     expect(serialized).not.toContain('farmUpkeep')

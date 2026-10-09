@@ -32,7 +32,7 @@ Never mark a feature complete without implementation and validation evidence.
 | Node version | v24.19.0 |
 | Typecheck | PASS — `npx tsc --noEmit`, no errors (2026-10-08) |
 | Lint | PASS — `npx eslint .`, no findings (2026-10-08) |
-| Unit tests | PASS — `npx vitest run`: 123 files / 1897 tests, all green (2026-10-08, Step004) |
+| Unit tests | PASS — `npx vitest run`: 124 files / 1908 tests, all green (2026-10-08, Step005) |
 | E2E | PASS — full suite: 27/27 scripts, 0 failed (Step003 pass, 2026-10-08); two pre-existing single-read hover races noted (pass in isolation) |
 | Build | PASS — `npm run build` (tsc -p tsconfig.build.json + vite build) (2026-10-08) |
 
@@ -59,7 +59,7 @@ Update these values from actual command output.
 | Environment | UNKNOWN | not inspected this pass |
 | Technology | PLANNED | no implementation found |
 | Ages | PLANNED | progression stages implemented (wilderness→village→settlement→town); Age system is not |
-| Persistence | IMPLEMENTED | versioned save/load, `SAVE_VERSION = 11` (Step003 wood slice + Step004 day-0 Colony Center anchor, maintenance-exempt), canonical hash, deterministic continuation |
+| Persistence | IMPLEMENTED | versioned save/load, `SAVE_VERSION = 12` (Step003 wood + Step004 day-0 anchor + Step005 stone: `resources.wood/stone`, `woodDeposits`/`stoneDeposits`), canonical hash, deterministic continuation |
 | Performance | UNKNOWN | no measurements taken this pass |
 
 ---
@@ -92,7 +92,7 @@ Do not implement deferred scope without an explicit product decision.
 
 ## Current Approved Step
 
-Step004 (day-0 bootstrap hardening: guaranteed Colony Center) — complete; see `docs/roadmap/Step004-day0-bootstrap.md`.
+Step005 (physical stone + extraction) — complete; see `docs/roadmap/Step005-stone-extraction.md`.
 
 ---
 

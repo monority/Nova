@@ -15,6 +15,7 @@ export type BuildingType =
   | 'well'
   | 'lumberCamp'
   | 'colonyCenter'
+  | 'quarry'
 
 export type BuildingStatus = 'underConstruction' | 'operational'
 
@@ -82,6 +83,10 @@ export const BUILDING_CATALOG: Readonly<
   // and cost as every other building; it must never replace a Lumber Camp
   // economically.
   colonyCenter: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  // Step005: the Stone extraction building. A concrete workplace (capacity 1)
+  // that extracts stone from ADJACENT finite stone deposits while staffed —
+  // the exact Lumber Camp contract over a different deposit resource.
+  quarry: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
 }
 
 export const getBuildingDefinition = (

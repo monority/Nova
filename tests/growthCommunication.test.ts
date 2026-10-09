@@ -211,6 +211,6 @@ describe('G1.3 — derived, stable, persistent', () => {
     for (const term of ['Growth —', 'growthBlocker', 'growthMessage', 'growthState']) {
       expect(serialized.includes(term), term).toBe(false)
     }
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
   })
 })

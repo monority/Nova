@@ -62,13 +62,18 @@ export const isOperationalWell = (building: WorkplaceLike): boolean =>
 export const isOperationalLumberCamp = (building: WorkplaceLike): boolean =>
   building.type === 'lumberCamp' && building.status === 'operational'
 
+/** An operational Quarry offers jobs (Step005). Same rule, different deposit. */
+export const isOperationalQuarry = (building: WorkplaceLike): boolean =>
+  building.type === 'quarry' && building.status === 'operational'
+
 /** A building offers jobs once operational: Farm, Workshop, Well or Lumber
  * Camp (Step003). The Colony Center is never a workplace (audit D4). */
 export const isOperationalWorkplace = (building: WorkplaceLike): boolean =>
   isOperationalWorkshop(building) ||
   isOperationalFarm(building) ||
   isOperationalWell(building) ||
-  isOperationalLumberCamp(building)
+  isOperationalLumberCamp(building) ||
+  isOperationalQuarry(building)
 
 /** A workplace only offers jobs once operational (docs/06 lifecycle). */
 export const isOperationalWorkshop = (building: WorkplaceLike): boolean =>

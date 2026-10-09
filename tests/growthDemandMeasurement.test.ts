@@ -56,7 +56,7 @@ const operational = (
 const balancedColony = (population: number): SimulationState => {
   let state = {
     ...createInitialState(config),
-    resources: { money: 10000, food: 10000, water: 10000, wood: 0 },
+    resources: { money: 10000, food: 10000, water: 10000, wood: 0, stone: 0 },
   }
   for (let index = 0; index < population; index += 1) {
     state = operational(state, 'residence', index, 0)

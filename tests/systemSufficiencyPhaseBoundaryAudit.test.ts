@@ -86,6 +86,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -1553,9 +1554,9 @@ describe('13-14. Architecture boundary audit', { timeout: 30000 }, () => {
       hashAlgorithm: 'FNV-1a 64 over canonical JSON (unchanged)',
       uiOrRenderingFields: 0,
     })
-    expect(saved.version).toBe(11)
-    expect(SAVE_VERSION).toBe(11)
-    expect(Object.keys(saved.state)).toHaveLength(9)
+    expect(saved.version).toBe(12)
+    expect(SAVE_VERSION).toBe(12)
+    expect(Object.keys(saved.state)).toHaveLength(10)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serialized).not.toContain('coverage')

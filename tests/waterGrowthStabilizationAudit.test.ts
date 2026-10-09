@@ -113,6 +113,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -750,7 +751,7 @@ describe('§15/§16 — persistence and performance impact', () => {
     const state = waterWorld({ residences: 2, wells: 1, colonists: 1, water: 4 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
   })
 
   it('measures the admission-loop cost (existing population/residence scan)', () => {

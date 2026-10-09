@@ -38,6 +38,7 @@ describe('canonical state', () => {
       config: b.config,
       roads: {},
       woodDeposits: {},
+      stoneDeposits: {},
     }
     expect(serializeCanonicalState(a)).toBe(serializeCanonicalState(reordered))
   })

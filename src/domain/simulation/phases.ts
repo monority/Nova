@@ -59,6 +59,7 @@ import {
   countWorkersAt,
   isOperationalFarm,
   isOperationalLumberCamp,
+  isOperationalQuarry,
   isOperationalWorkplace,
   isOperationalWorkshop,
 } from '../jobs/jobs.js'
@@ -91,14 +92,15 @@ import {
   hasSufficientWater,
   MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   TAX_PER_INHABITANT_PER_TICK,
+  STONE_PER_QUARRY_PER_TICK,
   WOOD_PER_COLONY_CENTER_PER_TICK,
   WOOD_PER_LUMBER_CAMP_PER_TICK,
 } from '../resource/resource.js'
 import {
-  extractAdjacentWood,
-  adjacentWoodRemaining,
-  hasWoodDepositAt,
-} from '../world/woodDeposits.js'
+  extractAdjacent,
+  adjacentRemaining,
+  hasDepositAt,
+} from '../world/deposits.js'
 import type { CellCoordinate } from '../world/grid.js'
 import { isInBounds, isTerrainBlocked } from '../world/grid.js'
 import { waterProductionForTick } from '../water/water.js'
@@ -200,11 +202,13 @@ export const validatePlacement = (
   if (buildingType === 'colonyCenter') {
     return { valid: false, reason: 'colonyCenterExists' }
   }
-  // Step003: a wood deposit is a physical world feature — a building must
-  // never overwrite it (and a camp sitting ON a deposit could never extract
-  // from it: extraction requires orthogonal adjacency). Checked like terrain,
-  // before occupancy and affordability — a deposit is not a cost problem.
-  if (hasWoodDepositAt(state.woodDeposits, cell.x, cell.y)) {
+  // Step003/005: wood AND stone deposits are physical world features — a
+  // building must never overwrite either (and an extractor sitting ON its
+  // deposit could never extract from it: extraction requires orthogonal
+  // adjacency). Checked like terrain, before occupancy and affordability —
+  // a deposit is not a cost problem.
+  if (hasDepositAt(state.woodDeposits, cell.x, cell.y) ||
+      hasDepositAt(state.stoneDeposits, cell.x, cell.y)) {
     return { valid: false, reason: 'depositBlocked' }
   }
   if (isCellBlocked(state, cell)) {
@@ -947,7 +951,7 @@ export const woodExtractionForCamp = (state: SimulationState, camp: {
 }): number =>
   Math.min(
     WOOD_PER_LUMBER_CAMP_PER_TICK,
-    adjacentWoodRemaining(state.woodDeposits, camp.x, camp.y)
+    adjacentRemaining(state.woodDeposits, camp.x, camp.y)
   )
 
 /**
@@ -961,7 +965,7 @@ export const woodCollectionForCenter = (state: SimulationState, center: {
 }): number =>
   Math.min(
     WOOD_PER_COLONY_CENTER_PER_TICK,
-    adjacentWoodRemaining(state.woodDeposits, center.x, center.y)
+    adjacentRemaining(state.woodDeposits, center.x, center.y)
   )
 
 /**
@@ -986,13 +990,13 @@ export const produceWood = (state: SimulationState): SimulationState => {
       if (countWorkersAt(state, building.id) === 0) continue
       const amount = woodExtractionForCamp(state, building)
       if (amount === 0) continue
-      const extracted = extractAdjacentWood(deposits, building.x, building.y, amount)
+      const extracted = extractAdjacent(deposits, building.x, building.y, amount)
       deposits = extracted.deposits
       yieldTotal += extracted.extracted
     } else if (building.type === 'colonyCenter') {
       const amount = woodCollectionForCenter(state, building)
       if (amount === 0) continue
-      const extracted = extractAdjacentWood(deposits, building.x, building.y, amount)
+      const extracted = extractAdjacent(deposits, building.x, building.y, amount)
       deposits = extracted.deposits
       yieldTotal += extracted.extracted
     }
@@ -1004,6 +1008,57 @@ export const produceWood = (state: SimulationState): SimulationState => {
     ...state,
     resources: { ...state.resources, wood: state.resources.wood + yieldTotal },
     woodDeposits: deposits,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4d - Stone extraction (Step005)
+// ---------------------------------------------------------------------------
+
+/**
+ * Stone extracted this tick by ONE staffed operational Quarry from the stone
+ * deposits orthogonally adjacent to it. Mirrors `woodExtractionForCamp`.
+ */
+export const stoneExtractionForQuarry = (state: SimulationState, quarry: {
+  readonly x: number
+  readonly y: number
+}): number =>
+  Math.min(
+    STONE_PER_QUARRY_PER_TICK,
+    adjacentRemaining(state.stoneDeposits, quarry.x, quarry.y)
+  )
+
+/**
+ * Add this tick's stone extraction to the shared stock (Step005). Every
+ * STAFFED operational Quarry extracts STONE_PER_QUARRY_PER_TICK from the
+ * stone deposits orthogonally adjacent to it, capped by what remains, in
+ * deterministic sorted-id order. Same next-tick staffing timing contract as
+ * produceFood/produceWood. The Colony Center does NOT collect stone: wood
+ * remains the primitive recovery resource (audit D4).
+ */
+export const produceStone = (state: SimulationState): SimulationState => {
+  let yieldTotal = 0
+  let deposits = state.stoneDeposits
+  for (const building of iterateBuildings(state)) {
+    if (building.status !== 'operational') continue
+    if (!isOperationalQuarry(building)) continue
+    if (countWorkersAt(state, building.id) === 0) continue
+    const amount = Math.min(
+      STONE_PER_QUARRY_PER_TICK,
+      adjacentRemaining(state.stoneDeposits, building.x, building.y)
+    )
+    if (amount === 0) continue
+    const extracted = extractAdjacent(deposits, building.x, building.y, amount)
+    deposits = extracted.deposits
+    yieldTotal += extracted.extracted
+  }
+  if (yieldTotal === 0) {
+    return state
+  }
+  return {
+    ...state,
+    resources: { ...state.resources, stone: state.resources.stone + yieldTotal },
+    stoneDeposits: deposits,
   }
 }
 

@@ -624,7 +624,7 @@ describe('employment render projection (Step 07C §13)', () => {
 
 describe('jobs persistence (Step 07C §10)', () => {
   it('bumps the save version to 9', () => {
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
   })
 
   it('round-trips employment state with hash and behavioral equivalence', () => {
@@ -734,7 +734,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
     const state = twoColonistState()
     getFoodTicksRemaining(state)
     isFoodSupplySustainable(state)
-    expect(Object.keys(state.resources).sort()).toEqual(['food', 'money', 'water', 'wood'])
+    expect(Object.keys(state.resources).sort()).toEqual(['food', 'money', 'stone', 'water', 'wood'])
     expect(Object.keys(state).sort()).toEqual([
       'buildings',
       'colonists',
@@ -742,6 +742,7 @@ describe('food forecast correction (Step 07C §1 / §17)', () => {
       'counters',
       'resources',
       'roads',
+      'stoneDeposits',
       'storage',
       'time',
       'woodDeposits',

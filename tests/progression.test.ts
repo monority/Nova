@@ -84,6 +84,7 @@ const scene = (spec: SceneSpec): SimulationState => {
       food: spec.food ?? 100,
       water: spec.water ?? 0,
       wood: 0,
+      stone: 0,
     },
   }
   for (const cell of spec.residences) state = op(state, 'residence', cell.x, cell.y)

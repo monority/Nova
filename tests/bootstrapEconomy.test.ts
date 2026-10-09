@@ -544,7 +544,7 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     // Save/load at the most fragile point: transient construction states.
     const loaded = loadSave(serializeSave(state))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
     // Continue both 5 ticks: identical futures.
     let direct = state
     let resumed = loaded

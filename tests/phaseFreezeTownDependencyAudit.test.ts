@@ -123,6 +123,7 @@ const colony = (spec: ColonySpec, world = config()): SimulationState => {
       food: spec.food ?? 200,
       water: spec.water ?? 50,
       wood: 0,
+      stone: 0,
     },
   }
   for (let index = 0; index < spec.population; index += 1) {
@@ -215,7 +216,7 @@ describe('1. freeze verification', () => {
     expect(frozen.farm).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
-    expect(frozen.saveVersion).toBe(11)
+    expect(frozen.saveVersion).toBe(12)
     // 7 at the freeze; Step 10BE added one curated content scenario and Step
     // 10CI added three Town-goal scenarios
     // (no mechanic, no constant, no objective kind changed).
@@ -276,7 +277,7 @@ describe('1. freeze verification', () => {
     // pinned to the progression query by tests/settlementGrowth.test.ts.
     expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
     expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/growth.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
-    expect(rows.saveVersion).toBe(11)
+    expect(rows.saveVersion).toBe(12)
   })
 })
 
@@ -453,7 +454,7 @@ describe('4. candidate audit', () => {
     // services, same network, different road budget.
     const shared = (() => {
       let state = createInitialState(config())
-      state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 , wood: 0} }
+      state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 , wood: 0, stone: 0} }
       state = withRoad(state, 1, 1)
       state = withBuilding(state, 'residence', 1, 0)
       state = withBuilding(state, 'residence', 0, 1)
@@ -467,7 +468,7 @@ describe('4. candidate audit', () => {
     })()
     const dedicated = (() => {
       let state = createInitialState(config())
-      state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 , wood: 0} }
+      state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 , wood: 0, stone: 0} }
       for (const x of [0, 1, 2]) state = withRoad(state, x, 1)
       state = withBuilding(state, 'residence', 0, 0)
       state = withBuilding(state, 'residence', 1, 0)
@@ -549,7 +550,7 @@ describe('4. candidate audit', () => {
     const layout = (secondResidence: { x: number; y: number }): SimulationState =>
       (() => {
         let state = createInitialState(config())
-        state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 , wood: 0} }
+        state = { ...state, resources: { ...state.resources, money: 100, food: 200, water: 50 , wood: 0, stone: 0} }
         state = withRoad(state, 1, 1)
         state = withRoad(state, 3, 1)
         state = withBuilding(state, 'residence', 1, 0)

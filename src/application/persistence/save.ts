@@ -66,11 +66,11 @@ export const SAVE_FORMAT = 'nova-save'
  * world that actually owns blocked cells carries the field. No migration and
  * therefore NO version bump: SAVE_VERSION stays 8.
  */
-export const SAVE_VERSION = 11
-/** The single previous version this build knows how to migrate (v4..v10 chain through it). */
-export const MIGRATABLE_SAVE_VERSION = 10
+export const SAVE_VERSION = 12
+/** The single previous version this build knows how to migrate (v4..v11 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 11
 /** Every older version the chained migration still accepts. */
-export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9, 10]
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9, 10, 11]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -113,7 +113,8 @@ const assertString = (value: unknown, field: string): void => {
  *   v8 -> v9: rename `resources.construction` to `money`, fold hub
  *     `storage.material` into the treasury, drop the hub material slot;
  *   v9 -> v10: add `resources.wood` (0) and empty `woodDeposits` (Step003);
- *   v10 -> v11: pre-place the Colony Center anchor (Step004).
+ *   v10 -> v11: pre-place the Colony Center anchor (Step004);
+ *   v11 -> v12: add `resources.stone` (0) and empty `stoneDeposits` (Step005).
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -134,6 +135,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV9ToV10(current)
     } else if (version === 10) {
       current = migrateV10ToV11(current)
+    } else if (version === 11) {
+      current = migrateV11ToV12(current)
     } else {
       break
     }
@@ -207,6 +210,31 @@ const migrateV6ToV7 = (save: Record<string, unknown>): Record<string, unknown> =
  * If the save already carries a Colony Center (e.g. a player-placed one),
  * it is preserved untouched — no duplicates.
  */
+/**
+ * v11 -> v12: Step005 physical-stone slice. Adds `resources.stone`
+ * (deterministic 0 — stone only enters through extraction) and empty
+ * `stoneDeposits`. Wood deposits, stock, buildings and the Colony Center
+ * anchor are preserved untouched.
+ */
+const migrateV11ToV12 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state) || !isRecord(state['resources'])) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const resources = state['resources'] as Record<string, unknown>
+  return {
+    ...save,
+    state: {
+      ...state,
+      resources: {
+        ...resources,
+        stone: typeof resources['stone'] === 'number' ? resources['stone'] : 0,
+      },
+      stoneDeposits: state['stoneDeposits'] ?? {},
+    },
+  }
+}
+
 const migrateV10ToV11 = (save: Record<string, unknown>): Record<string, unknown> => {
   const state = save['state']
   if (!isRecord(state)) {
@@ -450,6 +478,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     food: resources['food'] as number,
     water: resources['water'] as number,
     wood: resources['wood'] as number,
+    stone: resources['stone'] as number,
   }
 
   const validatedRoads: Record<string, RoadState> = {}
@@ -486,6 +515,10 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
         ...(Array.isArray(world['woodDeposits'])
           ? { woodDeposits: world['woodDeposits'] as WoodDepositSeed[] }
           : {}),
+        // Step005: stone deposit seeds round-trip identically.
+        ...(Array.isArray(world['stoneDeposits'])
+          ? { stoneDeposits: world['stoneDeposits'] as WoodDepositSeed[] }
+          : {}),
       },
     },
     time: { tick: time['tick'] as number },
@@ -497,6 +530,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     // Step003: deposits are canonical persisted state — validated as a whole
     // by the round-trip check below (normalized form: canonical keys).
     woodDeposits: (raw['woodDeposits'] ?? {}) as SimulationState['woodDeposits'],
+    stoneDeposits: (raw['stoneDeposits'] ?? {}) as SimulationState['stoneDeposits'],
     counters: {
       nextBuildingId: counters['nextBuildingId'] as number,
       nextColonistId: counters['nextColonistId'] as number,

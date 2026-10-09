@@ -33,6 +33,8 @@ export interface WorldConfig {
    * decrements them), normalized/deduplicated by the same key convention.
    */
   readonly woodDeposits?: readonly WoodDepositSeed[]
+  /** Step005: finite stone deposits, same conventions as woodDeposits. */
+  readonly stoneDeposits?: readonly WoodDepositSeed[]
 }
 
 export interface CellCoordinate {

@@ -284,6 +284,7 @@ const colony = (spec: ColonySpec): SimulationState => {
       food: spec.food ?? 100,
       water: spec.water ?? 0,
       wood: 0,
+      stone: 0,
     },
   }
   for (let index = 0; index < spec.population; index += 1) {
@@ -379,7 +380,7 @@ describe('1. frozen baseline', () => {
     expect(contract.well).toBe(2)
     expect(contract.workshop).toBe(2)
     expect(contract.upkeep).toBe(1)
-    expect(contract.saveVersion).toBe(11)
+    expect(contract.saveVersion).toBe(12)
     // 7 when this audit ran; Step 10BE added one content scenario and Step
     // 10CI added three Town-goal scenarios (rates below untouched).
     expect(contract.scenarios).toBe(11)

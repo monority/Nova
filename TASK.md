@@ -2,8 +2,8 @@
 
 ## Objective
 
-Step004: guarantee the Day-0 Colony Center anchor (existence, uniqueness,
-persistence, maintenance exemption) with the anti-self-lock invariant tested.
+Step005: physical Stone deposits + Quarry extraction, mirroring the validated
+Wood architecture (finite deposits, staffed extraction, save migration).
 
 ## Scope
 

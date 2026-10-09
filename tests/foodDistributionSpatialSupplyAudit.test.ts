@@ -82,6 +82,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -1028,8 +1029,8 @@ describe('11. Architecture invariants (src-immutable audit)', { timeout: 30000 }
       })),
     })
     // Step001 money migration bumps SAVE_VERSION from 8 to 9.
-    expect(saved.version).toBe(11)
-    expect(SAVE_VERSION).toBe(11)
+    expect(saved.version).toBe(12)
+    expect(SAVE_VERSION).toBe(12)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serializeCanonicalState(a)).not.toContain('coverage')

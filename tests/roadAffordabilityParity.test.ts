@@ -246,6 +246,6 @@ describe('10CS — road expenditure affordability', () => {
     expect(getRoadsPlacementAffordability(restored, [FREE_CELL])).toEqual(
       getRoadsPlacementAffordability(state, [FREE_CELL])
     )
-    expect(SAVE_VERSION).toBe(11)
+    expect(SAVE_VERSION).toBe(12)
   })
 })

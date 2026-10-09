@@ -92,6 +92,7 @@ const withStocks = (
     food: stocks.food ?? state.resources.food,
     water: stocks.water ?? state.resources.water,
     wood: 0,
+    stone: 0,
   },
 })
 
@@ -405,8 +406,8 @@ describe('5 — economic verification: manual moves reallocate labor, treasury f
 
 describe('6 — persistence and migration', () => {
   it('SAVE_VERSION is 11 and a manual assignment round-trips', () => {
-    expect(SAVE_VERSION).toBe(11)
-    expect(MIGRATABLE_SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(12)
+    expect(MIGRATABLE_SAVE_VERSION).toBe(11)
     const state = rowWorld({ residences: 2, farms: 2, workshops: 2 })
     const manual = reassign(state, 'colonist-2', 'building-5')
     const restored = loadSave(serializeSave(manual))

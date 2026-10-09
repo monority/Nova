@@ -82,6 +82,7 @@ describe('10DC — building identity: silhouette and colour', () => {
       workshop: 'CylinderGeometry',
       lumberCamp: 'BoxGeometry',
       colonyCenter: 'BoxGeometry',
+      quarry: 'BoxGeometry',
       well: 'CylinderGeometry',
     }
     for (const type of ['residence', 'farm', 'workshop', 'well'] as const) {
