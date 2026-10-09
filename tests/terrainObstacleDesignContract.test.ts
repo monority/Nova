@@ -322,10 +322,17 @@ describe('1. What roads can and cannot express', { timeout: 120000 }, () => {
         'a road cell carries: access (09E), network membership (09D), Water coverage (10P), workforce mobility (09K), the distance preference (09M) and a 5-Material cost (09C)',
     })
     expect(capability.roadCostPerCell).toBe(5)
-    expect(capability.access.every((entry) => entry.hasRoadAccess)).toBe(true)
+    // Step004: the Colony Center anchor is pre-placed without roads — it is
+    // not a workplace and needs no access. Every SCENARIO building is served.
+    expect(
+      capability.access
+        .filter((entry) => entry.type !== 'colonyCenter')
+        .every((entry) => entry.hasRoadAccess)
+    ).toBe(true)
     expect(capability.networks).toBe(1)
     expect(capability.waterCoverage.servedResidences).toBe(2)
     expect(capability.employment).toBe(2)
+    // Step004: the Colony Center anchor is the extra standing building.
     expect(capability.distanceBetweenResidenceAndFarm).not.toBeNull()
   })
 
@@ -892,7 +899,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
       reading:
         'the round-trip guard forbids unknown fields, so terrain inside config.world requires (a) the validator to carry the field and (b) a decision: omit-when-empty (no version bump, terrain-free saves and hashes unchanged) or always-present (SAVE_VERSION 7 -> 8 with a migration). Neither is done here.',
     })
-    expect(raw.version).toBe(10)
+    expect(raw.version).toBe(11)
     expect(Object.keys(raw.state)).toHaveLength(9)
     expect(rejected).not.toBeNull()
   })
@@ -957,7 +964,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
     expect(nonGoals).toHaveLength(13)
     expect(frozen.roadCost).toBe(5)
     expect(frozen.scenarioCount).toBe(7)
-    expect(frozen.saveVersion).toBe(10)
+    expect(frozen.saveVersion).toBe(11)
     // Terrain is design-only: the real scenario set is untouched.
     expect(findScenario('partitioned-valley')).toBeUndefined()
     expect(SCENARIOS_UNCHANGED())

@@ -35,6 +35,15 @@ describe('render snapshot', () => {
         // Step 07C: employment is projected for rendering (0 for residences).
         workers: 0,
       },
+      // Step004: the pre-placed Colony Center anchor renders as a building.
+      {
+        id: 'colony-center',
+        type: 'colonyCenter',
+        x: 7,
+        y: 7,
+        status: 'operational',
+        workers: 0,
+      },
     ])
     expect(snapshot.colonists).toEqual([
       { id: 'colonist-1', residenceId: 'building-1', cell: { x: 2, y: 3 } },

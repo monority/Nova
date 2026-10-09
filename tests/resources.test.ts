@@ -60,14 +60,15 @@ describe('resource model (Step 4)', () => {
   it('accepted placement deducts the cost from the stock', () => {
     const state = stepSimulation(createTestState(), placeResidence(6, 6))
     expect(getResourceStock(state).money).toBe(100 - COST)
-    expect(Object.keys(state.buildings)).toHaveLength(1)
+    // Step004: the Colony Center anchor + the new residence.
+    expect(Object.keys(state.buildings)).toHaveLength(2)
   })
 
   it('rejected placement leaves resources and buildings unchanged', () => {
     const low = withStock(createTestState(), 10)
     const rejected = stepSimulation(low, placeResidence(6, 6))
     expect(getResourceStock(rejected).money).toBe(10)
-    expect(Object.keys(rejected.buildings)).toHaveLength(0)
+    expect(Object.keys(rejected.buildings)).toHaveLength(1)
     expect(rejected.colonists).toEqual({})
   })
 
@@ -79,9 +80,9 @@ describe('resource model (Step 4)', () => {
     expect(getResourceStock(state).money).toBe(50)
     state = stepSimulation(state, placeResidence(2, 2))
     expect(getResourceStock(state).money).toBe(25)
-    state = stepSimulation(state, placeResidence(0, 0))
+    state = stepSimulation(state, placeResidence(7, 6)) // Step004: (0,0) is free but (7,6) keeps the grid pattern
     expect(getResourceStock(state).money).toBe(0)
-    expect(Object.keys(state.buildings)).toHaveLength(4)
+    expect(Object.keys(state.buildings)).toHaveLength(5)
   })
 
   it('placement is rejected once the stock is below the cost', () => {

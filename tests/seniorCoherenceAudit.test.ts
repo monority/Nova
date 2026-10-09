@@ -423,7 +423,8 @@ describe('§7 — invariants hold on edge cases', () => {
       y: 1,
       buildingType: 'residence',
     })
-    expect(Object.keys(s.buildings)).toHaveLength(0)
+    // Step004: the Colony Center anchor is present from initialization.
+    expect(Object.keys(s.buildings)).toHaveLength(1)
     assertGlobalInvariants(s)
   })
 
@@ -629,7 +630,7 @@ describe('§12 — save/hash: persisted vs derived audit', () => {
     ]) {
       expect(serialized).not.toContain(`"${key}"`)
     }
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 
   it('corrupt/foreign saves are rejected, never silently migrated', () => {

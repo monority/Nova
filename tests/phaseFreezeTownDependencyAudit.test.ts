@@ -215,7 +215,7 @@ describe('1. freeze verification', () => {
     expect(frozen.farm).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
     expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
-    expect(frozen.saveVersion).toBe(10)
+    expect(frozen.saveVersion).toBe(11)
     // 7 at the freeze; Step 10BE added one curated content scenario and Step
     // 10CI added three Town-goal scenarios
     // (no mechanic, no constant, no objective kind changed).
@@ -276,7 +276,7 @@ describe('1. freeze verification', () => {
     // pinned to the progression query by tests/settlementGrowth.test.ts.
     expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
     expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/growth.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
-    expect(rows.saveVersion).toBe(10)
+    expect(rows.saveVersion).toBe(11)
   })
 })
 
@@ -325,9 +325,16 @@ describe('2. closed semantics, re-verified', () => {
       next = stepSimulation(next, { type: 'placeRoads', cells: [{ x: 4, y: 5 }] })
       return tick(next, 60)
     }
-    const strip = (state: SimulationState): string =>
-      canonicalJson({
+    const strip = (state: SimulationState): string => {
+      // Step004: the Colony Center anchor's cell legitimately depends on
+      // buildability (it must sit on a free cell), so the terrain world's
+      // anchor sits elsewhere. The anchor is excluded from the
+      // terrain-invariance comparison; every other field must match.
+      const restBuildings: Record<string, unknown> = { ...state.buildings }
+      delete restBuildings['colony-center']
+      return canonicalJson({
         ...state,
+        buildings: restBuildings,
         config: {
           world: {
             seed: state.config.world.seed,
@@ -336,6 +343,7 @@ describe('2. closed semantics, re-verified', () => {
           },
         },
       })
+    }
     const rows = {
       identical: strip(drive(plain)) === strip(drive(terrain)),
       buildingRefusedOnBlocked: validatePlacement(terrain, { x: 0, y: 7 }, 'residence'),

@@ -212,9 +212,9 @@ async function main() {
 
     section('INTERACTION');
     let s = await page.evaluate(() => window.__nova.stats());
-    if (s.tick !== '0' || s.buildings !== '0' || s.colonists !== '0' || s.money !== '100') {
+    if (s.tick !== '0' || s.buildings !== '1' || s.colonists !== '0' || s.money !== '100') {
       fail(`initial stats bad: ${JSON.stringify(s)}`);
-    } else ok(`initial Tick=0 Buildings=0 Colonists=0 Material=${s.money}`);
+    } else ok(`initial Tick=0 Buildings=1 (Colony Center anchor) Colonists=0 Material=${s.money}`);
 
     // --- First placement: building-1 at (6,6) ---
     const pt = await page.evaluate((c) => window.__nova.cellToScreen(c), TARGET);
@@ -226,9 +226,9 @@ async function main() {
     ok('hover shows valid placement preview');
 
     await page.mouse.click(pt.x, pt.y);
-    await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).buildings === '1', 'building placed');
+    await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).buildings === '2', 'building placed');
     s = await page.evaluate(() => window.__nova.stats());
-    if (s.tick !== '1' || s.buildings !== '1' || s.money !== '75') {
+    if (s.tick !== '1' || s.buildings !== '2' || s.money !== '75') {
       fail(`after placement bad: ${JSON.stringify(s)}`);
     } else ok(`resource deduction 100 -> ${s.money}, ${JSON.stringify(s)}`);
     stats.interaction = true;
@@ -247,13 +247,13 @@ async function main() {
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '2', 'step to tick 2');
     s = await page.evaluate(() => window.__nova.stats());
-    if (s.operational !== '0') {
+    if (s.operational !== '1') {
       fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
     } else ok(`tick 2 still under construction, ${JSON.stringify(s)}`);
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '3', 'step to tick 3');
     s = await page.evaluate(() => window.__nova.stats());
-    if (s.operational !== '1' || s.colonists !== '1') {
+    if (s.operational !== '2' || s.colonists !== '1') {
       fail(`after step3 bad: ${JSON.stringify(s)}`);
     } else ok(`STEP tick 3: building-1 operational, colonist admitted, ${JSON.stringify(s)}`);
     const initiallyOperational = await page.evaluate(() => window.__nova.selectedBuilding());
@@ -274,7 +274,7 @@ async function main() {
       s = await page.evaluate(() => window.__nova.stats());
     }
     // After 1 (original) + 3 = 4 buildings: 100 - 4*25 = 0
-    if (s.money !== '0' || s.buildings !== '4') {
+    if (s.money !== '0' || s.buildings !== '5') {
       fail(`depletion expected 0/4, got ${s.money}/${s.buildings}`);
     } else ok(`stock depleted: material ${s.money}, buildings ${s.buildings}`);
 
@@ -307,7 +307,9 @@ async function main() {
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => Number((await page.evaluate(() => window.__nova.stats())).tick) === temporalTickBefore + 1, 'step advances one tick');
     s = await page.evaluate(() => window.__nova.stats());
-    if (s.operational !== '3' || s.colonists !== '3') {
+    // Measured: anchor + 3 residences operational; the 4th residence is
+    // still under construction at this deterministic tick (money floored).
+    if (s.operational !== '4' || s.colonists !== '3') {
       fail(`after deterministic step bad: ${JSON.stringify(s)}`);
     } else ok(`deterministic STEP: ${s.operational} operational, ${s.colonists} colonists, ${JSON.stringify(s)}`);
     stats.render = true;

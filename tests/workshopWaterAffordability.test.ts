@@ -103,7 +103,8 @@ describe('§1 — sub-cost revenue completes the build', () => {
     expect(affordability.coveredBySameTickInflow).toBe(true)
     expect(affordability.affordable).toBe(true)
     // The preview now agrees with what the domain actually does.
-    expect(Object.keys(dispatched.buildings)).toHaveLength(3)
+    // Step004: anchor + workshop + residence.
+    expect(Object.keys(dispatched.buildings)).toHaveLength(4)
     // 24 + 3 revenue − 25 cost − 2 maintenance = 0.
     expect(getResourceStock(dispatched).money).toBe(0)
   })
@@ -123,7 +124,8 @@ describe('§1 — sub-cost revenue completes the build', () => {
     })
     expect(affordability.affordable).toBe(false)
     expect(affordability.coveredBySameTickInflow).toBe(false)
-    expect(Object.keys(dispatched.buildings)).toHaveLength(2)
+    // Step004: anchor + workshop (the second workshop is refused).
+    expect(Object.keys(dispatched.buildings)).toHaveLength(3)
   })
 })
 
@@ -150,7 +152,8 @@ describe('§1 — the Water shortfall is its own refusal', () => {
     // The validator reports the Material shortfall first (its deterministic
     // order) and the placement is refused either way.
     expect(affordability.placement).toEqual({ valid: false, reason: 'insufficientResources' })
-    expect(Object.keys(dispatched.buildings)).toHaveLength(2)
+    // Step004: anchor + workshop.
+    expect(Object.keys(dispatched.buildings)).toHaveLength(3)
   })
 
   it('reports the Water reason when only Water is missing', () => {
@@ -178,7 +181,8 @@ describe('§1 — the Water shortfall is its own refusal', () => {
       domainAccepted: Object.keys(dispatched.buildings).length > Object.keys(state.buildings).length,
     })
     expect(affordability.affordable).toBe(true)
-    expect(Object.keys(dispatched.buildings)).toHaveLength(3)
+    // Step004: anchor + workshop + residence.
+    expect(Object.keys(dispatched.buildings)).toHaveLength(4)
     expect(getResourceStock(dispatched).water).toBe(0)
   })
 })

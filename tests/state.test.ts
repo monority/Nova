@@ -11,7 +11,8 @@ describe('canonical state', () => {
   it('creates a valid initial state', () => {
     const state = createInitialState(testConfig)
     expect(state.time.tick).toBe(0)
-    expect(state.buildings).toEqual({})
+    // Step004: exactly one pre-placed Colony Center anchor.
+    expect(Object.keys(state.buildings)).toEqual(['colony-center'])
     expect(state.colonists).toEqual({})
     expect(state.counters.nextBuildingId).toBe(1)
     expect(state.counters.nextColonistId).toBe(1)

@@ -135,7 +135,8 @@ async function bootstrapResidence(page) {
   await step(page); // t2: 1 construction tick left
   const s = await step(page); // t3: operational + colonist-1
   assert(s.colonists === '1', `bootstrap colonist expected, got ${s.colonists}`);
-  assert(s.operational === '1', `residence should be operational, got ${s.operational}`);
+  // Step004: the anchor is also operational (maintenance-exempt).
+  assert(s.operational === '2', `residence should be operational, got ${s.operational}`);
   return s;
 }
 
@@ -218,7 +219,7 @@ async function main() {
     await selectPalette(page, 'build-farm', 'Farm selected');
     await placeAt(page, { x: 5, y: 5 });
     s = await step(page); // 1 construction tick left (uncrewed pace)
-    assert(s.operational === '2', `Farm must still be under construction, got ${s.operational}`);
+    assert(s.operational === '3', `Farm must still be under construction, got ${s.operational}`);
     await selectAt(page, { x: 5, y: 5 });
     let crew = await crewText(page);
     assert(crew === 'Crew — None · Speed normal', `uncrewed crew line bad: "${crew}"`);
@@ -237,7 +238,7 @@ async function main() {
     // leaves the Well, so its Water output pauses that tick. Step001: revenue
     // is unaffected — commerce is connection-based, not labor-based.
     s = await assignCrew(page, 'colonist-1');
-    assert(s.operational === '3', `crewed Farm must complete on the assignment tick, got ${JSON.stringify(s.operational)}`);
+    assert(s.operational === '4', `crewed Farm must complete on the assignment tick, got ${JSON.stringify(s.operational)}`);
     assert(s.crewWorkerIds === '', `crew must be released on completion, got "${s.crewWorkerIds}"`);
     assert(s.waterProduction === '0', `the crewed colonist leaves the Well: water output pauses, got ${s.waterProduction}`);
     assert(Number(s.money) <= moneyBefore, `money must not grow on a crew tick: ${moneyBefore} -> ${s.money}`);
@@ -304,7 +305,7 @@ async function main() {
     // ---------------------------------------------------------------------
     const payload = await page.evaluate(() => window.__nova.serialize());
     const parsed = JSON.parse(payload);
-    assert(parsed.version === 10, `save version expected 10, got ${parsed.version}`);
+    assert(parsed.version === 11, `save version expected 11, got ${parsed.version}`);
     const colonists = Object.values(parsed.state.colonists);
     assert(colonists.length >= 1, `save should contain colonists, got ${colonists.length}`);
     assert(

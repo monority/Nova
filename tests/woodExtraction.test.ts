@@ -302,7 +302,8 @@ describe('Step003 — wood extraction', () => {
     // And the authoritative command refuses without spending.
     const after = applyCommand(state, { type: 'placeBuilding', x: 5, y: 2, buildingType: 'residence' })
     expect(after.accepted).toBe(false)
-    expect(Object.keys(after.state.buildings)).toHaveLength(0)
+    // Step004: only the pre-placed Colony Center anchor exists.
+    expect(Object.keys(after.state.buildings)).toEqual(['colony-center'])
     expect(after.state.resources.money).toBe(state.resources.money)
   })
 

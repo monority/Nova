@@ -564,7 +564,7 @@ describe('§11/§12 — deadlock/recovery and workforce', () => {
 
 describe('§13 — persistence, determinism, performance', () => {
   it('SAVE_VERSION stays 9; derived state only; replay deterministic', () => {
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     const state = world({ residences: 6, farms: 2, workshops: 2, wells: 2, colonists: 4 })
     const restored = loadSave(serializeSave(state))
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(state))

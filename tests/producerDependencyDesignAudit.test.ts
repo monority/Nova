@@ -1215,7 +1215,7 @@ describe('§12/§15 — persistence impact and determinism', () => {
       buildingsRead: [...iterateBuildings(state)].length,
       srcTouched: false,
     })
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 })
 

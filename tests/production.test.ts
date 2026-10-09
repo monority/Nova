@@ -139,7 +139,7 @@ describe('produceFood phase (Step 06B)', () => {
     let state = colonistState() // t3, pop 1
     state = stepSimulation(state, placeResidence(5, 5)) // t4
     state = stepSimulation(state, placeFarm(0, 0)) // t5: farm-1 UC
-    state = stepSimulation(state, placeFarm(7, 7)) // t6: farm-1 op, farm-2 UC
+    state = stepSimulation(state, placeFarm(7, 6)) // t6: farm-1 op, farm-2 UC (Step004: (7,7) is the anchor)
     state = withRoadsForWorkshops(state)
     state = stepSimulation(state) // Step 10Y: farm-2 1 tick left
     state = stepSimulation(state) // both operational, both staffed
@@ -174,7 +174,7 @@ describe('produceFood phase (Step 06B)', () => {
     let state = colonistState()
     state = stepSimulation(state, placeFarm(0, 0))
     state = stepSimulation(state, placeResidence(5, 5))
-    state = stepSimulation(state, placeResidence(7, 7))
+    state = stepSimulation(state, placeResidence(6, 7)) // Step004: (7,7) hosts the anchor
     for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(3)
     state = withFood(state, 0)
@@ -251,7 +251,7 @@ describe('farm persistence (Step 06B §14)', () => {
   it('round-trips a state containing farms (SAVE_VERSION 4 since Step 07C)', () => {
     // Step 07C added ColonistState.workplaceId, bumping the save version from
     // 3 to 4. Farm behavior itself is unchanged and still round-trips.
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     let state = stepSimulation(createTestState(), placeFarm(1, 1))
     state = stepSimulation(state)
     const restored = loadSave(serializeSave(state))

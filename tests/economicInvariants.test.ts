@@ -87,7 +87,7 @@ const colony = (n: number): SimulationState => {
   state = stepSimulation(state)
   state = withStaffedFarms(state) // Step 10E: farms produce only when staffed
   state = untilAffordable(state)
-  state = stepSimulation(state, place('farm', 7, 7)) // Step 10Y
+  state = stepSimulation(state, place('farm', 6, 7)) // Step 10Y (Step004: (7,7) hosts the Colony Center anchor)
   state = stepSimulation(state) // 1 construction tick left
   state = stepSimulation(state)
   state = withStaffedFarms(state) // Step 10E: second farmer
@@ -136,7 +136,7 @@ const noWorkshopTwin = (): SimulationState => {
   state = stepSimulation(state, place('farm', 6, 6)) // t3
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // farm operational
-  state = stepSimulation(state, place('farm', 7, 7))
+  state = stepSimulation(state, place('farm', 6, 7))
   state = stepSimulation(state) // Step 10Y: 1 construction tick left
   state = stepSimulation(state) // second farm operational
   return withStaffedFarms(state) // Step 10E: two staffed farms, food sustained
@@ -518,7 +518,7 @@ describe('economic invariants (Step 08D)', () => {
   })
 
   it('save/hash (§8) — SAVE_VERSION 9, round-trip stable, no upkeep fields', () => {
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     const state = stepSimulation(colony(2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('upkeep')

@@ -19,6 +19,7 @@ import {
   isInBounds,
   normalizeBlockedCells,
   parseBlockedCell,
+  type WoodDepositSeed,
   type WorldConfig,
 } from '../../domain/world/grid.js'
 
@@ -65,11 +66,11 @@ export const SAVE_FORMAT = 'nova-save'
  * world that actually owns blocked cells carries the field. No migration and
  * therefore NO version bump: SAVE_VERSION stays 8.
  */
-export const SAVE_VERSION = 10
-/** The single previous version this build knows how to migrate (v4..v9 chain through it). */
-export const MIGRATABLE_SAVE_VERSION = 9
+export const SAVE_VERSION = 11
+/** The single previous version this build knows how to migrate (v4..v10 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 10
 /** Every older version the chained migration still accepts. */
-export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9]
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9, 10]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -111,7 +112,8 @@ const assertString = (value: unknown, field: string): void => {
  *   v7 -> v8: add empty StorageHub;
  *   v8 -> v9: rename `resources.construction` to `money`, fold hub
  *     `storage.material` into the treasury, drop the hub material slot;
- *   v9 -> v10: add `resources.wood` (0) and empty `woodDeposits` (Step003).
+ *   v9 -> v10: add `resources.wood` (0) and empty `woodDeposits` (Step003);
+ *   v10 -> v11: pre-place the Colony Center anchor (Step004).
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -130,6 +132,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV8ToV9(current)
     } else if (version === 9) {
       current = migrateV9ToV10(current)
+    } else if (version === 10) {
+      current = migrateV10ToV11(current)
     } else {
       break
     }
@@ -192,6 +196,66 @@ const migrateV6ToV7 = (save: Record<string, unknown>): Record<string, unknown> =
         : value
   }
   return { ...save, state: { ...state, colonists } }
+}
+
+/**
+ * v10 -> v11: Step004 Day-0 bootstrap hardening. Every colony owns exactly
+ * one pre-placed, operational, maintenance-exempt Colony Center (audit D4).
+ * Old saves (where the Center was player-placeable and usually absent) gain
+ * it deterministically: first valid cell of the SAVED world (y-then-x scan,
+ * skipping blocked cells and wood deposits), canonical id `colony-center`.
+ * If the save already carries a Colony Center (e.g. a player-placed one),
+ * it is preserved untouched — no duplicates.
+ */
+const migrateV10ToV11 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state)) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const buildings = isRecord(state['buildings'])
+    ? (state['buildings'] as Record<string, unknown>)
+    : {}
+  const alreadyAnchored = Object.values(buildings).some(
+    (b) => isRecord(b) && b['type'] === 'colonyCenter'
+  )
+  if (alreadyAnchored) {
+    return save
+  }
+  const world = isRecord(state['config']) && isRecord(state['config']['world'])
+    ? (state['config']['world'] as Record<string, unknown>)
+    : {}
+  const width = typeof world['width'] === 'number' ? world['width'] : 0
+  const height = typeof world['height'] === 'number' ? world['height'] : 0
+  const blocked = Array.isArray(world['blockedCells'])
+    ? new Set(world['blockedCells'] as string[])
+    : new Set<string>()
+  const deposits = isRecord(state['woodDeposits'])
+    ? new Set(Object.keys(state['woodDeposits'] as Record<string, unknown>))
+    : new Set<string>()
+  let anchor: Record<string, unknown> | null = null
+  for (let y = 0; y < height && anchor === null; y += 1) {
+    for (let x = 0; x < width && anchor === null; x += 1) {
+      const key = `${x},${y}`
+      if (blocked.has(key) || deposits.has(key)) continue
+      anchor = {
+        id: 'colony-center',
+        type: 'colonyCenter',
+        x,
+        y,
+        status: 'operational',
+        constructionRemaining: 0,
+      }
+    }
+  }
+  if (anchor === null) {
+    // No buildable cell in the saved world: preserve the save as-is rather
+    // than fabricate an anchor that could not exist (the state stays loadable).
+    return save
+  }
+  return {
+    ...save,
+    state: { ...state, buildings: { ...buildings, 'colony-center': anchor } },
+  }
 }
 
 /**
@@ -417,6 +481,11 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
         // Step 10AV: present ONLY when the world owns blocked cells, so the
         // canonical form of a terrain-free save is byte-identical.
         ...(blockedCells === undefined ? {} : { blockedCells }),
+        // Step003: deposit seeds round-trip through the world config (the
+        // mutable state lives in state.woodDeposits; this is the seed).
+        ...(Array.isArray(world['woodDeposits'])
+          ? { woodDeposits: world['woodDeposits'] as WoodDepositSeed[] }
+          : {}),
       },
     },
     time: { tick: time['tick'] as number },

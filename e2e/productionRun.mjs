@@ -174,7 +174,7 @@ async function main() {
 
     // B. Residence at (3,1) (tick 1). Residence is the default tool.
     await clickCell(page, { x: 3, y: 1 });
-    await waitFor(async () => (await stats(page)).buildings === '1', 'residence placed');
+    await waitFor(async () => (await stats(page)).buildings === '2', 'residence placed');
     ok('residence placed (material 100 -> 75)');
 
     // C. Road at (3,2) (tick 2) — the mobility link under the 09K contract.
@@ -189,7 +189,7 @@ async function main() {
     // D. Farm at (3,3) (tick 3), adjacent to the same road cell.
     await selectPalette(page, 'build-farm', 'Farm selected');
     await clickCell(page, { x: 3, y: 3 });
-    await waitFor(async () => (await stats(page)).buildings === '2', 'farm placed');
+    await waitFor(async () => (await stats(page)).buildings === '3', 'farm placed');
     s = await stats(page);
     if (s.money !== '45' || s.farms !== '1') {
       fail(`after placements expected material 45 / farms 1, got ${JSON.stringify(s)}`);
@@ -238,7 +238,7 @@ async function main() {
     //    feeds two people. This is the observable labour/production contract.
     await selectPalette(page, 'build-residence', 'Residence selected');
     await clickCell(page, { x: 6, y: 1 });
-    await waitFor(async () => (await stats(page)).buildings === '3', 'second residence placed');
+    await waitFor(async () => (await stats(page)).buildings === '4', 'second residence placed');
     await stepToTick(page, Number((await stats(page)).tick) + 4);
     s = await stats(page);
     if (s.colonists !== '2') fail(`expected 2 colonists, got ${JSON.stringify(s)}`);

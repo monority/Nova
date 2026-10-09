@@ -88,16 +88,24 @@ const BYSTANDER_TERRAIN: readonly string[] = ['0,0', '11,11', '0,11']
  * The same state with terrain removed from the world config, so two runs can
  * be compared on everything EXCEPT the terrain field itself.
  */
-const withoutTerrain = (state: SimulationState): unknown => ({
-  ...state,
-  config: {
-    world: {
-      seed: state.config.world.seed,
-      width: state.config.world.width,
-      height: state.config.world.height,
+const withoutTerrain = (state: SimulationState): unknown => {
+  // Step004: the Colony Center anchor's cell depends on buildability (it
+  // avoids blocked cells and deposits), so it is excluded from the
+  // terrain-invariance comparison like the terrain field itself.
+  const buildings: Record<string, unknown> = { ...state.buildings }
+  delete buildings['colony-center']
+  return {
+    ...state,
+    buildings,
+    config: {
+      world: {
+        seed: state.config.world.seed,
+        width: state.config.world.width,
+        height: state.config.world.height,
+      },
     },
-  },
-})
+  }
+}
 
 const tick = (state: SimulationState, times = 1): SimulationState => {
   let next = state
@@ -244,7 +252,8 @@ describe('2. building placement', () => {
     expect(result.reason).toBe('terrainBlocked')
     // Same state REFERENCE: no building, no counter move, no cost, no tick.
     expect(result.state).toBe(state)
-    expect(Object.keys(result.state.buildings)).toHaveLength(0)
+    // Step004: the Colony Center anchor is present from initialization.
+    expect(Object.keys(result.state.buildings)).toHaveLength(1)
     expect(result.state.counters).toEqual(state.counters)
     expect(result.state.resources.money).toBe(state.resources.money)
     expect(result.state.time.tick).toBe(0)
@@ -259,7 +268,8 @@ describe('2. building placement', () => {
       buildingType: 'residence',
     })
     expect(result.accepted).toBe(true)
-    expect(Object.keys(result.state.buildings)).toHaveLength(1)
+    // Anchor + the new residence.
+    expect(Object.keys(result.state.buildings)).toHaveLength(2)
     expect(result.state.resources.money).toBe(
       state.resources.money - getBuildingDefinition('residence').constructionCost
     )
@@ -319,7 +329,7 @@ describe('2. building placement', () => {
       y: 4,
       buildingType: 'residence',
     })
-    const id = Object.keys(placed.buildings)[0] ?? ''
+    const id = Object.keys(placed.buildings).find((k) => k !== 'colony-center') ?? ''
     expect(placed.buildings[id]?.constructionRemaining).toBe(2)
     expect(tick(placed).buildings[id]?.constructionRemaining).toBe(1)
     expect(tick(placed, 2).buildings[id]?.status).toBe('operational')
@@ -435,18 +445,18 @@ describe('3. road placement is atomic', () => {
 
 describe('4. persistence', () => {
   it('keeps SAVE_VERSION at 7 and writes no terrain field when empty', () => {
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     const saved = serializeSave(createInitialState(config))
     expect(saved).not.toContain('blockedCells')
     const raw = JSON.parse(saved) as { version: number }
-    expect(raw.version).toBe(10)
+    expect(raw.version).toBe(11)
   })
 
   it('writes terrain only when the world owns blocked cells', () => {
     const saved = serializeSave(terrainState(['1,2', '3,2']))
     expect(saved).toContain('"blockedCells":["1,2","3,2"]')
     const raw = JSON.parse(saved) as { version: number }
-    expect(raw.version).toBe(10)
+    expect(raw.version).toBe(11)
   })
 
   it('loads an old save without terrain as terrain-free', () => {

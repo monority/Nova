@@ -841,7 +841,7 @@ describe('6. phase A boundary and determinism', () => {
     // housing phenomenon became a curated scenario in 10BE instead.
     expect(rows.fixtures).toEqual(['terrain-chokepoint'])
     // Step001 money migration bumps SAVE_VERSION from 8 to 9.
-    expect(rows.saveVersion).toBe(10)
+    expect(rows.saveVersion).toBe(11)
   })
 
   it('keeps the layouts deterministic and save/load stable', () => {

@@ -85,7 +85,7 @@ async function main() {
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     ok('load, app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.money !== '100' || s.buildings !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
+    if (s.tick !== '0' || s.money !== '100' || s.buildings !== '1') fail(`initial stats bad: ${JSON.stringify(s)}`);
     else ok(`initial stock visible: material ${s.money}, ${JSON.stringify(s.tick)} ticks`);
     await shot('01-initial.png');
 
@@ -98,7 +98,7 @@ async function main() {
 
     // Real click: building created, stock deducted atomically.
     await page.mouse.click(pt1.x, pt1.y);
-    await waitFor(async () => (await stats(page)).buildings === '1', 'building placed');
+    await waitFor(async () => (await stats(page)).buildings === '2', 'building placed');
     s = await stats(page);
     if (s.tick !== '1' || s.money !== '75') fail(`after placement bad: ${JSON.stringify(s)}`);
     else ok(`resource deduction 100 -> ${s.money}, ${JSON.stringify(s)}`);
@@ -108,11 +108,11 @@ async function main() {
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await stats(page)).tick === '2', 'step to tick 2');
     s = await stats(page);
-    if (s.operational !== '0') fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
+    if (s.operational !== '1') fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
     await page.click('[data-testid="simulation-step"]');
     await waitFor(async () => (await stats(page)).tick === '3', 'step to tick 3');
     s = await stats(page);
-    if (s.operational !== '1' || s.colonists !== '1' || s.money !== '75') fail(`after STEP bad: ${JSON.stringify(s)}`);
+    if (s.operational !== '2' || s.colonists !== '1' || s.money !== '75') fail(`after STEP bad: ${JSON.stringify(s)}`);
     else ok(`building operational, stock stable at ${s.money}, ${JSON.stringify(s)}`);
     await shot('04-operational.png');
 
@@ -124,7 +124,7 @@ async function main() {
       s = await stats(page);
     }
     // After 4 residences: 100 - 4*25 = 0.
-    if (s.money !== '0' || s.buildings !== '4') fail(`depletion bad: ${JSON.stringify(s)}`);
+    if (s.money !== '0' || s.buildings !== '5') fail(`depletion bad: ${JSON.stringify(s)}`);
     else ok(`stock depleted to ${s.money} after ${s.buildings} buildings`);
     await shot('05-low-resources.png');
 

@@ -214,13 +214,13 @@ async function main() {
 
     // --- Scenario starts: stage + objective + state ------------------------
     const expectations = [
-      { id: 'first-settlement', stage: 'Wilderness', buildings: '0' },
-      { id: 'water-constraint', stage: 'Settlement', buildings: '3' },
-      { id: 'industrial-expansion', stage: 'Village', buildings: '4' },
-      { id: 'water-reserve-industry', stage: 'Village', buildings: '4' },
-      { id: 'spatial-efficiency', stage: 'Wilderness', buildings: '0' },
-      { id: 'population-expansion', stage: 'Settlement', buildings: '5' },
-      { id: 'recovery', stage: 'Wilderness', buildings: '2' },
+      { id: 'first-settlement', stage: 'Wilderness', buildings: '1' },
+      { id: 'water-constraint', stage: 'Settlement', buildings: '4' },
+      { id: 'industrial-expansion', stage: 'Village', buildings: '5' },
+      { id: 'water-reserve-industry', stage: 'Village', buildings: '5' },
+      { id: 'spatial-efficiency', stage: 'Wilderness', buildings: '1' },
+      { id: 'population-expansion', stage: 'Settlement', buildings: '6' },
+      { id: 'recovery', stage: 'Wilderness', buildings: '3' },
     ];
     for (const expectation of expectations) {
       const s = await loadScenario(page, expectation.id);
@@ -338,7 +338,7 @@ async function main() {
     const second = JSON.stringify(await progression(page));
     assert(first === second, 'progression must be recomputed identically');
     const saved = JSON.parse(await page.evaluate(() => window.__nova.serialize()));
-    assert(saved.version === 10, `save version expected 10, got ${saved.version}`);
+    assert(saved.version === 11, `save version expected 11, got ${saved.version}`);
     assert(Object.keys(saved.state).length === 9, `save must keep 9 top-level keys, got ${Object.keys(saved.state).length}`);
     const serialized = JSON.stringify(saved);
     for (const term of ['scenario', 'progression', 'stage', 'objective', 'blocker']) {

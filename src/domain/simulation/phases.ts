@@ -49,7 +49,7 @@
  * wall-clock time or randomness.
  */
 
-import { BUILDING_CATALOG, type BuildingState, type BuildingType } from '../building/building.js'
+import { BUILDING_CATALOG, type BuildingState, type BuildingStatus, type BuildingType } from '../building/building.js'
 import {
   availableResidenceIds,
   iterateBuildings,
@@ -172,6 +172,7 @@ export type PlacementValidation =
         | 'terrainBlocked'
         | 'cellOccupied'
         | 'depositBlocked'
+        | 'colonyCenterExists'
         | 'insufficientResources'
         | 'insufficientWater'
     }
@@ -192,6 +193,12 @@ export const validatePlacement = (
   // affordability — a blocked cell is not a cost problem.
   if (isTerrainBlocked(state.config.world, cell)) {
     return { valid: false, reason: 'terrainBlocked' }
+  }
+  // Step004: the Colony Center is a Day-0 singleton anchor — exactly one
+  // exists in every colony (pre-placed at initialization), so it can never be
+  // player-placed. The uniqueness rule IS the placement rule.
+  if (buildingType === 'colonyCenter') {
+    return { valid: false, reason: 'colonyCenterExists' }
   }
   // Step003: a wood deposit is a physical world feature — a building must
   // never overwrite it (and a camp sitting ON a deposit could never extract
@@ -1432,6 +1439,18 @@ export const countOperationalBuildings = (state: SimulationState): number => {
 }
 
 /**
+ * Step004: the Colony Center is the settlement anchor (audit D4). It is
+ * pre-placed at Day 0, never player-built, and the uniform Step001
+ * maintenance rule deliberately does NOT bill it — billing the anchor would
+ * be an economy-balancing change (taxing the recovery capability itself),
+ * which is explicitly out of scope. Concrete exemption, not a framework.
+ */
+export const isMaintenanceExempt = (building: {
+  readonly type: BuildingType
+  readonly status: BuildingStatus
+}): boolean => building.type === 'colonyCenter' && building.status === 'operational'
+
+/**
  * Staffed operational Workshops: operational AND at least one worker
  * assigned. Residences, Farms, under-construction and vacant Workshops
  * cost exactly 0. Deterministic: iterateBuildings sorts by id.
@@ -1452,9 +1471,19 @@ export const countStaffedOperationalWorkshops = (
 }
 
 /** Deterministic maintenance due this tick: operational buildings × rate. */
-export const maintenanceDueForTick = (state: SimulationState): number =>
-  countOperationalBuildings(state) *
-  MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
+/**
+ * Deterministic maintenance due this tick: payable operational buildings ×
+ * rate. The Colony Center anchor is exempt (Step004, `isMaintenanceExempt`).
+ */
+export const maintenanceDueForTick = (state: SimulationState): number => {
+  let count = 0
+  for (const building of iterateBuildings(state)) {
+    if (building.status === 'operational' && !isMaintenanceExempt(building)) {
+      count += 1
+    }
+  }
+  return count * MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
+}
 
 /**
  * Deduct this tick's maintenance from the treasury. Runs after

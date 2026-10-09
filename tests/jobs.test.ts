@@ -123,7 +123,7 @@ const twoWorkshopState = (): SimulationState => {
   state = withRoadsForWorkshops(state) // 09F: road for WS1
   state = stepSimulation(state) // t5: 1 remaining
   state = stepSimulation(state) // t6: building-2 operational, colonist-1 employed
-  state = stepSimulation(withWorkshopWater(state), place('workshop', 7, 7)) // t7: building-3
+  state = stepSimulation(withWorkshopWater(state), place('workshop', 7, 6)) // t7: building-3 (Step004: (7,7) hosts the Colony Center anchor)
   state = withRoadsForWorkshops(state) // 09F: road for WS2
   state = stepSimulation(state) // t8: 1 remaining
   state = stepSimulation(state) // t9: building-3 operational
@@ -437,7 +437,7 @@ describe('construction material production (Step 07C §6-§8)', () => {
     state = withRoadsForWorkshops(state) // 09F: road for W2
     state = stepSimulation(state) // t8: W2 1 construction tick left
     state = stepSimulation(state) // t9: W2 operational
-    state = stepSimulation(state, place('residence', 7, 7)) // t10
+    state = stepSimulation(state, place('residence', 7, 6)) // t10 (Step004: (7,7) hosts the anchor)
     state = withRoadsForWorkshops(state) // 09K: connect the new residence
     const beforeAdmission = getResourceStock(state).money
     expect(Object.keys(state.colonists)).toHaveLength(1)
@@ -522,7 +522,7 @@ describe('jobs integration: housing -> colonist -> workshop -> employment -> mat
     expect(getMaintenanceDuePerTick(state)).toBe(3)
     state = stepSimulation(state) // t10: 29 + 5 − 3 → 31
     expect(getResourceStock(state).money).toBe(31)
-    state = stepSimulation(withWorkshopWater(state), place('workshop', 7, 7)) // t11: 31 + 5 − 25 − 3 → 8
+    state = stepSimulation(withWorkshopWater(state), place('workshop', 7, 6)) // t11: 31 + 5 − 25 − 3 → 8 (Step004: (7,7) is the anchor)
     expect(getResourceStock(state).money).toBe(8)
 
     // Below the 25 cost: another building would be rejected right now.
@@ -609,20 +609,22 @@ describe('employment render projection (Step 07C §13)', () => {
     expect(byId('building-1')?.workers).toBe(0) // residence
     expect(byId('building-2')?.workers).toBe(1) // staffed workshop
     expect(byId('building-3')?.workers).toBe(0) // vacant workshop
-    expect(snapshot.buildings.map((b) => b.workers)).toEqual([0, 1, 0])
+    // Step004: the Colony Center anchor (never a workplace) projects 0.
+    expect(snapshot.buildings.map((b) => b.workers)).toEqual([0, 1, 0, 0])
   })
 
   it('drops the projection when the colony starves', () => {
     const starved = stepSimulation(withFood(workshopState(), 0))
     const snapshot = toRenderSnapshot(starved)
     expect(snapshot.colonists).toHaveLength(0)
-    expect(snapshot.buildings.map((b) => b.workers)).toEqual([0, 0])
+    // Step004: residence + workshop + anchor, all unstaffed projections.
+    expect(snapshot.buildings.map((b) => b.workers)).toEqual([0, 0, 0])
   })
 })
 
 describe('jobs persistence (Step 07C §10)', () => {
   it('bumps the save version to 9', () => {
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 
   it('round-trips employment state with hash and behavioral equivalence', () => {

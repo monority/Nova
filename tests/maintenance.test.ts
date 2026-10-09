@@ -113,12 +113,14 @@ const staffedState = (n: number): SimulationState => {
 }
 
 describe('building maintenance (Step001)', () => {
-  it('A — no operational building pays 0', () => {
+  it('A — a fresh colony holds only the exempt Colony Center anchor and pays 0', () => {
     const fresh = createTestState()
-    expect(countOperationalBuildings(fresh)).toBe(0)
+    // Step004: exactly one pre-placed Colony Center (operational, exempt
+    // from maintenance — audit D4). No other building exists.
+    expect(countOperationalBuildings(fresh)).toBe(1)
     expect(getMaintenanceDuePerTick(fresh)).toBe(0)
     expect(payMaintenance(fresh)).toBe(fresh)
-    // Under-construction buildings only: still 0.
+    // Under-construction buildings only added: still 0.
     const constructing = stepSimulation(withWorkshopWater(createTestState()), place('workshop', 1, 1))
     expect(getMaintenanceDuePerTick(constructing)).toBe(0)
     expect(payMaintenance(constructing)).toBe(constructing)
@@ -141,27 +143,33 @@ describe('building maintenance (Step001)', () => {
   it('C — residence plus staffed connected Workshop: maintenance 2, revenue 3', () => {
     const state = workshopState()
     expect(MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK).toBe(1)
-    expect(countOperationalBuildings(state)).toBe(2)
+    // Step004: the count includes the exempt Colony Center anchor, the due
+    // does not (2 payable = residence + Workshop).
+    expect(countOperationalBuildings(state)).toBe(3)
     expect(countStaffedOperationalWorkshops(state)).toBe(1)
     expect(getMaintenanceDuePerTick(state)).toBe(2)
     expect(getRevenuePerTick(state)).toBe(3)
     expect(getNetMoneyPerTick(state)).toBe(1)
   })
 
-  it('D — maintenance scales with every operational building', () => {
+  it('D — maintenance scales with every PAYABLE operational building', () => {
     const state = staffedState(2)
     expect(getEmploymentSummary(state).employed).toBe(2)
+    // Step004: the Colony Center anchor is counted as operational but is
+    // maintenance-exempt — dues follow the payable count only.
+    const payable = countOperationalBuildings(state) - 1 // minus the anchor
     expect(getMaintenanceDuePerTick(state)).toBe(
-      countOperationalBuildings(state) * MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
+      payable * MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
     )
-    expect(countOperationalBuildings(state)).toBe(4)
+    expect(countOperationalBuildings(state)).toBe(5)
   })
 
-  it('E — four staffed Workshops: dues follow the building count', () => {
+  it('E — four staffed Workshops: dues follow the payable building count', () => {
     const state = staffedState(4)
     expect(getEmploymentSummary(state).employed).toBe(4)
+    const payable = countOperationalBuildings(state) - 1 // minus the anchor
     expect(getMaintenanceDuePerTick(state)).toBe(
-      countOperationalBuildings(state) * MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
+      payable * MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK
     )
   })
 
@@ -251,7 +259,7 @@ describe('building maintenance (Step001)', () => {
     expect(getResourceStock(state).money).toBe(
       getResourceStock(after).money + 2
     )
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 
   it('collectRevenue is pure and additive', () => {

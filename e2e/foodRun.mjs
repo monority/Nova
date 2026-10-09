@@ -115,10 +115,10 @@ async function main() {
     const cells = [{ x: 6, y: 6 }, { x: 4, y: 4 }, { x: 2, y: 2 }, { x: 0, y: 0 }];
     for (const cell of cells) {
       await clickCell(page, cell);
-      await waitFor(async () => (await stats(page)).buildings === String(cells.indexOf(cell) + 1), `building placed at ${cell.x},${cell.y}`);
+      await waitFor(async () => (await stats(page)).buildings === String(cells.indexOf(cell) + 2), `building placed at ${cell.x},${cell.y}`);
     }
     s = await stats(page);
-    if (s.money !== '0' || s.buildings !== '4') {
+    if (s.money !== '0' || s.buildings !== '5') {
       fail(`after 4 placements expected material 0 / buildings 4, got ${s.money}/${s.buildings}`);
     } else ok(`material depleted 100 -> ${s.money}, ${s.buildings} residences`);
 
@@ -130,7 +130,7 @@ async function main() {
     await step(page);
     await waitFor(async () => Number((await stats(page)).tick) === 6, 'step to tick 6');
     s = await stats(page);
-    if (s.colonists !== '4' || s.operational !== '4' || s.food !== '94') {
+    if (s.colonists !== '4' || s.operational !== '5' || s.food !== '94') {
       fail(`after operational tick bad: ${JSON.stringify(s)}`);
     } else ok(`4 colonists fed, food ${s.food} at tick ${s.tick}, ${JSON.stringify(s)}`);
     await step(page);
@@ -176,7 +176,7 @@ async function main() {
       await waitFor(async () => Number((await stats(page)).tick) === tBefore + 1, 'post-starvation tick');
     }
     s = await stats(page);
-    if (s.food !== '0' || s.colonists !== '0' || s.buildings !== '4') {
+    if (s.food !== '0' || s.colonists !== '0' || s.buildings !== '5') {
       fail(`post-starvation state bad: ${JSON.stringify(s)}`);
     } else ok(`post-starvation: food ${s.food}, colonists ${s.colonists}, buildings ${s.buildings} stable`);
     await shot('04-after-starvation.png');

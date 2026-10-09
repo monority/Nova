@@ -674,7 +674,7 @@ describe('8. Architectural invariants', () => {
       ].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(10)
+    expect(invariants.saveVersion).toBe(11)
     expect(invariants.saveKeys).toHaveLength(9)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)

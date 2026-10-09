@@ -377,8 +377,9 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     )
     audit('INDUSTRIAL_EXPANSION', { workshopNow, capacityFirst, colonistFirst })
     // The Workshop can exist but cannot run: one worker per colonist, and the
-    // Farm and Well already hold both of them.
-    expect(workshopNow.final.buildings).toBe(5)
+    // Farm and Well already hold both of them. Step004: + the Colony Center
+    // anchor.
+    expect(workshopNow.final.buildings).toBe(6)
     expect(workshopNow.final.staffedWorkshops).toBe(0)
     expect(workshopNow.final.stage).toBe('village')
     // Measured hard cap: the scenario starts with an operational Well, so the
@@ -494,7 +495,8 @@ describe('3-4. Scenario profiles and decision differentiation', { timeout: 60000
     expect(repair.final.staffedFarms).toBe(1)
     expect(replace.final.stage).toBe('settlement')
     expect(replace.final.roads).toBe(1)
-    expect(replace.final.buildings).toBe(3)
+    // Step004: + the Colony Center anchor.
+    expect(replace.final.buildings).toBe(4)
     expect(replace.final.material).toBe(0)
     expect(inaction.final.stage).toBe('wilderness')
     expect(inaction.wipeTick).not.toBeNull()
@@ -761,7 +763,7 @@ describe('9-11. Safety, Town+ gate and classification', { timeout: 30000 }, () =
       scenarioStateInSave: serializeCanonicalState(state).includes('scenario'),
       progressionStateInSave: serializeCanonicalState(state).includes('progression'),
     })
-    expect(saved.version).toBe(10)
+    expect(saved.version).toBe(11)
     expect(Object.keys(saved.state)).toHaveLength(9)
     expect(serializeCanonicalState(state)).not.toContain('scenario')
     expect(serializeCanonicalState(state)).not.toContain('progression')

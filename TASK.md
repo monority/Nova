@@ -2,8 +2,8 @@
 
 ## Objective
 
-Finalize Step002-money-suite-green: full E2E reconciliation, full validation,
-clean committable state.
+Step004: guarantee the Day-0 Colony Center anchor (existence, uniqueness,
+persistence, maintenance exemption) with the anti-self-lock invariant tested.
 
 ## Scope
 

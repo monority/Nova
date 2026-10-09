@@ -946,7 +946,7 @@ describe('5. Road cost versus building density', { timeout: 30000 }, () => {
     const compact = (rows as { name: string; buildingsPerRoad: number }[]).find((row) => row.name.startsWith('compact'))
     const corridor = (rows as { name: string; buildingsPerRoad: number }[]).find((row) => row.name.startsWith('corridor'))
     expect((compact?.buildingsPerRoad ?? 0) > (corridor?.buildingsPerRoad ?? 0)).toBe(true)
-    expect(corridor?.buildingsPerRoad).toBe(1)
+    expect(corridor?.buildingsPerRoad).toBe(1.25) // Step004: + the anchor (5 buildings / 4 roads)
   })
 })
 
@@ -1449,8 +1449,8 @@ describe('13. Architecture invariants (src-immutable audit)', { timeout: 30000 }
       ),
     })
     // Step001 money migration bumps SAVE_VERSION from 8 to 9.
-    expect(saved.version).toBe(10)
-    expect(SAVE_VERSION).toBe(10)
+    expect(saved.version).toBe(11)
+    expect(SAVE_VERSION).toBe(11)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))
     expect(serializeCanonicalState(a)).not.toContain('coverage')

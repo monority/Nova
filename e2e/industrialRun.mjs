@@ -185,7 +185,8 @@ async function main() {
     assert(s.money === '25', `Material expected 25, got ${s.money}`);
     assert(s.water === '51', `Water expected 51, got ${s.water}`);
     assert(s.food === '50', `Food expected 50, got ${s.food}`);
-    assert(s.buildings === '4' && s.operational === '4', `initial buildings wrong: ${JSON.stringify(s)}`);
+    // Step004: + the Colony Center anchor.
+    assert(s.buildings === '5' && s.operational === '5', `initial buildings wrong: ${JSON.stringify(s)}`);
     assert(s.roads === '4' && s.operationalRoads === '4', `initial roads wrong: ${s.roads}/${s.operationalRoads}`);
     assert(s.colonists === '2' && s.jobs === '2 / 2', `workforce wrong: ${s.colonists}, ${s.jobs}`);
     // Step 10AR: the reserve covers the need and the flow is balanced.
@@ -324,7 +325,7 @@ async function main() {
     const second = JSON.stringify(await progression(page));
     assert(first === second, 'progression must be recomputed identically');
     const saved = JSON.parse(await page.evaluate(() => window.__nova.serialize()));
-    assert(saved.version === 10, `save version expected 10, got ${saved.version}`);
+    assert(saved.version === 11, `save version expected 11, got ${saved.version}`);
     assert(Object.keys(saved.state).length === 9, `save must keep 9 top-level keys, got ${Object.keys(saved.state).length}`);
     const serialized = JSON.stringify(saved);
     for (const term of ['scenario', 'progression', 'stage', 'objective', 'blocker']) {

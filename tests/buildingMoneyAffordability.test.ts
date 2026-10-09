@@ -109,7 +109,8 @@ describe('Step001 — revenue-aware building affordability', () => {
     expect(affordability.moneyAvailable).toBe(25)
 
     const after = stepSimulation(state, residence(FREE.x, FREE.y))
-    expect(buildingCount(after)).toBe(1)
+    // Step004: the Colony Center anchor counts too.
+    expect(buildingCount(after)).toBe(2)
     expect(after.resources.money).toBe(0)
   })
 
@@ -150,7 +151,7 @@ describe('Step001 — revenue-aware building affordability', () => {
     const after = stepSimulation(state, {
       type: 'placeBuilding', x: FREE.x, y: FREE.y, buildingType: 'workshop',
     })
-    expect(buildingCount(after)).toBe(0)
+    expect(buildingCount(after)).toBe(1)
   })
 
   it('M5 — a spatial failure is never masked by revenue', () => {
@@ -199,6 +200,6 @@ describe('Step001 — revenue-aware building affordability', () => {
     expect(getPlacementAffordability(restored, FREE, 'residence')).toEqual(
       getPlacementAffordability(state, FREE, 'residence')
     )
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 })

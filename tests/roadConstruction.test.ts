@@ -427,7 +427,7 @@ describe('road projection, persistence and determinism (Step 09H)', () => {
     const raw = serializeSave(state)
     expect(raw.includes('connections')).toBe(false)
     expect(raw.includes('orientation')).toBe(false)
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 
   it('T — deterministic replay: same gestures, same state and hash', () => {
@@ -458,7 +458,7 @@ describe('road projection, persistence and determinism (Step 09H)', () => {
     controller.dispatch(place('residence', 1, 1))
     controller.dispatch(roads([{ x: 4, y: 4 }]))
     const state = controller.getState()
-    expect(Object.keys(state.buildings)).toEqual(['building-1'])
+    expect(Object.keys(state.buildings)).toEqual(['building-1', 'colony-center'])
     expect(Object.keys(state.roads)).toEqual(['road-1'])
     // Building placement is unchanged by the Road tool (no createBuilding
     // helper is used for roads and vice versa).

@@ -1267,7 +1267,7 @@ describe('audit persistence and determinism', () => {
 
   it('P1 — SAVE_VERSION 4 and save/load round-trip the audited state exactly', () => {
     // SAVE_VERSION unchanged by the audit step.
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     const state = scenario()
     const loaded = loadSave(serializeSave(state))
     expect(serializeCanonicalState(loaded)).toBe(serializeCanonicalState(state))

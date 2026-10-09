@@ -142,7 +142,7 @@ describe('money flow (Step001)', () => {
     it('6 — insufficient money places nothing', () => {
       const before = atMoney(createTestState(), 10)
       const after = stepSimulation(before, place('residence', 3, 3))
-      expect(Object.keys(after.buildings)).toHaveLength(0)
+      expect(Object.keys(after.buildings)).toHaveLength(1)
     })
 
     it('7 — treasury is unchanged on failure (no revenue, no buildings)', () => {
@@ -263,7 +263,7 @@ describe('money flow (Step001)', () => {
 
   describe('H — persistence', () => {
     it('21 — save/load round-trips after construction (SAVE_VERSION 9)', () => {
-      expect(SAVE_VERSION).toBe(10)
+      expect(SAVE_VERSION).toBe(11)
       const state = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

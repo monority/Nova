@@ -953,8 +953,10 @@ describe('11-15. Scenario design contract', { timeout: 30000 }, () => {
       rulesIdentical: true,
       catalogUnchanged: getBuildingDefinition('workshop').constructionCost === 25 && getBuildingDefinition('workshop').constructionWaterCost === 1,
     })
-    // The empty scenario start produces nothing on its own: the rules need a player action.
-    expect(snapshot(scenarioSettled).buildings).toBe(0)
+    // The empty scenario start produces nothing on its own: the rules need a
+    // player action. Step004: the Colony Center anchor counts as the 1
+    // standing building.
+    expect(snapshot(scenarioSettled).buildings).toBe(1)
     expect(snapshot(freeSettled).foodProduction).toBe(2)
   })
 })
@@ -1220,8 +1222,8 @@ describe('20-22. Final design contract and architecture', { timeout: 30000 }, ()
       ),
       stock: getResourceStock(a),
     })
-    expect(saved.version).toBe(10)
-    expect(SAVE_VERSION).toBe(10)
+    expect(saved.version).toBe(11)
+    expect(SAVE_VERSION).toBe(11)
     expect(Object.keys(saved.state)).toHaveLength(9)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))

@@ -379,7 +379,7 @@ describe('1. frozen baseline', () => {
     expect(contract.well).toBe(2)
     expect(contract.workshop).toBe(2)
     expect(contract.upkeep).toBe(1)
-    expect(contract.saveVersion).toBe(10)
+    expect(contract.saveVersion).toBe(11)
     // 7 when this audit ran; Step 10BE added one content scenario and Step
     // 10CI added three Town-goal scenarios (rates below untouched).
     expect(contract.scenarios).toBe(11)

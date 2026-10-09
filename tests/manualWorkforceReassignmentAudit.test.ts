@@ -845,7 +845,7 @@ describe('16/17 — persistence and invalid-control audit', () => {
     expect(restored.colonists['colonist-2']!.workplaceId).toBe('building-5')
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(manual))
     audit('PERSISTENCE', { saveVersion: SAVE_VERSION, newStateFields: 0, workplaceId: restored.colonists['colonist-2']!.workplaceId })
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
   })
 
   it('one colonist can never hold two workplaces and capacity is one per workplace', () => {

@@ -193,7 +193,8 @@ async function main() {
     if (s.accessibleBuildings !== '0') {
       fail(`B under-construction residence must be inaccessible: ${JSON.stringify(s)}`);
     } else ok('B under-construction residence inaccessible');
-    s = await stepUntil(page, (v) => v.operational === '1', 'residence operational', 10);
+    // Step004: the anchor is also operational (+1 on the operational count).
+    s = await stepUntil(page, (v) => v.operational === '2', 'residence operational', 10);
     if (s.accessibleBuildings !== '1' || s.colonists !== '1') {
       fail(`B root bad: ${JSON.stringify(s)}`);
     } else ok(`B root residence accessible: ${s.accessibleBuildings}, colonist ${s.colonists}`);
@@ -247,7 +248,7 @@ async function main() {
     if (s.workshops !== '1' || !s.status.includes('under construction')) {
       fail(`C Workshop must be accepted once Water exists: ${JSON.stringify(s)}`);
     } else ok(`C Workshop accepted with Water ${s.water} available, material ${s.money}`);
-    await stepUntil(page, (v) => v.operational === '3', 'workshop operational', 10);
+    await stepUntil(page, (v) => v.operational === '4', 'workshop operational', 10);
     s = await stats(page);
     if (s.accessibleBuildings !== '2') {
       fail(`C adjacent Workshop must be accessible: ${JSON.stringify(s)}`);

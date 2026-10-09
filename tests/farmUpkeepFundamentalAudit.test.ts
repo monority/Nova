@@ -1202,7 +1202,7 @@ describe('13 — storage and construction pressure', () => {
 
 describe('16 — persistence and determinism', () => {
   it('SAVE_VERSION 9, no persisted Farm upkeep, deterministic replay', () => {
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     const state = rowWorld({ residences: 5, farms: 3, workshops: 3, material: 5 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

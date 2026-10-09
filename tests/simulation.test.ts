@@ -39,7 +39,9 @@ describe('simulation tick', () => {
     const state = createTestState()
     const next = stepSimulation(state)
     expect(next.time.tick).toBe(1)
-    expect(next.buildings).toEqual({})
+    // Step004: the only change is the tick — the Colony Center anchor is
+    // part of both states and unchanged.
+    expect(next.buildings).toEqual(state.buildings)
     expect(next.colonists).toEqual({})
     expect(hashCanonicalState(state)).not.toBe(hashCanonicalState(next))
   })
@@ -90,12 +92,13 @@ describe('simulation tick', () => {
 
   it('rejects invalid placements as explicit no-ops', () => {
     let state = stepSimulation(createTestState(), placeResidence(-1, 0))
-    expect(Object.keys(state.buildings)).toHaveLength(0)
-    state = stepSimulation(state, placeResidence(0, 8))
-    expect(Object.keys(state.buildings)).toHaveLength(0)
-    state = stepSimulation(state, placeResidence(0, 0))
-    state = stepSimulation(state, placeResidence(0, 0))
     expect(Object.keys(state.buildings)).toHaveLength(1)
+    state = stepSimulation(state, placeResidence(0, 8))
+    expect(Object.keys(state.buildings)).toHaveLength(1)
+    state = stepSimulation(state, placeResidence(0, 0))
+    // The second placement is rejected: same cell occupied.
+    state = stepSimulation(state, placeResidence(0, 0))
+    expect(Object.keys(state.buildings)).toHaveLength(2)
   })
 
   it('operational residence exists only after its lifecycle completes', () => {
@@ -189,7 +192,7 @@ describe('food need simulation (Step 05)', () => {
   it('four colonists consume 4 food per tick', () => {
     let state = colonistState()
     state = stepSimulation(state, placeResidence(5, 5))
-    state = stepSimulation(state, placeResidence(7, 7))
+    state = stepSimulation(state, placeResidence(7, 6)) // Step004: (7,7) is the anchor
     state = stepSimulation(state, placeResidence(3, 3))
     for (let i = 0; i < 3; i += 1) state = stepSimulation(state)
     expect(Object.keys(state.colonists)).toHaveLength(4)

@@ -335,8 +335,9 @@ describe('1. Opening sequences from the default 100 Material', { timeout: 300000
     expect(s5!.wipeTick).toBe(104)
     expect(s6!.wipeTick).toBe(104)
     // Step001: the fourth building (second Residence, 25) is never
-    // affordable — the treasury drains to 0 — so only 3 stand.
-    expect(s6!.final.buildings).toBe(3)
+    // affordable — the treasury drains to 0 — so only 3 stand, plus the
+    // pre-placed Colony Center anchor (Step004) = 4.
+    expect(s6!.final.buildings).toBe(4)
     expect(s6!.final.roads).toBe(0)
   })
 
@@ -853,7 +854,7 @@ describe('8-9. Implementation and invariants', () => {
       },
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(10)
+    expect(invariants.saveVersion).toBe(11)
     expect(invariants.saveKeys).toHaveLength(9)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)

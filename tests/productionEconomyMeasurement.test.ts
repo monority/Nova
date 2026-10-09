@@ -422,7 +422,7 @@ describe('4. Production vs workforce income (measured)', () => {
       y: cell.y,
       buildingType: 'residence',
     })
-    expect(Object.keys(after.buildings)).toHaveLength(0)
+    expect(Object.keys(after.buildings)).toHaveLength(1)
   })
 })
 
@@ -474,7 +474,7 @@ describe('5. Decision pressure per resource (measured)', () => {
     const jobs = [...iterateBuildings(constrained)].filter(
       (building) => building.type !== 'residence'
     )
-    expect(jobs).toHaveLength(3)
+    expect(jobs).toHaveLength(4) // Step004: + the Colony Center anchor (non-residence)
     // Income scales with which job the single colonist takes.
     const perJob = (['farm', 'well', 'workshop'] as const).map((type) => {
       const only = build({ residences: 1, [type === 'farm' ? 'farms' : type === 'well' ? 'wells' : 'workshops']: 1, colonists: 1, material: 0 })

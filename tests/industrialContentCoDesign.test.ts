@@ -244,7 +244,7 @@ describe('1. Economic baseline', { timeout: 30000 }, () => {
       foodPerColonist: 1,
       waterPerColonist: 1,
       treasuryCap: 'uncapped',
-      saveVersion: 10,
+      saveVersion: 11,
     })
   })
 })
@@ -460,8 +460,8 @@ describe('3-5. Decision and construction consequence', { timeout: 60000 }, () =>
     // treasury never refills — the Well and Farm stay unaffordable, so both
     // paths end at 9 buildings with an empty treasury.
     expect(withIndustry.actions.slice(0, 2).every((action) => action.tick !== null)).toBe(true)
-    expect(withIndustry.final.operationalBuildings).toBe(9)
-    expect(without.final.operationalBuildings).toBe(9)
+    expect(withIndustry.final.operationalBuildings).toBe(10)
+    expect(without.final.operationalBuildings).toBe(10)
     expect(withIndustry.final.staffedWorkshops + 1).toBeGreaterThan(without.final.staffedWorkshops)
   })
 
@@ -864,7 +864,7 @@ describe('16. Architectural invariants', () => {
       requirementKinds: [...new Set(SCENARIOS.flatMap((s) => s.objective.requirements.map((r) => r.kind)))].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(10)
+    expect(invariants.saveVersion).toBe(11)
     expect(invariants.saveKeys).toEqual([
       'buildings',
       'colonists',

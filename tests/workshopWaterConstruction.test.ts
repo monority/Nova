@@ -144,7 +144,7 @@ describe('§1/§2 — Workshop construction contract', () => {
     expect(result.state).toBe(before)
     // A rejected placement is an explicit no-op tick: no mutation at all.
     expect(after.resources).toEqual(before.resources)
-    expect(Object.keys(after.buildings)).toHaveLength(0)
+    expect(Object.keys(after.buildings)).toHaveLength(1)
   })
 
   it('keeps the existing Material rejection and the both-insufficient case', () => {
@@ -357,7 +357,7 @@ describe('§8 — persistence and determinism', () => {
       saveLoadStable: serializeCanonicalState(restored) === serializeCanonicalState(after),
       water: getWaterStock(after),
     })
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(after))
     expect(hashCanonicalState(before)).not.toBe(hashCanonicalState(after))
   })

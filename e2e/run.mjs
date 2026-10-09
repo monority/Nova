@@ -68,8 +68,8 @@ try {
   await page.screenshot({ path: `${SHOTS}/01-initial.png` });
 
   let s = await page.evaluate(() => window.__nova.stats());
-  if (s.tick !== '0' || s.buildings !== '0' || s.colonists !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
-  else ok('initial Tick=0 Buildings=0 Colonists=0');
+  if (s.tick !== '0' || s.buildings !== '1' || s.colonists !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
+  else ok('initial Tick=0 Buildings=1 (Colony Center anchor) Colonists=0');
 
   const pt = await page.evaluate((c) => window.__nova.cellToScreen(c), TARGET);
   if (!pt) fail('cellToScreen null');
@@ -81,9 +81,9 @@ try {
   await page.screenshot({ path: `${SHOTS}/02-preview.png` });
 
   await page.mouse.click(pt.x, pt.y);
-  await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).buildings === '1', 'building placed');
+  await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).buildings === '2', 'building placed');
   s = await page.evaluate(() => window.__nova.stats());
-  if (s.tick !== '1' || s.buildings !== '1' || s.operational !== '0') fail(`after placement bad: ${JSON.stringify(s)}`);
+  if (s.tick !== '1' || s.buildings !== '2' || s.operational !== '1') fail(`after placement bad: ${JSON.stringify(s)}`);
   else ok(`click places building via canvas picking, ${JSON.stringify(s)}`);
   await page.screenshot({ path: `${SHOTS}/03-construction.png` });
 
@@ -91,13 +91,13 @@ try {
   await page.click('[data-testid="simulation-step"]');
   await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '2', 'step to tick 2');
   s = await page.evaluate(() => window.__nova.stats());
-  if (s.operational !== '0') fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
+  if (s.operational !== '1') fail(`tick 2 should still be under money: ${JSON.stringify(s)}`);
   else ok(`tick 2 still under construction, ${JSON.stringify(s)}`);
 
   await page.click('[data-testid="simulation-step"]');
   await waitFor(async () => (await page.evaluate(() => window.__nova.stats())).tick === '3', 'step to tick 3');
   s = await page.evaluate(() => window.__nova.stats());
-  if (s.operational !== '1' || s.colonists !== '1') fail(`after step3 bad: ${JSON.stringify(s)}`);
+  if (s.operational !== '2' || s.colonists !== '1') fail(`after step3 bad: ${JSON.stringify(s)}`);
   else ok(`STEP drives construction to operational, ${JSON.stringify(s)}`);
 
   await page.click('[data-testid="simulation-step"]');

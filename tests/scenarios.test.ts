@@ -160,7 +160,7 @@ describe('scenarios — starting states and progression framing', () => {
     expect(state.resources.money).toBe(100)
     expect(state.resources.food).toBe(100)
     expect(state.resources.water).toBe(0)
-    expect(Object.keys(state.buildings)).toHaveLength(0)
+    expect(Object.keys(state.buildings)).toHaveLength(1)
     expect(Object.keys(state.roads)).toHaveLength(0)
     expect(Object.keys(state.colonists)).toHaveLength(0)
     // Scenario framing is UI state, so the canonical payload is untouched.

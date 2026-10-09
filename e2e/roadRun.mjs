@@ -249,7 +249,8 @@ async function main() {
     await placeBuilding(page, WORKSHOP); // roadless
     // Operational marker: residence + Well + Workshop all operational (the
     // Well also raises maintenance to 2 while the Workshop is unfinished).
-    s = await stepUntil(page, (v) => v.workshops === '1' && v.operational === '3', 'roadless workshop operational', 10);
+    // Step004: the anchor is operational too — the Workshop completes at 4.
+    s = await stepUntil(page, (v) => v.workshops === '1' && v.operational === '4', 'roadless workshop operational', 10);
     // Step001: a roadless Workshop is mobility-blocked (no worker, no
     // commerce) but still PAYS maintenance — infrastructure, not labor.
     if (s.staffedWorkshopIds !== '' || s.commerce !== '0' || s.maintenance !== '3') {

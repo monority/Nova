@@ -96,15 +96,15 @@ async function main() {
     await waitFor(() => page.evaluate(() => window.__nova?.ready === true), 'app ready');
     ok('load, app ready');
     let s = await stats(page);
-    if (s.tick !== '0' || s.buildings !== '0' || s.colonists !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
-    else ok('initial Tick=0 Buildings=0 Colonists=0');
+    if (s.tick !== '0' || s.buildings !== '1' || s.colonists !== '0') fail(`initial stats bad: ${JSON.stringify(s)}`);
+    else ok('initial Tick=0 Buildings=1 (Colony Center anchor) Colonists=0');
     await shot('01-initial.png');
 
     // Placement at (6,6): building-1 under construction.
     await clickCell(page, { x: 6, y: 6 });
-    await waitFor(async () => (await stats(page)).buildings === '1', 'building placed');
+    await waitFor(async () => (await stats(page)).buildings === '2', 'building placed');
     s = await stats(page);
-    if (s.tick !== '1' || s.buildings !== '1') fail(`after placement bad: ${JSON.stringify(s)}`);
+    if (s.tick !== '1' || s.buildings !== '2') fail(`after placement bad: ${JSON.stringify(s)}`);
     else ok(`building placed, ${JSON.stringify(s)}`);
 
     // Select the building by clicking it again.
@@ -188,7 +188,7 @@ async function main() {
     await waitFor(async () => Number((await stats(page)).tick) === fastPaused + 1, 'deterministic STEP');
     ok(`STEP after speed change still advances exactly one tick (${fastPaused} -> ${fastPaused + 1})`);
     s = await stats(page);
-    if (s.buildings !== '2') fail(`buildings changed: ${JSON.stringify(s)}`);
+    if (s.buildings !== '3') fail(`buildings changed: ${JSON.stringify(s)}`);
     else ok('buildings stable (2) across PLAY/PAUSE/speed');
 
     const realErrors = errors.filter((e) => !e.includes('favicon'));

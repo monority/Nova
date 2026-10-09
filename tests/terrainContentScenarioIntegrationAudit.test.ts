@@ -1543,9 +1543,14 @@ describe('14. long-run regression', () => {
     }
     const a = run(plain)
     const b = run(terrain)
-    const strip = (state: SimulationState): string =>
-      canonicalJson({
+    const strip = (state: SimulationState): string => {
+      // Step004: the Colony Center anchor's cell depends on buildability, so
+      // it is excluded from the terrain-invariance comparison.
+      const buildings: Record<string, unknown> = { ...state.buildings }
+  delete buildings['colony-center']
+      return canonicalJson({
         ...state,
+        buildings,
         config: {
           world: {
             seed: state.config.world.seed,
@@ -1554,6 +1559,7 @@ describe('14. long-run regression', () => {
           },
         },
       })
+    }
     audit('HIDDEN_EFFECT', {
       identicalWithoutTerrainField: strip(a) === strip(b),
       material: read(b).material,
@@ -1607,7 +1613,7 @@ describe('15. determinism, insertion order, save/load, hash', () => {
     expect(rows.insertionOrderEquivalent).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
     expect(rows.terrainSurvivesSave).toEqual(normalizeBlockedCells(cells))
-    expect(rows.saveVersion).toBe(10)
+    expect(rows.saveVersion).toBe(11)
     expect(rows.beforeHash).not.toBe(rows.afterHash)
   })
 

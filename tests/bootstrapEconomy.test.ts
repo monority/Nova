@@ -334,6 +334,7 @@ describe('scenario E — first expansion (Step 09I §5)', () => {
     expect(Object.keys(attempt.state.buildings)).toEqual([
       'building-1',
       'building-2',
+      'colony-center',
       'building-3',
     ])
     // Stock above 25 but below 50: one Farm built, no second workshop.
@@ -543,7 +544,7 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     // Save/load at the most fragile point: transient construction states.
     const loaded = loadSave(serializeSave(state))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(10)
+    expect(SAVE_VERSION).toBe(11)
     // Continue both 5 ticks: identical futures.
     let direct = state
     let resumed = loaded

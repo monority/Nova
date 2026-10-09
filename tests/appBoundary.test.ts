@@ -14,7 +14,8 @@ describe('game controller command flow', () => {
 
     const after = controller.getState()
     expect(hashCanonicalState(after)).not.toBe(before)
-    expect(Object.keys(after.buildings)).toEqual(['building-1'])
+    // Step004: the pre-placed Colony Center anchor is part of every state.
+    expect(Object.keys(after.buildings)).toEqual(['colony-center', 'building-1'])
     expect(after.time.tick).toBe(1)
   })
 
@@ -25,7 +26,7 @@ describe('game controller command flow', () => {
     controller.dispatch({ type: 'placeBuilding', x: 1, y: 1, buildingType: 'residence' })
     const afterSecond = controller.getState()
     // Only one building: rejected placement changed nothing structural.
-    expect(Object.keys(afterSecond.buildings)).toEqual(['building-1'])
+    expect(Object.keys(afterSecond.buildings)).toEqual(['building-1', 'colony-center'])
     // But simulation time always advances (dispatch = one tick).
     expect(afterSecond.time.tick).toBe(afterFirst.time.tick + 1)
   })
@@ -40,7 +41,7 @@ describe('game controller command flow', () => {
     // Rejected placement still advances time => notify; no building added.
     controller.dispatch({ type: 'placeBuilding', x: -5, y: -5, buildingType: 'residence' })
     expect(notifications).toBe(2)
-    expect(Object.keys(controller.getState().buildings)).toHaveLength(0)
+    expect(Object.keys(controller.getState().buildings)).toHaveLength(1)
   })
 
   it('exposes derived render snapshot', () => {
@@ -56,7 +57,7 @@ describe('game controller command flow', () => {
     const controller = createGameController(isolated)
     controller.dispatch({ type: 'placeBuilding', x: 2, y: 2, buildingType: 'residence' })
     // Original state object untouched (purity preserved through controller).
-    expect(Object.keys(isolated.buildings)).toHaveLength(0)
+    expect(Object.keys(isolated.buildings)).toHaveLength(1)
   })
 })
 

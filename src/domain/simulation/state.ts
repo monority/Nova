@@ -18,11 +18,12 @@ import { createInitialStorageHub, type StorageHub } from '../storage/storage.js'
 import {
   cellKey,
   isInBounds,
+  isTerrainBlocked,
   listBlockedCells,
   normalizeBlockedCells,
   type WorldConfig,
 } from '../world/grid.js'
-import { normalizeWoodDeposits, type WoodDeposits } from '../world/woodDeposits.js'
+import { hasWoodDepositAt, normalizeWoodDeposits, type WoodDeposits } from '../world/woodDeposits.js'
 
 export interface SimulationTime {
   /** Current tick. Starts at 0, increments once per completed tick. */
@@ -89,7 +90,8 @@ export const normalizeConfig = (config: SimulationConfig): SimulationConfig => {
 export const createInitialState = (config: SimulationConfig): SimulationState => {
   const normalized = normalizeConfig(config)
   assertValidConfig(normalized)
-  return {
+  const world = normalized.world
+  const base: SimulationState = {
     config: normalized,
     time: { tick: 0 },
     resources: createInitialResourceStock(),
@@ -97,9 +99,63 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
     buildings: {},
     colonists: {},
     roads: {},
-    woodDeposits: normalizeWoodDeposits(normalized.world.woodDeposits ?? []),
+    woodDeposits: normalizeWoodDeposits(world.woodDeposits ?? []),
     counters: { nextBuildingId: 1, nextColonistId: 1, nextRoadId: 1 },
   }
+  // Step004 (audit D4, day-0 bootstrap hardening): every new colony owns
+  // exactly one Colony Center — the settlement anchor that guarantees the
+  // primitive recovery path from tick 0. Placed at the first valid cell in
+  // deterministic bottom-right (y, x) scan order: in bounds, not
+  // terrain-blocked, not a wood deposit. Operational from tick 0 (it is the
+  // founding structure, not a construction project). A world without a
+  // single valid cell cannot host a colony at all — that is a config error,
+  // thrown here.
+  const cell = firstAnchorCell(world, base.woodDeposits)
+  if (cell === null) {
+    throw new Error(
+      'Invalid world: no buildable cell available for the Colony Center'
+    )
+  }
+  return {
+    ...base,
+    buildings: {
+      [COLONY_CENTER_ID]: {
+        id: COLONY_CENTER_ID,
+        type: 'colonyCenter',
+        x: cell.x,
+        y: cell.y,
+        status: 'operational',
+        constructionRemaining: 0,
+      },
+    },
+  }
+}
+
+/** The canonical Colony Center building id (Step004). Deliberately NOT from
+ * the `building-N` counter: pre-placing the anchor must not shift the ids of
+ * the player's own first buildings. */
+export const COLONY_CENTER_ID = 'colony-center'
+
+/**
+ * First cell (bottom-right scan order: y descending, then x descending) that
+ * can host the Colony Center: in bounds, not terrain-blocked, not a wood
+ * deposit. Deterministic per world. The bottom-right preference keeps the
+ * anchor clear of the origin-anchored fixture/scenario building space.
+ */
+const firstAnchorCell = (
+  world: WorldConfig,
+  deposits: WoodDeposits
+): { readonly x: number; readonly y: number } | null => {
+  for (let y = world.height - 1; y >= 0; y -= 1) {
+    for (let x = world.width - 1; x >= 0; x -= 1) {
+      const cell = { x, y }
+      if (!isInBounds(world, cell)) continue
+      if (isTerrainBlocked(world, cell)) continue
+      if (hasWoodDepositAt(deposits, x, y)) continue
+      return cell
+    }
+  }
+  return null
 }
 
 const assertValidConfig = (config: SimulationConfig): void => {
