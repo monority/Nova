@@ -176,6 +176,7 @@ const scene = (spec: SceneSpec, blockedCells: readonly string[] = []): Simulatio
       water: spec.water ?? 0,
       wood: 0,
       stone: 0,
+      planks: 0,
     },
   }
   for (const [x, y] of spec.residences) {
@@ -1614,7 +1615,7 @@ describe('15. determinism, insertion order, save/load, hash', () => {
     expect(rows.insertionOrderEquivalent).toBe(true)
     expect(rows.reloadEquivalent).toBe(true)
     expect(rows.terrainSurvivesSave).toEqual(normalizeBlockedCells(cells))
-    expect(rows.saveVersion).toBe(12)
+    expect(rows.saveVersion).toBe(13)
     expect(rows.beforeHash).not.toBe(rows.afterHash)
   })
 

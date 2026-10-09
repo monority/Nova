@@ -263,7 +263,7 @@ describe('money flow (Step001)', () => {
 
   describe('H — persistence', () => {
     it('21 — save/load round-trips after construction (SAVE_VERSION 9)', () => {
-      expect(SAVE_VERSION).toBe(12)
+      expect(SAVE_VERSION).toBe(13)
       const state = stepSimulation(atMoney(singleWorkshop(), 30), place('residence', 0, 0))
       const restored = loadSave(serializeSave(state))
       expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

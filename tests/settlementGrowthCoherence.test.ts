@@ -241,7 +241,7 @@ describe('G1.2 — growth feedback', () => {
     for (const term of ['growthBlocker', 'growthDemand', 'growthCell', 'growthState']) {
       expect(serialized.includes(term), term).toBe(false)
     }
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
 
     const restored = loadSave(serialized)
     expect(evaluateSettlementGrowth(restored)).toEqual(first)

@@ -140,6 +140,7 @@ const withStocks = (
     water: stocks.water ?? state.resources.water,
     wood: 0,
     stone: 0,
+    planks: 0,
   },
 })
 
@@ -1335,7 +1336,7 @@ describe('§19 — UI information audit (hypothetical, no UI change)', () => {
 
 describe('§25 — persistence and determinism (audit-only)', () => {
   it('SAVE_VERSION is 9; the threshold adds no persisted state', () => {
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     const state = rowWorld({ residences: 4, farms: 2, workshops: 3, material: 20 })
     const restored = loadSave(serializeSave(state))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(state))

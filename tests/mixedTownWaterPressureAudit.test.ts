@@ -39,7 +39,7 @@ const op = (state: SimulationState, type: BuildingType, x: number, y: number): S
 
 const town = (types: readonly BuildingType[], water = 20): SimulationState => {
   let state = createInitialState(config)
-  state = { ...state, resources: { money: 1000, food: 1000, water, wood: 0, stone: 0 } }
+  state = { ...state, resources: { money: 1000, food: 1000, water, wood: 0, stone: 0, planks: 0 } }
   for (let index = 0; index < 10; index += 1) state = op(state, 'residence', 1 + index * 2, 0)
   const created = createRoads(state, Array.from({ length: 25 }, (_, x) => ({ x, y: 1 })))
   state = created.state

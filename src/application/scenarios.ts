@@ -37,6 +37,8 @@ export interface ScenarioResources {
   readonly wood?: number
   /** Step005: optional stone seed (defaults 0 — no scenario ships stone). */
   readonly stone?: number
+  /** Step006: optional plank seed (defaults 0 — no scenario ships planks). */
+  readonly planks?: number
 }
 
 export interface ScenarioBuilding {
@@ -105,6 +107,7 @@ export const createScenarioState = (
       water: scenario.resources.water,
       wood: scenario.resources.wood ?? 0,
       stone: scenario.resources.stone ?? 0,
+      planks: scenario.resources.planks ?? 0,
     },
   }
   const buildingIdByCell = new Map<string, string>()

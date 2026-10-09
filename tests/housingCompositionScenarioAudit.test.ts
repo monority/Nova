@@ -131,6 +131,7 @@ const scene = (spec: SceneSpec): SimulationState => {
       water: spec.water ?? 0,
       wood: 0,
       stone: 0,
+      planks: 0,
     },
   }
   for (const [x, y] of spec.residences) {
@@ -842,7 +843,7 @@ describe('6. phase A boundary and determinism', () => {
     // housing phenomenon became a curated scenario in 10BE instead.
     expect(rows.fixtures).toEqual(['terrain-chokepoint'])
     // Step001 money migration bumps SAVE_VERSION from 8 to 9.
-    expect(rows.saveVersion).toBe(12)
+    expect(rows.saveVersion).toBe(13)
   })
 
   it('keeps the layouts deterministic and save/load stable', () => {

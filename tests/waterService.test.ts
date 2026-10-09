@@ -97,6 +97,7 @@ const withStocks = (
     water: stocks.water ?? state.resources.water,
     wood: 0,
     stone: 0,
+    planks: 0,
   },
 })
 
@@ -552,7 +553,7 @@ describe('7 — timing', () => {
 
 describe('8 — persistence and migration', () => {
   it('SAVE_VERSION is 9 and the Water stock round-trips', () => {
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     const state = waterWorld({ residences: 2, wells: 1, colonists: 2, water: 42 })
     const restored = loadSave(serializeSave(state))
     expect(restored.resources.water).toBe(42)
@@ -600,7 +601,7 @@ describe('8 — persistence and migration', () => {
   })
 
   it('MIGRATABLE_SAVE_VERSION is 9 and older saves are rejected', () => {
-    expect(MIGRATABLE_SAVE_VERSION).toBe(11)
+    expect(MIGRATABLE_SAVE_VERSION).toBe(12)
     const save = serializeSave(waterWorld({ residences: 1, wells: 1 }))
     const parsed = JSON.parse(save) as Record<string, unknown>
     parsed['version'] = 3

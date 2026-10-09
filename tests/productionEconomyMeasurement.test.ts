@@ -81,6 +81,7 @@ const withStocks = (
     water: stocks.water ?? state.resources.water,
     wood: 0,
     stone: 0,
+    planks: 0,
   },
 })
 
@@ -219,6 +220,7 @@ describe('1. Production dependency (measured from the catalog and the runtime)',
     for (const type of ['residence', 'farm', 'workshop', 'well', 'lumberCamp', 'colonyCenter', 'quarry'] as const) {
       expect(Object.keys(getBuildingDefinition(type)).sort()).toEqual([
         'constructionCost',
+        'constructionPlankCost',
         'constructionTicks',
         'constructionWaterCost',
         'housingCapacity',

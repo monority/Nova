@@ -103,6 +103,7 @@ export const createInitialState = (config: SimulationConfig): SimulationState =>
     roads: {},
     woodDeposits: normalizeDeposits(world.woodDeposits ?? []),
     stoneDeposits: normalizeDeposits(world.stoneDeposits ?? []),
+    // planks live in resources (Step006); no separate state field.
     counters: { nextBuildingId: 1, nextColonistId: 1, nextRoadId: 1 },
   }
   // Step004 (audit D4, day-0 bootstrap hardening): every new colony owns

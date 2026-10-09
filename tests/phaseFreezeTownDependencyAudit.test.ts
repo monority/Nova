@@ -124,6 +124,7 @@ const colony = (spec: ColonySpec, world = config()): SimulationState => {
       water: spec.water ?? 50,
       wood: 0,
       stone: 0,
+      planks: 0,
     },
   }
   for (let index = 0; index < spec.population; index += 1) {
@@ -212,11 +213,11 @@ describe('1. freeze verification', () => {
     expect(frozen.workshopStorage).toBe(0)
     expect(frozen.roadCost).toBe(5)
     expect(frozen.roadTicks).toBe(2)
-    expect(frozen.residence).toEqual({ constructionTicks: 2, housingCapacity: 1, constructionCost: 25, constructionWaterCost: 0 })
-    expect(frozen.farm).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
-    expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 })
-    expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 })
-    expect(frozen.saveVersion).toBe(12)
+    expect(frozen.residence).toEqual({ constructionTicks: 2, housingCapacity: 1, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 })
+    expect(frozen.farm).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 })
+    expect(frozen.well).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 })
+    expect(frozen.workshop).toEqual({ constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1, constructionPlankCost: 0 })
+    expect(frozen.saveVersion).toBe(13)
     // 7 at the freeze; Step 10BE added one curated content scenario and Step
     // 10CI added three Town-goal scenarios
     // (no mechanic, no constant, no objective kind changed).
@@ -277,7 +278,7 @@ describe('1. freeze verification', () => {
     // pinned to the progression query by tests/settlementGrowth.test.ts.
     expect(rows.townValues).toEqual(['src/app/main.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
     expect(rows.townMentions).toEqual(['src/app/main.ts', 'src/application/queries/growth.ts', 'src/application/queries/objective.ts', 'src/application/queries/progression.ts', 'src/application/scenarios.ts', 'src/domain/simulation/growth.ts'])
-    expect(rows.saveVersion).toBe(12)
+    expect(rows.saveVersion).toBe(13)
   })
 })
 

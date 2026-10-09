@@ -47,6 +47,14 @@ export interface BuildingDefinition {
    * concrete construction property of the catalog, not a cost abstraction.
    */
   readonly constructionWaterCost: number
+  /**
+   * Step006: physical PLANKS required to START construction. ONE-OFF, charged
+   * in the same atomic placement transaction. 0 for every building whose
+   * construction needs no planks. Same concrete-property pattern as the
+   * water cost. Quarry is the only consumer (narrow downstream use for the
+   * first transformation recipe).
+   */
+  readonly constructionPlankCost: number
 }
 
 /**
@@ -56,37 +64,39 @@ export interface BuildingDefinition {
 export const BUILDING_CATALOG: Readonly<
   Record<BuildingType, BuildingDefinition>
 > = {
-  residence: { constructionTicks: 2, housingCapacity: 1, constructionCost: 25, constructionWaterCost: 0 },
+  residence: { constructionTicks: 2, housingCapacity: 1, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 },
   // Step 06B: first food producer (Phase 4). Same lifecycle as a residence,
   // zero housing capacity — it never admits colonists. Food output lives in
   // resource.ts (FOOD_PER_FARM_PER_TICK), not in this catalog.
-  farm: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  farm: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 },
   // Step 07C: first workplace. Same lifecycle as a residence, zero housing
   // capacity — it never admits colonists. Job capacity (1) is a workplace
   // property and lives in jobs.ts (WORKSHOP_JOB_CAPACITY); this catalog stays
   // the source of truth for CONSTRUCTION properties only. Step 10AD adds the
   // Water construction investment (1 Water, one-off at placement).
-  workshop: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1 },
+  workshop: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 1, constructionPlankCost: 0 },
   // Step 10P: the second essential service. A concrete workplace (capacity 1)
   // that produces Water while staffed, operational and road-accessible. Same
   // lifecycle and cost as every other building; no special construction path.
   // Step 10AD: the Well is the Water bootstrap ROOT and is never Water-costed.
-  well: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  well: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 },
   // Step003: the first extraction building. A concrete workplace (capacity 1,
   // jobs.ts) that extracts wood from ADJACENT finite deposits while staffed.
   // Same lifecycle and cost as every other building; the deposit sits in the
   // world (woodDeposits.ts), the camp never creates wood ex nihilo.
-  lumberCamp: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  lumberCamp: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 },
   // Step003 (audit D4): the anti-self-lock bootstrap building. NOT a
   // workplace — its primitive wood collection is unstaffed by contract and
   // deliberately low-rate (WOOD_PER_COLONY_CENTER_PER_TICK). Same lifecycle
   // and cost as every other building; it must never replace a Lumber Camp
   // economically.
-  colonyCenter: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+  colonyCenter: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 0 },
   // Step005: the Stone extraction building. A concrete workplace (capacity 1)
   // that extracts stone from ADJACENT finite stone deposits while staffed —
   // the exact Lumber Camp contract over a different deposit resource.
-  quarry: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0 },
+    // Step006: the Quarry's construction consumes 5 planks (narrow downstream
+  // use for the first transformation recipe; does not touch recovery paths).
+  quarry: { constructionTicks: 2, housingCapacity: 0, constructionCost: 25, constructionWaterCost: 0, constructionPlankCost: 5 },
 }
 
 export const getBuildingDefinition = (

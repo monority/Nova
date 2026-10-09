@@ -200,6 +200,6 @@ describe('Step001 — revenue-aware building affordability', () => {
     expect(getPlacementAffordability(restored, FREE, 'residence')).toEqual(
       getPlacementAffordability(state, FREE, 'residence')
     )
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
   })
 })

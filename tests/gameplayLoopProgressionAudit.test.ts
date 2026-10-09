@@ -78,6 +78,7 @@ const withStocks = (
     water: stocks.water ?? state.resources.water,
     wood: 0,
     stone: 0,
+    planks: 0,
   },
 })
 
@@ -1307,8 +1308,8 @@ describe('15-16. Progression signals and architecture boundary', { timeout: 3000
       ),
       stock: getResourceStock(a),
     })
-    expect(saved.version).toBe(12)
-    expect(SAVE_VERSION).toBe(12)
+    expect(saved.version).toBe(13)
+    expect(SAVE_VERSION).toBe(13)
     expect(Object.keys(saved.state)).toHaveLength(10)
     expect(hashCanonicalState(a)).toBe(hashCanonicalState(b))
     expect(hashCanonicalState(reordered)).toBe(hashCanonicalState(a))

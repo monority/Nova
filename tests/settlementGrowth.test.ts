@@ -193,7 +193,7 @@ describe('G1.1 — growth activation and demand', () => {
     for (const term of ['growthDemand', 'growthCell', 'growthActive']) {
       expect(serialized.includes(term), term).toBe(false)
     }
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
   })
 })
 
@@ -294,7 +294,7 @@ describe('G1.1 — determinism and persistence neutrality', () => {
     const restored = loadSave(serializeSave(a))
     expect(hashCanonicalState(restored)).toBe(hashCanonicalState(a))
     expect(getGrowthStatus(restored)).toEqual(getGrowthStatus(a))
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
   })
 
   it('keeps the cross-check with the derived progression stage', () => {

@@ -37,6 +37,13 @@ export interface ResourceStock {
    * persisted state like food, water and wood; never created ex nihilo.
    */
   readonly stone: number
+  /**
+   * Colony plank reserve in whole plank-units (Step006). The first
+   * TRANSFORMED resource: produced by staffed operational Workshops
+   * consuming wood (2 wood -> 1 plank per tick). Canonical persisted state;
+   * never created ex nihilo.
+   */
+  readonly planks: number
 }
 
 /** Deterministic starting treasury (never random). Buys the day-0 setup. */
@@ -50,6 +57,9 @@ export const INITIAL_WATER = 0
 export const INITIAL_WOOD = 0
 /** Deterministic starting stone stock (Step005: explicitly zero, same rule). */
 export const INITIAL_STONE = 0
+/** Deterministic starting plank stock (Step006: explicitly zero — planks only
+ * enter the colony through transformation). */
+export const INITIAL_PLANKS = 0
 /** One live colonist needs exactly one food unit per tick (Step 05B). */
 export const FOOD_PER_COLONIST_PER_TICK = 1
 /** One operational farm produces exactly two food units per tick (Step 06B). */
@@ -97,6 +107,15 @@ export const WOOD_PER_COLONY_CENTER_PER_TICK = 1
  * — same modest rate as the Lumber Camp, capped by the adjacent deposits.
  */
 export const STONE_PER_QUARRY_PER_TICK = 2
+/**
+ * Step006 transformation recipe (the ONLY recipe): one staffed operational
+ * Workshop consumes WOOD_PER_WORKSHOP_RECIPE wood and produces
+ * PLANKS_PER_WORKSHOP_RECIPE planks per tick. All-or-nothing: partial input
+ * produces nothing. Commerce is unchanged and separate (documented
+ * separation — re-anchoring deferred).
+ */
+export const WOOD_PER_WORKSHOP_RECIPE = 2
+export const PLANKS_PER_WORKSHOP_RECIPE = 1
 
 /**
  * Settlement-phase storage allocation constants (Step 10BG).
@@ -111,6 +130,7 @@ export const createInitialResourceStock = (): ResourceStock => ({
   water: INITIAL_WATER,
   wood: INITIAL_WOOD,
   stone: INITIAL_STONE,
+  planks: INITIAL_PLANKS,
 })
 
 export const hasSufficientResources = (stock: ResourceStock, cost: number): boolean =>
@@ -144,6 +164,21 @@ export const deductFood = (stock: ResourceStock, amount: number): ResourceStock 
     throw new Error(`Insufficient food: ${stock.food} < ${amount}`)
   }
   return { ...stock, food: stock.food - amount }
+}
+
+/** Wood reserve check (Step003). Mirrors the Food access rule. */
+export const hasSufficientWood = (stock: ResourceStock, required: number): boolean =>
+  stock.wood >= required
+
+/** Atomic wood deduction. Pure: never mutates the input stock. */
+export const deductWood = (stock: ResourceStock, amount: number): ResourceStock => {
+  if (amount < 0) {
+    throw new Error(`Negative wood deduction: ${amount}`)
+  }
+  if (!hasSufficientWood(stock, amount)) {
+    throw new Error(`Insufficient wood: ${stock.wood} < ${amount}`)
+  }
+  return { ...stock, wood: stock.wood - amount }
 }
 
 /** Water reserve check (Step 10P). Mirrors the Food access rule. */

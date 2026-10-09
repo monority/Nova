@@ -115,6 +115,7 @@ const scene = (spec: Spec): SimulationState => {
       water: spec.water ?? 0,
       wood: 0,
       stone: 0,
+      planks: 0,
     },
   }
   for (const [x, y] of spec.residences) state = op(state, 'residence', x, y)
@@ -675,14 +676,14 @@ describe('8. Architectural invariants', () => {
       ].sort(),
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(12)
+    expect(invariants.saveVersion).toBe(13)
     expect(invariants.saveKeys).toHaveLength(10)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)
     // Step 10CI added three Town-goal scenarios; water rules below unchanged.
     expect(invariants.scenarioCount).toBe(11)
     expect(invariants.waterRules).toEqual({ perWell: 2, perColonist: 1 })
-    expect(invariants.noNewResource).toEqual(['food', 'money', 'stone', 'water', 'wood'])
+    expect(invariants.noNewResource).toEqual(['food', 'money', 'planks', 'stone', 'water', 'wood'])
     expect(invariants.objectiveKinds).toEqual([
       'building',
       'foodBalance',

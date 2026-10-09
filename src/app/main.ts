@@ -1310,6 +1310,11 @@ const describeCellStatus = (cell: CellCoordinate): string => {
     // and same-tick revenue never covers it.
     return `cell ${cell.x},${cell.y} — insufficient water (${affordability.waterAvailable}/${affordability.waterRequired})`
   }
+  if (!placement.valid && placement.reason === 'insufficientPlanks') {
+    // Step006: the Quarry's plank investment is its own causal reason, and
+    // same-tick revenue never covers it.
+    return `cell ${cell.x},${cell.y} — insufficient planks (${getResourceStock(controller.getState()).planks}/${definition.constructionPlankCost})`
+  }
   if (!placement.valid && placement.reason === 'terrainBlocked') {
     // Step 10AV: terrain refusal is neither a cost nor an occupancy problem.
     return `cell ${cell.x},${cell.y} — blocked by terrain`
@@ -1714,6 +1719,7 @@ window.__nova = {
       money: String(getMoneyStock(state)),
       wood: String(state.resources.wood),
       stone: String(state.resources.stone),
+      planks: String(state.resources.planks),
       taxes: String(getTaxRevenuePerTick(state)),
       commerce: String(getCommerceRevenuePerTick(state)),
       revenue: String(getRevenuePerTick(state)),

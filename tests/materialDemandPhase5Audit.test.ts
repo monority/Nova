@@ -112,6 +112,7 @@ const withStocks = (
     water: stocks.water ?? state.resources.water,
     wood: 0,
     stone: 0,
+    planks: 0,
   },
 })
 
@@ -761,7 +762,7 @@ describe('§18/§19 — persistence, determinism, performance', () => {
       buildingMaintenance: 'no new state; derived from operational buildings',
       phase5Service: 'would add a building type and possibly a resource — a shape change and a version bump',
     })
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
   })
 
   it('measures baseline performance and mirror determinism', () => {

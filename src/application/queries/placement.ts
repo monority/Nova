@@ -69,9 +69,10 @@ export const getPlacementAffordability = (
   const stock = getResourceStock(state)
   const moneyRequired = definition.constructionCost
   const waterRequired = definition.constructionWaterCost
+  const planksRequired = definition.constructionPlankCost
   // Same-tick revenue may complete a Money shortfall, but it must never
-  // mask a Water shortfall: the Water part of the placement contract has no
-  // same-tick producer equivalent, so it is checked directly.
+  // mask a Water or Plank shortfall: those parts of the placement contract
+  // have no same-tick producer equivalent, so they are checked directly.
   // Step001: revenue is credited before commands, so a shortfall covered by
   // this tick's taxes + commerce is accepted even when the treasury alone
   // is short.
@@ -79,6 +80,7 @@ export const getPlacementAffordability = (
     !placement.valid &&
     placement.reason === 'insufficientResources' &&
     stock.water >= waterRequired &&
+    stock.planks >= planksRequired &&
     stock.money + getRevenuePerTick(state) >= moneyRequired
   return {
     placement,

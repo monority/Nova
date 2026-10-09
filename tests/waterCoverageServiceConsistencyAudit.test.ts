@@ -136,6 +136,7 @@ const scene = (spec: SceneSpec): SimulationState => {
       water: spec.water ?? 0,
       wood: 0,
       stone: 0,
+      planks: 0,
     },
   }
   for (const [x, y] of spec.residences) {
@@ -1338,7 +1339,7 @@ describe('9. persistence and closure', () => {
     }
     audit('PERSISTENCE', rows)
     expect(rows.saveVersion).toBe(SAVE_VERSION)
-    expect(rows.saveVersion).toBe(12)
+    expect(rows.saveVersion).toBe(13)
     expect(rows.topLevelKeys).toEqual([
       'buildings',
       'colonists',
@@ -1352,7 +1353,7 @@ describe('9. persistence and closure', () => {
       'woodDeposits',
     ])
     expect(rows.waterKeys).toEqual([])
-    expect(rows.canonicalWaterKeys).toEqual(['food', 'money', 'stone', 'water', 'wood'])
+    expect(rows.canonicalWaterKeys).toEqual(['food', 'money', 'planks', 'stone', 'water', 'wood'])
     expect(rows.reloadEquivalent).toBe(true)
   })
 

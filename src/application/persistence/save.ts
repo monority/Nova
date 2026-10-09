@@ -66,11 +66,11 @@ export const SAVE_FORMAT = 'nova-save'
  * world that actually owns blocked cells carries the field. No migration and
  * therefore NO version bump: SAVE_VERSION stays 8.
  */
-export const SAVE_VERSION = 12
-/** The single previous version this build knows how to migrate (v4..v11 chain through it). */
-export const MIGRATABLE_SAVE_VERSION = 11
+export const SAVE_VERSION = 13
+/** The single previous version this build knows how to migrate (v4..v12 chain through it). */
+export const MIGRATABLE_SAVE_VERSION = 12
 /** Every older version the chained migration still accepts. */
-export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9, 10, 11]
+export const MIGRATABLE_SAVE_VERSIONS: readonly number[] = [4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 export interface SaveFile {
   readonly format: typeof SAVE_FORMAT
@@ -114,7 +114,8 @@ const assertString = (value: unknown, field: string): void => {
  *     `storage.material` into the treasury, drop the hub material slot;
  *   v9 -> v10: add `resources.wood` (0) and empty `woodDeposits` (Step003);
  *   v10 -> v11: pre-place the Colony Center anchor (Step004);
- *   v11 -> v12: add `resources.stone` (0) and empty `stoneDeposits` (Step005).
+ *   v11 -> v12: add `resources.stone` (0) and empty `stoneDeposits` (Step005);
+ *   v12 -> v13: add `resources.planks` (0) — Step006 transformation output.
  * Pure: the same old bytes always yield the same current state.
  */
 const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => {
@@ -137,6 +138,8 @@ const migrateSave = (save: Record<string, unknown>): Record<string, unknown> => 
       current = migrateV10ToV11(current)
     } else if (version === 11) {
       current = migrateV11ToV12(current)
+    } else if (version === 12) {
+      current = migrateV12ToV13(current)
     } else {
       break
     }
@@ -231,6 +234,29 @@ const migrateV11ToV12 = (save: Record<string, unknown>): Record<string, unknown>
         stone: typeof resources['stone'] === 'number' ? resources['stone'] : 0,
       },
       stoneDeposits: state['stoneDeposits'] ?? {},
+    },
+  }
+}
+
+/**
+ * v12 -> v13: Step006 transformation slice. Adds `resources.planks`
+ * (deterministic 0 — planks only enter through the Workshop recipe).
+ * Value-preserving: no existing field is renamed or dropped.
+ */
+const migrateV12ToV13 = (save: Record<string, unknown>): Record<string, unknown> => {
+  const state = save['state']
+  if (!isRecord(state) || !isRecord(state['resources'])) {
+    throw new SaveValidationError('Malformed save: missing state')
+  }
+  const resources = state['resources'] as Record<string, unknown>
+  return {
+    ...save,
+    state: {
+      ...state,
+      resources: {
+        ...resources,
+        planks: typeof resources['planks'] === 'number' ? resources['planks'] : 0,
+      },
     },
   }
 }
@@ -479,6 +505,7 @@ export const validateStateShape = (raw: Record<string, unknown>): SimulationStat
     water: resources['water'] as number,
     wood: resources['wood'] as number,
     stone: resources['stone'] as number,
+    planks: resources['planks'] as number,
   }
 
   const validatedRoads: Record<string, RoadState> = {}

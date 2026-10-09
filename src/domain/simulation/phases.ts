@@ -63,6 +63,7 @@ import {
   isOperationalWorkplace,
   isOperationalWorkshop,
 } from '../jobs/jobs.js'
+// Step006: the Workshop transformation uses isOperationalWorkshop above.
 import {
   areAccessesConnected,
   getDistanceBetweenAccesses,
@@ -84,12 +85,16 @@ import {
   deductFood,
   deductResources,
   deductWater,
+  deductWood,
+  PLANKS_PER_WORKSHOP_RECIPE,
+  WOOD_PER_WORKSHOP_RECIPE,
   COMMERCE_PER_CONNECTED_WORKSHOP_PER_TICK,
   FOOD_PER_COLONIST_PER_TICK,
   FOOD_PER_FARM_PER_TICK,
   hasSufficientFood,
   hasSufficientResources,
   hasSufficientWater,
+  hasSufficientWood,
   MAINTENANCE_PER_OPERATIONAL_BUILDING_PER_TICK,
   TAX_PER_INHABITANT_PER_TICK,
   STONE_PER_QUARRY_PER_TICK,
@@ -175,6 +180,7 @@ export type PlacementValidation =
         | 'cellOccupied'
         | 'depositBlocked'
         | 'colonyCenterExists'
+        | 'insufficientPlanks'
         | 'insufficientResources'
         | 'insufficientWater'
     }
@@ -222,6 +228,12 @@ export const validatePlacement = (
   // and every query (hover indicator, affordability feedback) agree.
   if (!hasSufficientWater(state.resources, definition.constructionWaterCost)) {
     return { valid: false, reason: 'insufficientWater' }
+  }
+  // Step006: the Quarry's plank requirement is checked directly — planks are
+  // physical stock with no same-tick revenue equivalent, mirroring the Water
+  // construction investment rule.
+  if ((state.resources.planks ?? 0) < definition.constructionPlankCost) {
+    return { valid: false, reason: 'insufficientPlanks' }
   }
   return { valid: true }
 }
@@ -485,10 +497,16 @@ export const applyCommand = (
       // Step 10AD: the Workshop's one-off Water investment is deducted in the
       // SAME atomic transaction (validated above), so a rejected placement can
       // never leave a partial mutation. Zero for every other building.
-      const paid =
+      const paidWater =
         definition.constructionWaterCost === 0
           ? deducted
           : deductWater(deducted, definition.constructionWaterCost)
+      // Step006: the plank construction investment is deducted in the SAME
+      // atomic transaction (Quarry only; 0 for every other building).
+      const paid =
+        definition.constructionPlankCost === 0
+          ? paidWater
+          : deductWood(paidWater, definition.constructionPlankCost)
       return {
         state: { ...created.state, resources: paid },
         accepted: true,
@@ -1059,6 +1077,50 @@ export const produceStone = (state: SimulationState): SimulationState => {
     ...state,
     resources: { ...state.resources, stone: state.resources.stone + yieldTotal },
     stoneDeposits: deposits,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4e - Wood -> Planks transformation (Step006, the first recipe)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add this tick's transformation output to the shared stock (Step006, the
+ * ONLY recipe): every STAFFED operational Workshop consumes
+ * WOOD_PER_WORKSHOP_RECIPE (2) wood from the colony stock and produces
+ * PLANKS_PER_WORKSHOP_RECIPE (1) plank. All-or-nothing: a workshop whose
+ * input cannot be covered in full produces nothing (partial recipes are
+ * never produced, inputs never go negative). Commerce is UNCHANGED and
+ * separate — the Step001 connection-based commerce contract still applies to
+ * every operational connected Workshop, staffed or not (documented
+ * separation; re-anchoring is deferred). Same next-tick staffing timing
+ * contract as produceFood/produceWood/produceStone. Wood produced this tick
+ * (phase 4c) IS available to this phase (extraction precedes transformation).
+ */
+export const producePlanks = (state: SimulationState): SimulationState => {
+  let workshops = 0
+  for (const building of iterateBuildings(state)) {
+    if (
+      building.type === 'workshop' &&
+      building.status === 'operational' &&
+      countWorkersAt(state, building.id) > 0
+    ) {
+      workshops += 1
+    }
+  }
+  const woodNeeded = workshops * WOOD_PER_WORKSHOP_RECIPE
+  if (workshops === 0 || woodNeeded === 0) {
+    return state
+  }
+  // All-or-nothing: the FULL recipe batch must be coverable, otherwise no
+  // workshop produces (partial recipes are never minted).
+  if (!hasSufficientWood(state.resources, woodNeeded)) {
+    return state
+  }
+  const consumed = deductWood(state.resources, woodNeeded)
+  return {
+    ...state,
+    resources: { ...consumed, planks: consumed.planks + workshops * PLANKS_PER_WORKSHOP_RECIPE },
   }
 }
 

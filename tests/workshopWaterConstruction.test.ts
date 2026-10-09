@@ -50,6 +50,7 @@ const withStocks = (
     water: stocks.water ?? state.resources.water,
     wood: 0,
     stone: 0,
+    planks: 0,
   },
 })
 
@@ -358,7 +359,7 @@ describe('§8 — persistence and determinism', () => {
       saveLoadStable: serializeCanonicalState(restored) === serializeCanonicalState(after),
       water: getWaterStock(after),
     })
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     expect(serializeCanonicalState(restored)).toBe(serializeCanonicalState(after))
     expect(hashCanonicalState(before)).not.toBe(hashCanonicalState(after))
   })

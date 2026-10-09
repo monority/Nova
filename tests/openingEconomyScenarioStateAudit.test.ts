@@ -854,7 +854,7 @@ describe('8-9. Implementation and invariants', () => {
       },
     }
     audit('ARCHITECTURAL_INVARIANTS', invariants)
-    expect(invariants.saveVersion).toBe(12)
+    expect(invariants.saveVersion).toBe(13)
     expect(invariants.saveKeys).toHaveLength(10)
     expect(invariants.deterministic).toBe(true)
     expect(invariants.roundTrip).toBe(true)

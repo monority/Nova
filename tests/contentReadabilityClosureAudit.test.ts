@@ -913,7 +913,7 @@ describe('11. Architectural checkpoint', () => {
     }
     audit('ARCHITECTURE_CHECKPOINT', invariants)
     // Step001 money migration bumps SAVE_VERSION from 8 to 9.
-    expect(invariants.saveVersion).toBe(12)
+    expect(invariants.saveVersion).toBe(13)
     expect(invariants.saveKeys).toHaveLength(10)
     expect(invariants.deterministicAssembly).toBe(true)
     expect(invariants.deterministicSimulation).toBe(true)

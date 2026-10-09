@@ -518,7 +518,7 @@ describe('economic invariants (Step 08D)', () => {
   })
 
   it('save/hash (§8) — SAVE_VERSION 9, round-trip stable, no upkeep fields', () => {
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     const state = stepSimulation(colony(2))
     const raw = serializeSave(state)
     expect(raw).not.toContain('upkeep')

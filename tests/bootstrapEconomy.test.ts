@@ -104,18 +104,21 @@ describe('canonical rules from source (Step 09I §3/§8)', () => {
       housingCapacity: 1,
       constructionCost: 25,
       constructionWaterCost: 0,
+      constructionPlankCost: 0,
     })
     expect(BUILDING_CATALOG.farm).toEqual({
       constructionTicks: 2,
       housingCapacity: 0,
       constructionCost: 25,
       constructionWaterCost: 0,
+      constructionPlankCost: 0,
     })
     expect(BUILDING_CATALOG.workshop).toEqual({
       constructionTicks: 2,
       housingCapacity: 0,
       constructionCost: 25,
       constructionWaterCost: 1,
+      constructionPlankCost: 0,
     })
     expect(FOOD_PER_COLONIST_PER_TICK).toBe(1)
     expect(FOOD_PER_FARM_PER_TICK).toBe(2)
@@ -544,7 +547,7 @@ describe('persistence of bootstrap states (Step 09I §16)', () => {
     // Save/load at the most fragile point: transient construction states.
     const loaded = loadSave(serializeSave(state))
     expect(hashCanonicalState(loaded)).toBe(hashCanonicalState(state))
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     // Continue both 5 ticks: identical futures.
     let direct = state
     let resumed = loaded

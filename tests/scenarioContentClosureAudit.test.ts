@@ -1182,9 +1182,9 @@ describe('8. Determinism, insertion order and save/load', () => {
       }
     })
     audit('SAVE_LOAD', rows)
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     for (const row of rows) {
-      expect(row.version).toBe(12)
+      expect(row.version).toBe(13)
       expect(row.equalHash).toBe(true)
       expect(row.framingNotPersisted).toBe(true)
     }

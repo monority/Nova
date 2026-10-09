@@ -362,7 +362,7 @@ describe('4. determinism, persistence and architecture', () => {
     audit('HOUSING_PERSISTENCE', rows)
     expect(rows.equalHash).toBe(true)
     expect(rows.scenarioFramingNotPersisted).toBe(true)
-    expect(rows.saveVersion).toBe(12)
+    expect(rows.saveVersion).toBe(13)
     expect(rows.networks).toBe(2)
   })
 

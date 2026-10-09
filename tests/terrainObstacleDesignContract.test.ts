@@ -115,6 +115,7 @@ const scene = (fixture: Fixture): SimulationState => {
       water: fixture.water ?? 0,
       wood: 0,
       stone: 0,
+      planks: 0,
     },
   }
   for (const [x, y] of fixture.residences) state = op(state, 'residence', x, y)
@@ -900,7 +901,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
       reading:
         'the round-trip guard forbids unknown fields, so terrain inside config.world requires (a) the validator to carry the field and (b) a decision: omit-when-empty (no version bump, terrain-free saves and hashes unchanged) or always-present (SAVE_VERSION 7 -> 8 with a migration). Neither is done here.',
     })
-    expect(raw.version).toBe(12)
+    expect(raw.version).toBe(13)
     expect(Object.keys(raw.state)).toHaveLength(10)
     expect(rejected).not.toBeNull()
   })
@@ -965,7 +966,7 @@ describe('8-9. Minimum contract and architectural consequences', () => {
     expect(nonGoals).toHaveLength(13)
     expect(frozen.roadCost).toBe(5)
     expect(frozen.scenarioCount).toBe(7)
-    expect(frozen.saveVersion).toBe(12)
+    expect(frozen.saveVersion).toBe(13)
     // Terrain is design-only: the real scenario set is untouched.
     expect(findScenario('partitioned-valley')).toBeUndefined()
     expect(SCENARIOS_UNCHANGED())

@@ -278,7 +278,7 @@ describe('2. building placement', () => {
   it('checks terrain before affordability', () => {
     const poor: SimulationState = {
       ...terrainState(['2,2']),
-      resources: { money: 0, food: 0, water: 0 , wood: 0, stone: 0},
+      resources: { money: 0, food: 0, water: 0 , wood: 0, stone: 0, planks: 0 },
     }
     const result = applyCommand(poor, {
       type: 'placeBuilding',
@@ -445,18 +445,18 @@ describe('3. road placement is atomic', () => {
 
 describe('4. persistence', () => {
   it('keeps SAVE_VERSION at 7 and writes no terrain field when empty', () => {
-    expect(SAVE_VERSION).toBe(12)
+    expect(SAVE_VERSION).toBe(13)
     const saved = serializeSave(createInitialState(config))
     expect(saved).not.toContain('blockedCells')
     const raw = JSON.parse(saved) as { version: number }
-    expect(raw.version).toBe(12)
+    expect(raw.version).toBe(13)
   })
 
   it('writes terrain only when the world owns blocked cells', () => {
     const saved = serializeSave(terrainState(['1,2', '3,2']))
     expect(saved).toContain('"blockedCells":["1,2","3,2"]')
     const raw = JSON.parse(saved) as { version: number }
-    expect(raw.version).toBe(12)
+    expect(raw.version).toBe(13)
   })
 
   it('loads an old save without terrain as terrain-free', () => {
